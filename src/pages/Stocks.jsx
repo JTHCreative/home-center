@@ -278,7 +278,13 @@ export default function Stocks() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Stocks & Crypto"
-        subtitle={hasFinnhubKey ? 'Live via Finnhub' : 'Demo data — add VITE_FINNHUB_API_KEY for live quotes'}
+        subtitle={
+          hasPositions
+            ? hasFinnhubKey
+              ? 'Live via Finnhub'
+              : 'Demo data — add VITE_FINNHUB_API_KEY for live quotes'
+            : 'Watchlist — add a quantity to a symbol to track its value and daily P&L.'
+        }
       />
 
       {/* Watchlist bar: shows 7 at a time, swipe or arrow to scroll. The New
@@ -323,9 +329,9 @@ export default function Stocks() {
         </Button>
       </div>
 
-      {/* Summary */}
-      <Card className="mb-6" glow={hasPositions}>
-        {hasPositions ? (
+      {/* Value / P&L summary — only when the list has share quantities */}
+      {hasPositions && (
+        <Card className="mb-4" glow>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <div className="text-sm text-gray-400">{active.name} Value</div>
@@ -343,12 +349,8 @@ export default function Stocks() {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="text-sm text-gray-400">
-            Watchlist — add a quantity to a symbol to track its value and daily P&amp;L.
-          </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* Symbol grid */}
       {items.length === 0 ? (
@@ -360,7 +362,10 @@ export default function Stocks() {
           {/* Own scroll area: fat scrollbar + native touch drag scrolling */}
           <div
             className="scroll-fat overflow-auto"
-            style={{ maxHeight: 'calc(100vh - 21rem)', WebkitOverflowScrolling: 'touch' }}
+            style={{
+              maxHeight: hasPositions ? 'calc(100vh - 24rem)' : 'calc(100vh - 18rem)',
+              WebkitOverflowScrolling: 'touch',
+            }}
           >
             <table className="w-full">
               <thead className="sticky top-0 z-10 bg-surface">
@@ -435,7 +440,8 @@ export default function Stocks() {
         </Card>
       )}
 
-      <div className="mt-4 text-right text-xs text-gray-600">
+      <div className="mt-3 text-right text-xs text-gray-600">
+        {!hasFinnhubKey && 'Demo data · '}
         {loading ? 'Updating…' : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : ''}
       </div>
 
