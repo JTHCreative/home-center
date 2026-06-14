@@ -127,23 +127,6 @@ const money = (n) =>
 
 const display = (symbol) => symbol.split(':').pop().replace('USDT', '').replace('USD', '')
 
-// Parse pasted text (from Robinhood Legend or anywhere) into watchlist items.
-// Accepts one symbol per line or comma/space separated, optionally "SYMBOL, qty".
-function parseSymbols(text) {
-  const seen = new Set()
-  const items = []
-  for (const line of text.split(/[\n,]+/)) {
-    const parts = line.trim().split(/[\s|]+/).filter(Boolean)
-    if (!parts.length) continue
-    const symbol = parts[0].toUpperCase()
-    if (!/^[A-Z0-9.:]+$/.test(symbol) || seen.has(symbol)) continue
-    seen.add(symbol)
-    const qty = Number(parts[1])
-    items.push({ symbol, name: '', qty: Number.isFinite(qty) ? qty : 0 })
-  }
-  return items
-}
-
 export default function Stocks() {
   // Key is versioned (-v2) so the imported Robinhood lists replace the earlier
   // demo Stocks/Crypto defaults on devices that already seeded them.
@@ -155,9 +138,6 @@ export default function Stocks() {
 
   const [listDraft, setListDraft] = useState(null) // { id?, name }
   const [symbolDraft, setSymbolDraft] = useState(null) // { symbol, name, qty, original? }
-  const [importing, setImporting] = useState(false)
-  const [importText, setImportText] = useState('')
-  const [importName, setImportName] = useState('')
   const [sort, setSort] = useState({ key: 'changePercent', dir: 'desc' })
   const [filtering, setFiltering] = useState(false)
   const [filters, setFilters] = useState({
@@ -247,25 +227,6 @@ export default function Stocks() {
   }
   const removeSymbol = (symbol) => patchItems((list) => list.filter((i) => i.symbol !== symbol))
 
-  const runImport = () => {
-    const parsed = parseSymbols(importText)
-    if (!parsed.length) return
-    const name = importName.trim()
-    if (name) {
-      const id = crypto.randomUUID()
-      setWatchlists((ws) => [...ws, { id, name, items: parsed }])
-      setActiveId(id)
-    } else {
-      patchItems((list) => {
-        const have = new Set(list.map((i) => i.symbol))
-        return [...list, ...parsed.filter((i) => !have.has(i.symbol))]
-      })
-    }
-    setImporting(false)
-    setImportText('')
-    setImportName('')
-  }
-
   // Totals for items that have a quantity.
   let total = 0
   let dayPL = 0
@@ -317,11 +278,23 @@ export default function Stocks() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Stocks & Crypto"
-        subtitle={hasFinnhubKey ? 'Live via Finnhub' : 'Demo data — add VITE_FINNHUB_API_KEY for live quotes'}
+        subtitle={
+          hasPositions
+            ? hasFinnhubKey
+              ? 'Live via Finnhub'
+              : 'Demo data — add VITE_FINNHUB_API_KEY for live quotes'
+            : 'Watchlist — add a quantity to a symbol to track its value and daily P&L.'
+        }
       />
 
-      {/* Watchlist bar: shows 7 at a time, swipe or arrow to scroll */}
-      <div className="mb-4 flex items-center gap-2">
+      {/* Watchlist bar: shows 7 at a time, swipe or arrow to scroll. The New
+          Watchlist button sits above, right-aligned with the bar's right arrow. */}
+      <div className="mb-4 w-fit">
+        <div className="mb-2 flex justify-end">
+          <Button className="px-4 py-2" onClick={() => setListDraft({ name: '' })}>
+            <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> New Watchlist</span>
+          </Button>
+        </div>
         <ScrollTabs
           tabs={watchlists.map((w) => ({ id: w.id, label: w.name }))}
           active={active?.id}
@@ -329,14 +302,6 @@ export default function Stocks() {
           onAdd={() => setListDraft({ name: '' })}
           visible={7}
         />
-        <button
-          type="button"
-          onClick={() => setListDraft({ name: '' })}
-          aria-label="New watchlist"
-          className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-gray-300 active:scale-95"
-        >
-          <PlusIcon className="h-6 w-6" />
-        </button>
       </div>
 
       {/* Active list actions */}
@@ -356,9 +321,6 @@ export default function Stocks() {
         >
           Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
         </Button>
-        <Button variant="ghost" className="px-4 py-2" onClick={() => setImporting(true)}>
-          Import
-        </Button>
         <Button variant="ghost" className="px-4 py-2" onClick={() => setListDraft({ id: active.id, name: active.name })}>
           Rename
         </Button>
@@ -367,9 +329,9 @@ export default function Stocks() {
         </Button>
       </div>
 
-      {/* Summary */}
-      <Card className="mb-6" glow={hasPositions}>
-        {hasPositions ? (
+      {/* Value / P&L summary — only when the list has share quantities */}
+      {hasPositions && (
+        <Card className="mb-4" glow>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <div className="text-sm text-gray-400">{active.name} Value</div>
@@ -387,23 +349,27 @@ export default function Stocks() {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="text-sm text-gray-400">
-            Watchlist — add a quantity to a symbol to track its value and daily P&amp;L.
-          </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* Symbol grid */}
       {items.length === 0 ? (
-        <Card className="text-center text-gray-500">No symbols yet. Add one or import a list.</Card>
+        <Card className="text-center text-gray-500">No symbols yet. Add one to get started.</Card>
       ) : rows.length === 0 ? (
         <Card className="text-center text-gray-500">No symbols match the filters.</Card>
       ) : (
-        <Card className="overflow-x-auto p-0">
-          <table className="w-full">
-            <thead>
-              <tr>
+        <Card className="p-0">
+          {/* Own scroll area: fat scrollbar + native touch drag scrolling */}
+          <div
+            className="scroll-fat overflow-auto"
+            style={{
+              maxHeight: hasPositions ? 'calc(100vh - 24rem)' : 'calc(100vh - 18rem)',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            <table className="w-full">
+              <thead className="sticky top-0 z-10 bg-surface">
+                <tr>
                 <SortTh label="Symbol" k="symbol" sort={sort} onSort={toggleSort} align="left" />
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                   Trend
@@ -424,7 +390,7 @@ export default function Stocks() {
                 const chg = hUp ? 'text-gain' : 'text-loss'
                 return (
                   <tr key={it.symbol} className="border-t border-border">
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-2">
                       <button
                         type="button"
                         onClick={() =>
@@ -436,31 +402,31 @@ export default function Stocks() {
                         {it.name && <div className="text-xs text-gray-400">{it.name}</div>}
                       </button>
                     </td>
-                    <td className="px-3 py-2">
-                      {q && <Sparkline data={seriesFromQuote(it.symbol, q)} up={hUp} width={90} height={32} />}
+                    <td className="px-3 py-1">
+                      {q && <Sparkline data={seriesFromQuote(it.symbol, q)} up={hUp} width={84} height={26} />}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono text-white">{q ? money(q.price) : '—'}</td>
-                    <td className={`px-3 py-3 text-right font-mono ${chg}`}>
+                    <td className="px-3 py-2 text-right font-mono text-white">{q ? money(q.price) : '—'}</td>
+                    <td className={`px-3 py-2 text-right font-mono ${chg}`}>
                       {q ? `${hUp ? '+' : '−'}${money(Math.abs(q.change))}` : '—'}
                     </td>
-                    <td className={`px-3 py-3 text-right font-mono font-bold ${chg}`}>
+                    <td className={`px-3 py-2 text-right font-mono font-bold ${chg}`}>
                       {q ? `${hUp ? '+' : ''}${q.changePercent.toFixed(2)}%` : '—'}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono text-gray-300">
+                    <td className="px-3 py-2 text-right font-mono text-gray-300">
                       {q?.week52High != null ? money(q.week52High) : '—'}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono text-gray-300">
+                    <td className="px-3 py-2 text-right font-mono text-gray-300">
                       {q?.pe != null ? q.pe.toFixed(2) : '—'}
                     </td>
                     {hasPositions && (
-                      <td className="px-3 py-3 text-right font-mono text-gray-400">{it.qty || '·'}</td>
+                      <td className="px-3 py-2 text-right font-mono text-gray-400">{it.qty || '·'}</td>
                     )}
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-3 py-2 text-right">
                       <button
                         type="button"
                         onClick={() => removeSymbol(it.symbol)}
                         aria-label={`Remove ${display(it.symbol)}`}
-                        className="rounded-lg p-2 text-gray-600 active:scale-95 active:text-loss"
+                        className="rounded-lg p-1.5 text-gray-600 active:scale-95 active:text-loss"
                       >
                         <TrashIcon className="h-5 w-5" />
                       </button>
@@ -469,11 +435,13 @@ export default function Stocks() {
                 )
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
         </Card>
       )}
 
-      <div className="mt-4 text-right text-xs text-gray-600">
+      <div className="mt-3 text-right text-xs text-gray-600">
+        {!hasFinnhubKey && 'Demo data · '}
         {loading ? 'Updating…' : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : ''}
       </div>
 
@@ -599,53 +567,6 @@ export default function Stocks() {
           <p className="text-xs text-gray-600">
             “=” matches to the nearest whole number. Leave a value blank to ignore that filter.
           </p>
-        </div>
-      </Modal>
-
-      {/* Import */}
-      <Modal
-        open={importing}
-        onClose={() => setImporting(false)}
-        title="Import Symbols"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setImporting(false)}>Cancel</Button>
-            <Button onClick={runImport}>Import</Button>
-          </>
-        }
-      >
-        <div className="grid gap-5 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">
-              Paste symbols (one per line or comma-separated)
-            </label>
-            <textarea
-              autoFocus
-              rows={8}
-              className={`${fieldClass} font-mono`}
-              placeholder={'AAPL\nMSFT, 12\nBINANCE:BTCUSDT, 0.4'}
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-            />
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-xs text-gray-500">New list name (optional)</label>
-              <input
-                className={fieldClass}
-                placeholder={`Leave blank to add to “${active?.name}”`}
-                value={importName}
-                onChange={(e) => setImportName(e.target.value)}
-              />
-            </div>
-            <p className="text-xs text-gray-500">
-              From Robinhood Legend, copy your watchlist tickers and paste them here.
-              Add a quantity after each symbol (e.g. <span className="font-mono">AAPL, 12</span>)
-              to track value and P&amp;L. {parseSymbols(importText).length > 0 && (
-                <span className="text-accent">{parseSymbols(importText).length} symbols detected.</span>
-              )}
-            </p>
-          </div>
         </div>
       </Modal>
     </div>
