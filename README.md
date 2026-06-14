@@ -1,0 +1,88 @@
+# Home Center
+
+A Raspberry Pi touchscreen dashboard — a single-page React app built for a 1080p
+display running Chromium in kiosk mode. Every control is tap-friendly with large
+touch targets and no hover-only interactions.
+
+## Features
+
+- **Smart Home** — light toggles with brightness sliders by room, TV/media
+  controls (power, volume, input), and a smart-plug on/off card grid. Uses mock
+  state today; structured so Home Assistant calls can be swapped in later (see
+  the controller helpers in `src/pages/SmartHome.jsx`).
+- **Stocks & Crypto** — portfolio value + daily P&L, holdings with price,
+  % change, and a per-asset sparkline. Separate Stocks / Crypto tabs. Live data
+  from the [Finnhub API](https://finnhub.io/) when a key is set, mock data
+  otherwise.
+- **Calendar** — Month / Week / Day views, tap any slot to add an event,
+  color-coded categories, today always highlighted.
+- **Meals** — weekly planner grid (Mon–Sun × Breakfast/Lunch/Dinner), recipe
+  storage with ingredients and instructions, an auto-generated grocery list from
+  planned meals, and checkable grocery items.
+- **Goals** — Daily / Weekly / Monthly tabs. Each goal is a checkbox or a
+  progress bar (chosen at creation). Daily goals reset each day, weekly each
+  Monday, monthly on the 1st. A completion summary ring sits atop each tab.
+
+All data (goals, meals, events, smart-home state, portfolio) persists to
+`localStorage`, so it survives reboots. No backend required.
+
+## Tech stack
+
+Vite + React + Tailwind CSS, React Router for navigation, and Recharts for
+sparklines and the goals summary ring.
+
+## Design tokens
+
+| Token        | Value     |
+| ------------ | --------- |
+| Background   | `#0D1117` |
+| Card surface | `#161B22` |
+| Border       | `#30363D` |
+| Accent       | `#58A6FF` |
+| Gain         | `#39D353` |
+| Loss         | `#F85149` |
+
+Fonts: **Inter** for UI, **JetBrains Mono** for numbers and data.
+
+## Getting started
+
+```bash
+npm install
+cp .env.example .env   # optional: add VITE_FINNHUB_API_KEY for live quotes
+npm run dev
+```
+
+Open http://localhost:5173.
+
+### Build & preview
+
+```bash
+npm run build
+npm run preview -- --host
+```
+
+## Configuration
+
+- `VITE_FINNHUB_API_KEY` — Finnhub API key for live stock/crypto quotes. Without
+  it, the Stocks page renders deterministic demo data.
+- Edit holdings in `DEFAULT_PORTFOLIO` (`src/pages/Stocks.jsx`) or override via
+  the `home-center:portfolio` localStorage key.
+
+## Kiosk mode on the Pi
+
+Launch Chromium pointed at the built app (or the dev server):
+
+```bash
+chromium-browser --kiosk --noerrdialogs --disable-infobars \
+  --check-for-update-interval=31536000 http://localhost:4173
+```
+
+## Project structure
+
+```
+src/
+  components/   shared UI (Sidebar, Card, Toggle, Slider, Tabs, Sparkline,
+                ProgressRing, Modal, Icons)
+  pages/        one file per page (SmartHome, Stocks, Calendar, Meals, Goals)
+  lib/          storage (localStorage hook) and finnhub (API client)
+```

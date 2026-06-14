@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-gray-100 font-sans antialiased;
+    /* Kiosk: never select text or show the caret on a touchscreen. */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overflow: hidden;
+  }
+
+  /* Inputs and editable fields still need selection. */
+  input,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+@layer components {
+  /* Large, tap-friendly scrollbars for the touchscreen. */
+  .scroll-area {
+    @apply overflow-y-auto;
+    scrollbar-width: thin;
+    scrollbar-color: #30363d transparent;
+  }
+  .scroll-area::-webkit-scrollbar {
+    width: 10px;
+  }
+  .scroll-area::-webkit-scrollbar-thumb {
+    background-color: #30363d;
+    border-radius: 9999px;
+  }
+}
