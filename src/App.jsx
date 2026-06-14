@@ -6,6 +6,7 @@ import Stocks from './pages/Stocks.jsx'
 import Calendar from './pages/Calendar.jsx'
 import Meals from './pages/Meals.jsx'
 import Goals from './pages/Goals.jsx'
+import Settings from './pages/Settings.jsx'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/meals" element={<Meals />} />
           <Route path="/goals" element={<Goals />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/smart-home" replace />} />
         </Routes>
       </main>

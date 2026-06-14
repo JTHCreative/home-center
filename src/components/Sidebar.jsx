@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   CalendarIcon,
   ChartIcon,
+  GearIcon,
   GoalIcon,
   HomeIcon,
   MealIcon,
@@ -14,6 +15,7 @@ const LINKS = [
   { to: '/calendar', label: 'Calendar', Icon: CalendarIcon },
   { to: '/meals', label: 'Meals', Icon: MealIcon },
   { to: '/goals', label: 'Goals', Icon: GoalIcon },
+  { to: '/settings', label: 'Settings', Icon: GearIcon },
 ]
 
 function useClock() {
