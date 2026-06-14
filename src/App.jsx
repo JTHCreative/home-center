@@ -12,7 +12,10 @@ export default function App() {
   return (
     <div className="flex h-full w-full overflow-hidden bg-bg">
       <Sidebar />
-      <main className="scroll-area flex-1 p-8">
+      <main
+        className="scroll-area flex-1 p-8 transition-[padding] duration-200"
+        style={{ paddingBottom: 'calc(2rem + var(--kb, 0px))' }}
+      >
         <Routes>
           <Route path="/" element={<Navigate to="/smart-home" replace />} />
           <Route path="/smart-home" element={<SmartHome />} />
