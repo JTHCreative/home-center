@@ -22,10 +22,11 @@ const SEED_RECIPES = [
   },
 ]
 
+// Draft ingredients are {id, text} rows so each gets its own touch-friendly field.
 const emptyRecipe = () => ({
   id: crypto.randomUUID(),
   name: '',
-  ingredientsText: '',
+  ingredients: [{ id: crypto.randomUUID(), text: '' }],
   instructions: '',
 })
 
@@ -69,10 +70,7 @@ export default function Meals() {
     const recipe = {
       id: recipeDraft.id,
       name: recipeDraft.name.trim(),
-      ingredients: recipeDraft.ingredientsText
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      ingredients: recipeDraft.ingredients.map((i) => i.text.trim()).filter(Boolean),
       instructions: recipeDraft.instructions.trim(),
     }
     setRecipes((list) => {
@@ -86,9 +84,29 @@ export default function Meals() {
     setRecipeDraft({
       id: r.id,
       name: r.name,
-      ingredientsText: r.ingredients.join('\n'),
+      ingredients: (r.ingredients.length ? r.ingredients : ['']).map((t) => ({
+        id: crypto.randomUUID(),
+        text: t,
+      })),
       instructions: r.instructions,
     })
+
+  // Ingredient-row editing within the recipe draft.
+  const addIngredient = () =>
+    setRecipeDraft((d) => ({
+      ...d,
+      ingredients: [...d.ingredients, { id: crypto.randomUUID(), text: '' }],
+    }))
+  const setIngredient = (id, text) =>
+    setRecipeDraft((d) => ({
+      ...d,
+      ingredients: d.ingredients.map((i) => (i.id === id ? { ...i, text } : i)),
+    }))
+  const removeIngredient = (id) =>
+    setRecipeDraft((d) => ({
+      ...d,
+      ingredients: d.ingredients.filter((i) => i.id !== id),
+    }))
 
   const deleteRecipe = (id) => {
     setRecipes((list) => list.filter((r) => r.id !== id))
@@ -319,18 +337,34 @@ export default function Meals() {
             {/* Ingredients and instructions side by side to keep the form short. */}
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-gray-500">
-                  Ingredients (one per line)
-                </label>
-                <textarea
-                  rows={7}
-                  className={fieldClass}
-                  placeholder={'Eggs\nFlour\nMilk'}
-                  value={recipeDraft.ingredientsText}
-                  onChange={(e) =>
-                    setRecipeDraft({ ...recipeDraft, ingredientsText: e.target.value })
-                  }
-                />
+                <label className="mb-1 block text-xs text-gray-500">Ingredients</label>
+                <div className="space-y-2">
+                  {recipeDraft.ingredients.map((ing) => (
+                    <div key={ing.id} className="flex items-center gap-2">
+                      <input
+                        className={fieldClass}
+                        placeholder="e.g. 2 eggs"
+                        value={ing.text}
+                        onChange={(e) => setIngredient(ing.id, e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeIngredient(ing.id)}
+                        aria-label="Remove ingredient"
+                        className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addIngredient}
+                    className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
+                  >
+                    <PlusIcon className="h-4 w-4" /> Add ingredient
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-xs text-gray-500">Instructions</label>
