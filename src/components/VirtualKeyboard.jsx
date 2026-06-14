@@ -86,6 +86,79 @@ function step(el, dir) {
   }
 }
 
+// --- Word prediction ---------------------------------------------------------
+// A small base vocabulary, augmented by whatever the user has already typed
+// across the app (recipes, goals, events…) so suggestions get more relevant
+// over time. No network/dictionary file needed.
+const BASE_WORDS =
+  `the and for with you your this that have from they will what when your
+   today tomorrow morning night week month water milk eggs flour sugar butter
+   chicken onion garlic pepper salt olive cheese bread rice pasta tomato lemon
+   honey breakfast lunch dinner recipe grocery clean laundry workout water
+   meeting call email doctor dentist birthday family budget savings invest
+   review plan finish start buy pay read write practice stretch meditate`
+    .split(/\s+/)
+    .filter(Boolean)
+
+function buildDictionary() {
+  const freq = new Map()
+  const add = (w) => {
+    const k = w.toLowerCase()
+    if (k.length > 1) freq.set(k, (freq.get(k) || 0) + 1)
+  }
+  BASE_WORDS.forEach(add)
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key || !key.startsWith('home-center:')) continue
+      const words = (localStorage.getItem(key) || '').match(/[A-Za-z']{2,}/g) || []
+      // Weight user words above the base vocabulary.
+      words.forEach((w) => {
+        add(w)
+        add(w)
+      })
+    }
+  } catch {
+    /* localStorage unavailable */
+  }
+  return freq
+}
+
+// The partial word immediately before the caret.
+function currentWord(el) {
+  if (el.type === 'number') return ''
+  const pos = el.selectionStart ?? el.value.length
+  const m = el.value.slice(0, pos).match(/[A-Za-z']+$/)
+  return m ? m[0] : ''
+}
+
+function replaceWord(el, word) {
+  const pos = el.selectionStart ?? el.value.length
+  const before = el.value.slice(0, pos)
+  const m = before.match(/[A-Za-z']+$/)
+  const start = m ? pos - m[0].length : pos
+  const insert = word + ' '
+  setNativeValue(el, el.value.slice(0, start) + insert + el.value.slice(pos))
+  const caret = start + insert.length
+  try {
+    el.setSelectionRange(caret, caret)
+  } catch {
+    /* ignore */
+  }
+}
+
+function predict(dict, word, n = 3) {
+  if (!dict || word.length < 1) return []
+  const lw = word.toLowerCase()
+  const cap = word[0] !== word[0].toLowerCase()
+  const matches = []
+  for (const [w, f] of dict) {
+    if (w !== lw && w.startsWith(lw)) matches.push([w, f])
+  }
+  matches.sort((a, b) => b[1] - a[1] || a[0].length - b[0].length || a[0].localeCompare(b[0]))
+  return matches.slice(0, n).map(([w]) => (cap ? w[0].toUpperCase() + w.slice(1) : w))
+}
+
 const LETTER_ROWS = [
   ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
   ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
@@ -103,7 +176,9 @@ export default function VirtualKeyboard() {
   const [target, setTarget] = useState(null)
   const [shift, setShift] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [suggestions, setSuggestions] = useState([])
   const panelRef = useRef(null)
+  const dictRef = useRef(null)
 
   useEffect(() => {
     // Only raise the keyboard when the field was reached by touch (or pen), so a
@@ -151,14 +226,29 @@ export default function VirtualKeyboard() {
 
   useEffect(() => () => setKbHeight(0), [])
 
+  // Rebuild the prediction dictionary (and seed suggestions) when a text field
+  // opens, so it includes the latest data the user has entered.
+  useEffect(() => {
+    if (!open || mode !== 'text') {
+      setSuggestions([])
+      return
+    }
+    dictRef.current = buildDictionary()
+    setSuggestions(predict(dictRef.current, currentWord(target)))
+  }, [open, mode, target])
+
   if (!target || !mode) return null
 
-  // Keep the field focused; act on the stored element.
+  const refresh = () => setSuggestions(predict(dictRef.current, currentWord(target)))
+
+  // Keep the field focused; act on the stored element, then refresh predictions.
   const act = (fn) => {
     fn(target)
     target.focus()
+    refresh()
   }
   const type = (ch) => act((el) => insertText(el, ch))
+  const applySuggestion = (w) => act((el) => replaceWord(el, w))
   const close = () => {
     target.blur()
     setTarget(null)
@@ -197,6 +287,22 @@ export default function VirtualKeyboard() {
           <ChevronDown className="h-5 w-5" /> Hide
         </button>
       </div>
+
+      {/* Word predictions (text fields only) */}
+      {mode === 'text' && suggestions.length > 0 && (
+        <div className="mx-auto mb-2 flex max-w-4xl gap-2">
+          {suggestions.map((w) => (
+            <button
+              key={w}
+              type="button"
+              onClick={() => applySuggestion(w)}
+              className="flex-1 truncate rounded-lg bg-accent/15 px-4 py-2.5 text-base font-semibold text-accent active:scale-95"
+            >
+              {w}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mx-auto max-w-4xl">
         {mode === 'numeric' ? (
