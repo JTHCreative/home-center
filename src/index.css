@@ -89,4 +89,24 @@
     background-color: #30363d;
     border-radius: 9999px;
   }
+
+  /* Fat, grabbable scrollbar for modal bodies on the touchscreen. */
+  .scroll-fat {
+    scrollbar-width: auto;
+    scrollbar-color: rgb(var(--c-accent)) transparent;
+  }
+  .scroll-fat::-webkit-scrollbar {
+    width: 22px;
+  }
+  .scroll-fat::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--c-accent) / 0.7);
+    border-radius: 9999px;
+    /* Transparent border + padding-box makes a chunky pill with a big hit area. */
+    border: 5px solid transparent;
+    background-clip: padding-box;
+    min-height: 48px;
+  }
+  .scroll-fat::-webkit-scrollbar-thumb:active {
+    background-color: rgb(var(--c-accent));
+  }
 }

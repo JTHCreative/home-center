@@ -347,48 +347,54 @@ function EventModal({ draft, setDraft, onClose, onSave, onDelete, isExisting }) 
         </>
       }
     >
-      <div className="space-y-4">
-        <input
-          autoFocus
-          className={fieldClass}
-          placeholder="Event title"
-          value={draft.title}
-          onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-        />
-        <div className="flex gap-3">
+      {/* Two columns: details on the left, category on the right. */}
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className="space-y-4">
           <input
-            type="date"
+            autoFocus
             className={fieldClass}
-            value={draft.date}
-            onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+            placeholder="Event title"
+            value={draft.title}
+            onChange={(e) => setDraft({ ...draft, title: e.target.value })}
           />
-          <input
-            type="time"
-            className={fieldClass}
-            value={draft.time}
-            onChange={(e) => setDraft({ ...draft, time: e.target.value })}
-          />
+          <div className="flex gap-3">
+            <input
+              type="date"
+              className={fieldClass}
+              value={draft.date}
+              onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+            />
+            <input
+              type="time"
+              className={fieldClass}
+              value={draft.time}
+              onChange={(e) => setDraft({ ...draft, time: e.target.value })}
+            />
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(CATEGORIES).map(([name, color]) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setDraft({ ...draft, category: name })}
-              className={[
-                'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold active:scale-95',
-                draft.category === name ? 'shadow-glow' : 'opacity-60',
-              ].join(' ')}
-              style={{
-                backgroundColor: `${color}22`,
-                color,
-                outline: draft.category === name ? `2px solid ${color}` : 'none',
-              }}
-            >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-              {name}
-            </button>
-          ))}
+        <div>
+          <label className="mb-2 block text-xs text-gray-500">Category</label>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(CATEGORIES).map(([name, color]) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setDraft({ ...draft, category: name })}
+                className={[
+                  'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold active:scale-95',
+                  draft.category === name ? 'shadow-glow' : 'opacity-60',
+                ].join(' ')}
+                style={{
+                  backgroundColor: `${color}22`,
+                  color,
+                  outline: draft.category === name ? `2px solid ${color}` : 'none',
+                }}
+              >
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+                {name}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </Modal>

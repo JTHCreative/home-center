@@ -269,7 +269,7 @@ export default function Meals() {
         onClose={() => setPicker(null)}
         title={picker ? `${picker.day} · ${picker.meal}` : ''}
       >
-        <div className="space-y-2">
+        <div className="space-y-3">
           <button
             type="button"
             onClick={() => assign(picker.day, picker.meal, undefined)}
@@ -277,16 +277,19 @@ export default function Meals() {
           >
             Clear slot
           </button>
-          {recipes.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => assign(picker.day, picker.meal, r.id)}
-              className="w-full rounded-xl bg-white/5 px-4 py-3 text-left font-medium text-white active:scale-[0.98]"
-            >
-              {r.name}
-            </button>
-          ))}
+          {/* Recipes in a grid so a long list spreads sideways. */}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {recipes.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => assign(picker.day, picker.meal, r.id)}
+                className="rounded-xl bg-white/5 px-4 py-3 text-left font-medium text-white active:scale-[0.98]"
+              >
+                {r.name}
+              </button>
+            ))}
+          </div>
         </div>
       </Modal>
 
@@ -313,31 +316,34 @@ export default function Meals() {
               value={recipeDraft.name}
               onChange={(e) => setRecipeDraft({ ...recipeDraft, name: e.target.value })}
             />
-            <div>
-              <label className="mb-1 block text-xs text-gray-500">
-                Ingredients (one per line)
-              </label>
-              <textarea
-                rows={5}
-                className={fieldClass}
-                placeholder={'Eggs\nFlour\nMilk'}
-                value={recipeDraft.ingredientsText}
-                onChange={(e) =>
-                  setRecipeDraft({ ...recipeDraft, ingredientsText: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-gray-500">Instructions</label>
-              <textarea
-                rows={4}
-                className={fieldClass}
-                placeholder="Steps…"
-                value={recipeDraft.instructions}
-                onChange={(e) =>
-                  setRecipeDraft({ ...recipeDraft, instructions: e.target.value })
-                }
-              />
+            {/* Ingredients and instructions side by side to keep the form short. */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">
+                  Ingredients (one per line)
+                </label>
+                <textarea
+                  rows={7}
+                  className={fieldClass}
+                  placeholder={'Eggs\nFlour\nMilk'}
+                  value={recipeDraft.ingredientsText}
+                  onChange={(e) =>
+                    setRecipeDraft({ ...recipeDraft, ingredientsText: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Instructions</label>
+                <textarea
+                  rows={7}
+                  className={fieldClass}
+                  placeholder="Steps…"
+                  value={recipeDraft.instructions}
+                  onChange={(e) =>
+                    setRecipeDraft({ ...recipeDraft, instructions: e.target.value })
+                  }
+                />
+              </div>
             </div>
           </div>
         )}
