@@ -50,11 +50,11 @@ export default function ScrollTabs({ tabs, active, onChange, onAdd, visible = 7 
     if (el) el.scrollBy({ left: dir * el.clientWidth, behavior: 'smooth' })
   }
 
-  // Mouse drag-to-scroll (touch uses native scrolling).
+  // Mouse drag-to-scroll (touch uses native scrolling). No pointer capture —
+  // capturing the pointer would steal the click from the tab buttons.
   const onPointerDown = (e) => {
     if (e.pointerType === 'touch') return
     drag.current = { x: e.clientX, scroll: viewportRef.current.scrollLeft, moved: false }
-    viewportRef.current.setPointerCapture?.(e.pointerId)
   }
   const onPointerMove = (e) => {
     if (!drag.current) return
@@ -62,9 +62,8 @@ export default function ScrollTabs({ tabs, active, onChange, onAdd, visible = 7 
     if (Math.abs(dx) > 4) drag.current.moved = true
     viewportRef.current.scrollLeft = drag.current.scroll - dx
   }
-  const onPointerUp = (e) => {
-    viewportRef.current?.releasePointerCapture?.(e.pointerId)
-    // Let the click that follows a real drag be ignored.
+  const endDrag = () => {
+    // If a real drag happened, defer clearing so the trailing click is ignored.
     if (drag.current?.moved) setTimeout(() => (drag.current = null), 0)
     else drag.current = null
   }
@@ -95,7 +94,8 @@ export default function ScrollTabs({ tabs, active, onChange, onAdd, visible = 7 
           ref={viewportRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
+          onPointerUp={endDrag}
+          onPointerLeave={endDrag}
           className="no-scrollbar flex cursor-grab overflow-x-auto active:cursor-grabbing"
         >
           {tabs.map((t) => {
