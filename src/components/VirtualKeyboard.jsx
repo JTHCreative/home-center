@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CloseIcon } from './Icons.jsx'
+import { ChevronLeft, ChevronRight, CloseIcon } from './Icons.jsx'
 
 // On-screen keyboard for the touchscreen kiosk. Mounted once (in App). It tracks
 // the focused input/textarea and writes through the native value setter so React
@@ -210,37 +210,40 @@ function TextPad({ shift, onShift, onKey, onBackspace, onSpace, onEnter, onDone 
 function NumericPad({ onKey, onBackspace, onStep, onDone }) {
   const pad = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0']
   return (
-    <div className="mx-auto flex max-w-xl gap-3">
+    <div className="mx-auto max-w-xl space-y-3">
       {/* Keypad */}
-      <div className="grid flex-1 grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {pad.map((k) => (
-          <Key key={k} label={k} onClick={() => onKey(k)} className="!h-16 !text-2xl" />
+          <Key key={k} label={k} onClick={() => onKey(k)} className="!h-14 !text-2xl" />
         ))}
-        <Key label="⌫" onClick={onBackspace} className="!h-16 !text-2xl" />
+        <Key label="⌫" onClick={onBackspace} className="!h-14 !text-2xl" />
       </div>
 
-      {/* Large steppers + done */}
-      <div className="flex w-28 flex-col gap-2">
-        <Key
-          label="+"
-          onClick={() => onStep(1)}
-          flex={1}
-          className="!h-auto flex-1 !text-3xl !bg-accent/15 text-accent"
-        />
-        <Key
-          label="−"
-          onClick={() => onStep(-1)}
-          flex={1}
-          className="!h-auto flex-1 !text-3xl !bg-accent/15 text-accent"
-        />
+      {/* Big left/right steppers */}
+      <div className="flex gap-3">
         <button
           type="button"
-          onClick={onDone}
-          className="flex h-16 items-center justify-center gap-2 rounded-xl bg-accent text-base font-semibold text-bg active:scale-95"
+          onClick={() => onStep(-1)}
+          className="flex h-16 flex-1 items-center justify-center gap-2 rounded-xl bg-accent/15 text-2xl font-bold text-accent active:scale-95"
         >
-          <CloseIcon className="h-5 w-5" /> Done
+          <ChevronLeft className="h-8 w-8" /> −1
+        </button>
+        <button
+          type="button"
+          onClick={() => onStep(1)}
+          className="flex h-16 flex-1 items-center justify-center gap-2 rounded-xl bg-accent/15 text-2xl font-bold text-accent active:scale-95"
+        >
+          +1 <ChevronRight className="h-8 w-8" />
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={onDone}
+        className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-accent text-base font-semibold text-bg active:scale-95"
+      >
+        <CloseIcon className="h-5 w-5" /> Done
+      </button>
     </div>
   )
 }
