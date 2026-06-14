@@ -5,6 +5,7 @@ import Sparkline from '../components/Sparkline.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import { fetchMetrics, fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
 import { useLocalState } from '../lib/storage.js'
+import { useDragScroll } from '../lib/useDragScroll.js'
 import { ChevronDown, ChevronUp, PlusIcon, TrashIcon } from '../components/Icons.jsx'
 
 // Watchlists: named lists of symbols. `symbol` is the Finnhub symbol; crypto
@@ -274,6 +275,8 @@ export default function Stocks() {
   const clearFilters = () =>
     setFilters((f) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, { ...v, value: '' }])))
 
+  const gridScroll = useDragScroll() // mouse grab-to-scroll for the ticker table
+
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
@@ -359,9 +362,12 @@ export default function Stocks() {
         <Card className="text-center text-gray-500">No symbols match the filters.</Card>
       ) : (
         <Card className="p-0">
-          {/* Own scroll area: fat scrollbar + native touch drag scrolling */}
+          {/* Own scroll area: fat scrollbar, native touch scroll, and mouse
+              grab-to-drag (press and pan up/down). */}
           <div
-            className="scroll-fat overflow-auto"
+            ref={gridScroll.ref}
+            {...gridScroll.handlers}
+            className="scroll-fat cursor-grab overflow-auto active:cursor-grabbing"
             style={{
               maxHeight: hasPositions ? 'calc(100vh - 24rem)' : 'calc(100vh - 18rem)',
               WebkitOverflowScrolling: 'touch',
