@@ -77,13 +77,17 @@ function backspace(el) {
 }
 
 function step(el, dir) {
-  try {
-    if (dir > 0) el.stepUp()
-    else el.stepDown()
-    el.dispatchEvent(new Event('input', { bubbles: true }))
-  } catch {
-    /* ignore non-steppable inputs */
-  }
+  // Manual step — el.stepUp()/stepDown() throw on inputs with step="any".
+  const stepAttr = parseFloat(el.step)
+  const inc = Number.isFinite(stepAttr) ? stepAttr : 1
+  const cur = parseFloat(el.value)
+  let next = (Number.isFinite(cur) ? cur : 0) + dir * inc
+  const min = parseFloat(el.min)
+  const max = parseFloat(el.max)
+  if (Number.isFinite(min)) next = Math.max(min, next)
+  if (Number.isFinite(max)) next = Math.min(max, next)
+  next = Math.round(next * 1e6) / 1e6 // trim float noise
+  setNativeValue(el, String(next))
 }
 
 // --- Word prediction ---------------------------------------------------------
