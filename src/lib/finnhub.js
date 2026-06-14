@@ -46,3 +46,30 @@ export async function fetchQuotes(symbols) {
   )
   return Object.fromEntries(entries)
 }
+
+/**
+ * Basic financials for a symbol — used for 52-week high and P/E.
+ * Finnhub /stock/metric returns a `metric` object with many keys.
+ */
+export async function fetchMetric(symbol) {
+  const data = await get('/stock/metric', { symbol, metric: 'all' })
+  const m = data.metric || {}
+  return {
+    week52High: m['52WeekHigh'] ?? null,
+    pe: m.peTTM ?? m.peBasicExclExtraTTM ?? m.peNormalizedAnnual ?? null,
+  }
+}
+
+/** Fetch metrics for many symbols in parallel. Returns a map keyed by symbol. */
+export async function fetchMetrics(symbols) {
+  const entries = await Promise.all(
+    symbols.map(async (symbol) => {
+      try {
+        return [symbol, await fetchMetric(symbol)]
+      } catch {
+        return [symbol, null]
+      }
+    }),
+  )
+  return Object.fromEntries(entries)
+}
