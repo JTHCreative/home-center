@@ -10,27 +10,33 @@ import { PlusIcon, TrashIcon } from '../components/Icons.jsx'
 // Watchlists: named lists of symbols. `symbol` is the Finnhub symbol; crypto
 // uses exchange-prefixed symbols (e.g. BINANCE:BTCUSDT). `qty` is optional —
 // when set, the symbol contributes to the list's value and daily P&L.
+// Default lists below were imported from the user's Robinhood Legend watchlists.
+const mk = (id, name, symbols) => ({
+  id,
+  name,
+  items: symbols.map((symbol) => ({ symbol, name: '', qty: 0 })),
+})
+
 const DEFAULT_WATCHLISTS = [
-  {
-    id: 'wl-stocks',
-    name: 'Stocks',
-    items: [
-      { symbol: 'AAPL', name: 'Apple', qty: 25 },
-      { symbol: 'MSFT', name: 'Microsoft', qty: 12 },
-      { symbol: 'NVDA', name: 'NVIDIA', qty: 8 },
-      { symbol: 'TSLA', name: 'Tesla', qty: 15 },
-      { symbol: 'AMZN', name: 'Amazon', qty: 10 },
-    ],
-  },
-  {
-    id: 'wl-crypto',
-    name: 'Crypto',
-    items: [
-      { symbol: 'BINANCE:BTCUSDT', name: 'Bitcoin', qty: 0.4 },
-      { symbol: 'BINANCE:ETHUSDT', name: 'Ethereum', qty: 3.2 },
-      { symbol: 'BINANCE:SOLUSDT', name: 'Solana', qty: 40 },
-    ],
-  },
+  mk('wl-growth', 'Growth Fund', [
+    'NEM', 'RYCEY', 'TSLA', 'BLOK', 'ABNB', 'DOCU', 'GOOGL', 'HOOD', 'BRK.B',
+    'CSGP', 'BABA', 'NVDA', 'AMZN', 'BA', 'DUOL', 'BLCN', 'AAPL', 'PLTR', 'RKT',
+  ]),
+  mk('wl-dividend', 'Dividend Fund', [
+    'VZ', 'STK', 'STAG', 'BSTZ', 'ARCC', 'O', 'SCHD', 'PG', 'VYM', 'JNJ', 'CVX',
+    'COST', 'JEPI', 'FDVV', 'KO', 'MAIN', 'IBM', 'BIPC',
+  ]),
+  mk('wl-ira', 'IRAs', [
+    'AMD', 'UAL', 'DAL', 'VYM', 'VTR', 'IVV', 'SPY', 'VOO', 'COST', 'SCHB',
+    'VONG', 'MSFT', 'DIS', 'CSCO',
+  ]),
+  mk('wl-eyeson', 'Eyes On', [
+    'ROKU', 'RIVN', 'STUB', 'KEYS', 'LUV', 'CMG', 'SCHW', 'RGTI', 'AMC', 'TGT',
+    'TTD', 'U', 'GEMI', 'TSM', 'OTIS', 'F', 'WAL', 'PYPL', 'IONQ', 'GM', 'ROP',
+    'LCID', 'WMT', 'ARKF', 'PFE', 'META', 'MCD', 'TOL', 'DHI', 'COIN', 'CRM',
+    'KLAR', 'UBER', 'NFLX', 'SNAP', 'ZG', 'QBTS', 'PTON', 'GME', 'AI', 'LLY',
+    'LULU', 'RVI', 'SNOW', 'SNDL', 'BRLT', 'LEN', 'PINS', 'ADBE',
+  ]),
 ]
 
 // Deterministic mock quote so the dashboard renders without an API key.
@@ -87,7 +93,9 @@ function parseSymbols(text) {
 }
 
 export default function Stocks() {
-  const [watchlists, setWatchlists] = useLocalState('watchlists', DEFAULT_WATCHLISTS)
+  // Key is versioned (-v2) so the imported Robinhood lists replace the earlier
+  // demo Stocks/Crypto defaults on devices that already seeded them.
+  const [watchlists, setWatchlists] = useLocalState('watchlists-v2', DEFAULT_WATCHLISTS)
   const [activeId, setActiveId] = useState(watchlists[0]?.id)
   const [quotes, setQuotes] = useState({})
   const [loading, setLoading] = useState(true)
