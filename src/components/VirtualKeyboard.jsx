@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, CloseIcon } from './Icons.jsx'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  CloseIcon,
+  KeyboardIcon,
+} from './Icons.jsx'
 
 // On-screen keyboard for the touchscreen kiosk. Mounted once (in App). It tracks
 // the focused input/textarea and writes through the native value setter so React
@@ -86,9 +93,17 @@ const LETTER_ROWS = [
 ]
 const NUMBER_ROW = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 
+// Sets the global --kb variable (px) that pages/modals use to reserve space so
+// the keyboard never covers the focused field. 0 when hidden/collapsed.
+function setKbHeight(px) {
+  document.documentElement.style.setProperty('--kb', `${px}px`)
+}
+
 export default function VirtualKeyboard() {
   const [target, setTarget] = useState(null)
   const [shift, setShift] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+  const panelRef = useRef(null)
 
   useEffect(() => {
     // Only raise the keyboard when the field was reached by touch (or pen), so a
@@ -99,7 +114,9 @@ export default function VirtualKeyboard() {
     }
     const onFocusIn = (e) => {
       if (TOUCH_ONLY && !touchInput) return setTarget(null)
-      setTarget(classify(e.target) ? e.target : null)
+      const next = classify(e.target) ? e.target : null
+      setTarget(next)
+      if (next) setCollapsed(false) // re-show on each new field
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('focusin', onFocusIn)
@@ -110,6 +127,30 @@ export default function VirtualKeyboard() {
   }, [])
 
   const mode = classify(target)
+  const open = !!target && !!mode && !collapsed
+
+  // Publish the keyboard height for keyboard-avoidance, and scroll the focused
+  // field into the remaining space. Reset to 0 whenever it's not open.
+  useLayoutEffect(() => {
+    if (!open) {
+      setKbHeight(0)
+      return
+    }
+    const update = () => setKbHeight(panelRef.current?.offsetHeight ?? 0)
+    update()
+    const ro = new ResizeObserver(update)
+    if (panelRef.current) ro.observe(panelRef.current)
+    const id = setTimeout(() => {
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 120)
+    return () => {
+      ro.disconnect()
+      clearTimeout(id)
+    }
+  }, [open, mode, target])
+
+  useEffect(() => () => setKbHeight(0), [])
+
   if (!target || !mode) return null
 
   // Keep the field focused; act on the stored element.
@@ -123,12 +164,40 @@ export default function VirtualKeyboard() {
     setTarget(null)
   }
 
+  // Collapsed: just a floating "show keyboard" pill.
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setCollapsed(false)}
+        className="fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-full bg-accent px-5 py-3 font-semibold text-bg shadow-glow active:scale-95"
+      >
+        <KeyboardIcon className="h-6 w-6" />
+        <ChevronUp className="h-5 w-5" />
+      </button>
+    )
+  }
+
   return (
     // Prevent mousedown from blurring the active field when tapping keys.
     <div
+      ref={panelRef}
       onMouseDown={(e) => e.preventDefault()}
-      className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-surface/95 p-3 backdrop-blur"
+      className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-surface/95 px-3 pb-3 backdrop-blur"
     >
+      {/* Hide handle */}
+      <div className="flex justify-center py-1">
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          aria-label="Hide keyboard"
+          className="flex items-center gap-2 rounded-full bg-white/5 px-6 py-1.5 text-sm font-medium text-gray-400 active:scale-95"
+        >
+          <ChevronDown className="h-5 w-5" /> Hide
+        </button>
+      </div>
+
       <div className="mx-auto max-w-4xl">
         {mode === 'numeric' ? (
           <NumericPad

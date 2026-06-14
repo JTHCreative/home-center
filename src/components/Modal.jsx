@@ -10,7 +10,10 @@ export default function Modal({ open, onClose, title, children, footer }) {
       onClick={onClose}
     >
       <div
-        className="scroll-area max-h-[80vh] w-full max-w-lg rounded-2xl border border-border bg-surface shadow-glow"
+        // Shrink so the on-screen keyboard never covers the modal; it scrolls
+        // internally and the focused field is scrolled into view.
+        className="scroll-area w-full max-w-lg rounded-2xl border border-border bg-surface shadow-glow"
+        style={{ maxHeight: 'calc(90vh - 5vh - var(--kb, 0px))' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-6 py-4">

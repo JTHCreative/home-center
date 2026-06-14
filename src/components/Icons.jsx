@@ -109,6 +109,31 @@ export function ChevronLeft(props) {
   )
 }
 
+export function ChevronUp(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M18 15l-6-6-6 6" />
+    </svg>
+  )
+}
+
+export function ChevronDown(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  )
+}
+
+export function KeyboardIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
+    </svg>
+  )
+}
+
 export function ChevronRight(props) {
   return (
     <svg {...base} {...props}>
