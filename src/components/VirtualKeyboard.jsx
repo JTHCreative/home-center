@@ -86,9 +86,22 @@ export default function VirtualKeyboard() {
   const [shift, setShift] = useState(false)
 
   useEffect(() => {
-    const onFocusIn = (e) => setTarget(classify(e.target) ? e.target : null)
+    // Only raise the keyboard when the field was reached by touch (or pen), so a
+    // mouse + physical keyboard on a mini PC isn't interrupted by it.
+    let touchInput = false
+    const onPointerDown = (e) => {
+      touchInput = e.pointerType === 'touch' || e.pointerType === 'pen'
+    }
+    const onFocusIn = (e) => {
+      if (!touchInput) return setTarget(null)
+      setTarget(classify(e.target) ? e.target : null)
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('focusin', onFocusIn)
-    return () => document.removeEventListener('focusin', onFocusIn)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('focusin', onFocusIn)
+    }
   }, [])
 
   const mode = classify(target)
