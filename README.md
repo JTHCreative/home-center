@@ -68,6 +68,24 @@ npm run preview -- --host
 - Edit holdings in `DEFAULT_PORTFOLIO` (`src/pages/Stocks.jsx`) or override via
   the `home-center:portfolio` localStorage key.
 
+## Hosting on GitHub Pages
+
+This repo ships a workflow (`.github/workflows/deploy.yml`) that builds the app
+and deploys it to GitHub Pages on every push to `main`.
+
+1. In the repo, go to **Settings → Pages** and set **Source** to
+   **GitHub Actions**.
+2. (Optional) Add a `VITE_FINNHUB_API_KEY` repository secret for live quotes.
+   Note: client builds inline this value into the public bundle, so only use a
+   key you're comfortable exposing.
+3. Push to `main` (or run the workflow manually from the **Actions** tab).
+
+The site publishes to `https://<owner>.github.io/home-center/`. Production
+builds use a base path of `/home-center/` to match the project-pages subpath
+(routing uses `HashRouter`, so deep links work). If you rename the repo or use a
+custom domain, override it: `VITE_BASE=/your-base/ npm run build` (or set the
+`VITE_BASE` env var in the workflow).
+
 ## Kiosk mode on the Pi
 
 Launch Chromium pointed at the built app (or the dev server):
