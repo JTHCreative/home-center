@@ -24,6 +24,18 @@
     -webkit-user-select: text;
     user-select: text;
   }
+
+  /* Hide the tiny native number spinners — too small for touch; the on-screen
+     keyboard provides large +/- stepper buttons instead. */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 @layer components {

@@ -69,7 +69,7 @@ function withResets(sections) {
       items: s.items.map((it) => ({
         ...it,
         done: false,
-        value: 0,
+        checks: [],
         children: (it.children || []).map((c) => ({ ...c, done: false })),
       })),
     }
@@ -90,7 +90,8 @@ function itemCompletion(it) {
     return kids.filter((c) => c.done).length / kids.length
   }
   if (it.type === 'tally') {
-    return it.target ? Math.max(0, Math.min(1, it.value / it.target)) : 0
+    const checked = (it.checks || []).slice(0, it.target).filter(Boolean).length
+    return it.target ? Math.max(0, Math.min(1, checked / it.target)) : 0
   }
   return it.done ? 1 : 0
 }
@@ -114,7 +115,7 @@ const newItem = () => ({
   title: '',
   type: 'checkbox',
   target: 7,
-  value: 0,
+  checks: [], // per-box state for tally type (each box toggles independently)
   done: false,
   note: '',
   children: [],
@@ -209,12 +210,36 @@ export default function Goals() {
       ),
     )
 
+  // Toggle a single tally box independently of the others.
+  const toggleTally = (sectionId, itemId, index) =>
+    setSections((list) =>
+      list.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              items: s.items.map((it) => {
+                if (it.id !== itemId) return it
+                const checks = Array.from({ length: it.target }, (_, i) => it.checks?.[i] || false)
+                checks[index] = !checks[index]
+                return { ...it, checks }
+              }),
+            }
+          : s,
+      ),
+    )
+
   const saveItem = () => {
     if (!itemDraft.item.title.trim()) return
+    const target = Math.max(1, Number(itemDraft.item.target) || 1)
     const item = {
       ...itemDraft.item,
       title: itemDraft.item.title.trim(),
-      target: Math.max(1, Number(itemDraft.item.target) || 1),
+      target,
+      // Resize the per-box state to the (possibly changed) target.
+      checks:
+        itemDraft.item.type === 'tally'
+          ? Array.from({ length: target }, (_, i) => itemDraft.item.checks?.[i] || false)
+          : [],
       children: (itemDraft.item.children || [])
         .map((c) => ({ ...c, title: c.title.trim() }))
         .filter((c) => c.title),
@@ -259,6 +284,7 @@ export default function Goals() {
                 onEditItem={(it) => setItemDraft({ sectionId: section.id, item: { ...it } })}
                 onPatchItem={(itemId, patch) => patchItem(section.id, itemId, patch)}
                 onToggleChild={(itemId, childId) => toggleChild(section.id, itemId, childId)}
+                onToggleTally={(itemId, index) => toggleTally(section.id, itemId, index)}
                 onRemoveItem={(itemId) => removeItem(section.id, itemId)}
                 onEditSection={() => setSectionDraft({ ...section })}
                 onRemoveSection={() => removeSection(section.id)}
@@ -323,7 +349,7 @@ function SortableSection({ section, ...props }) {
   )
 }
 
-function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchItem, onToggleChild, onRemoveItem, onEditSection, onRemoveSection }) {
+function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchItem, onToggleChild, onToggleTally, onRemoveItem, onEditSection, onRemoveSection }) {
   const pct = sectionCompletion(section)
   const resetLabel = RESETS.find((r) => r.id === (section.reset || 'none')).label
 
@@ -361,7 +387,7 @@ function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchI
             item={it}
             color={section.color}
             onToggle={() => onPatchItem(it.id, { done: !it.done })}
-            onTally={(value) => onPatchItem(it.id, { value })}
+            onToggleBox={(index) => onToggleTally(it.id, index)}
             onToggleChild={(childId) => onToggleChild(it.id, childId)}
             onEdit={() => onEditItem(it)}
             onRemove={() => onRemoveItem(it.id)}
@@ -398,11 +424,12 @@ function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchI
   )
 }
 
-function GoalItem({ item, color, onToggle, onTally, onToggleChild, onEdit, onRemove }) {
+function GoalItem({ item, color, onToggle, onToggleBox, onToggleChild, onEdit, onRemove }) {
   const kids = item.children || []
   const isGroup = kids.length > 0
   const complete = itemCompletion(item) >= 1
   const doneCount = kids.filter((c) => c.done).length
+  const tallyDone = (item.checks || []).slice(0, item.target).filter(Boolean).length
 
   return (
     <li className="rounded-lg px-1 py-1.5">
@@ -428,7 +455,7 @@ function GoalItem({ item, color, onToggle, onTally, onToggleChild, onEdit, onRem
             {item.done && <CheckIcon className="h-5 w-5" />}
           </button>
         ) : (
-          <TallyBoxes value={item.value} target={item.target} color={color} onChange={onTally} />
+          <TallyBoxes checks={item.checks || []} target={item.target} color={color} onToggle={onToggleBox} />
         )}
 
         <button
@@ -441,7 +468,7 @@ function GoalItem({ item, color, onToggle, onTally, onToggleChild, onEdit, onRem
           </span>
           {!isGroup && item.type === 'tally' && (
             <span className="font-mono text-xs text-gray-500">
-              {item.value}/{item.target}
+              {tallyDone}/{item.target}
             </span>
           )}
           {item.note && <span className="font-mono text-xs text-gray-500">· {item.note}</span>}
@@ -485,25 +512,27 @@ function GoalItem({ item, color, onToggle, onTally, onToggleChild, onEdit, onRem
   )
 }
 
-// Row of tappable boxes. Tap a box to fill up to it; tap the last filled to unset.
-function TallyBoxes({ value, target, color, onChange }) {
+// Row of tappable boxes. Each box toggles independently and shows a check mark.
+function TallyBoxes({ checks, target, color, onToggle }) {
   return (
-    <div className="flex flex-shrink-0 flex-wrap gap-1">
+    <div className="flex flex-shrink-0 flex-wrap gap-1.5">
       {Array.from({ length: target }, (_, i) => {
-        const filled = i < value
+        const filled = !!checks[i]
         return (
           <button
             key={i}
             type="button"
-            onClick={() => onChange(i + 1 === value ? i : i + 1)}
-            aria-label={`Set progress to ${i + 1}`}
-            className="h-6 w-6 rounded border-2 active:scale-90"
+            onClick={() => onToggle(i)}
+            aria-label={`Toggle box ${i + 1}`}
+            className="flex h-7 w-7 items-center justify-center rounded border-2 active:scale-90"
             style={
               filled
-                ? { backgroundColor: color, borderColor: color }
+                ? { backgroundColor: color, borderColor: color, color: '#0D1117' }
                 : { borderColor: '#30363D' }
             }
-          />
+          >
+            {filled && <CheckIcon className="h-4 w-4" />}
+          </button>
         )
       })}
     </div>
