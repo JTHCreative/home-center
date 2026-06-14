@@ -7,6 +7,11 @@ import { ChevronLeft, ChevronRight, CloseIcon } from './Icons.jsx'
 
 const TEXT_TYPES = ['text', 'search', 'email', 'url', 'tel', 'password']
 
+// When true, the keyboard only appears for touch/pen input (so a mouse +
+// physical keyboard isn't interrupted). Temporarily false to allow testing the
+// keyboard with a mouse on a non-touch machine.
+const TOUCH_ONLY = false
+
 // Which keyboard (if any) a focused element should get.
 function classify(el) {
   if (!el || el.disabled || el.readOnly) return null
@@ -93,7 +98,7 @@ export default function VirtualKeyboard() {
       touchInput = e.pointerType === 'touch' || e.pointerType === 'pen'
     }
     const onFocusIn = (e) => {
-      if (!touchInput) return setTarget(null)
+      if (TOUCH_ONLY && !touchInput) return setTarget(null)
       setTarget(classify(e.target) ? e.target : null)
     }
     document.addEventListener('pointerdown', onPointerDown, true)

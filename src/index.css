@@ -3,6 +3,42 @@
 @tailwind utilities;
 
 @layer base {
+  /* Theme palettes — RGB channels consumed by tailwind.config.js. The default
+     (Midnight) lives on :root; data-theme overrides swap the whole palette. */
+  :root,
+  [data-theme='midnight'] {
+    --c-bg: 13 17 23;
+    --c-surface: 22 27 34;
+    --c-border: 48 54 61;
+    --c-accent: 88 166 255;
+    --c-gain: 57 211 83;
+    --c-loss: 248 81 73;
+  }
+  [data-theme='ocean'] {
+    --c-bg: 8 22 40;
+    --c-surface: 14 36 58;
+    --c-border: 28 64 92;
+    --c-accent: 56 189 248;
+    --c-gain: 45 212 191;
+    --c-loss: 251 113 133;
+  }
+  [data-theme='forest'] {
+    --c-bg: 13 26 17;
+    --c-surface: 21 39 27;
+    --c-border: 39 74 49;
+    --c-accent: 110 231 135;
+    --c-gain: 63 185 80;
+    --c-loss: 229 115 80;
+  }
+  [data-theme='moon'] {
+    --c-bg: 11 16 38;
+    --c-surface: 21 26 58;
+    --c-border: 43 49 99;
+    --c-accent: 167 139 250;
+    --c-gain: 52 211 153;
+    --c-loss: 251 113 133;
+  }
+
   html,
   body,
   #root {
@@ -11,6 +47,7 @@
 
   body {
     @apply bg-bg text-gray-100 font-sans antialiased;
+    transition: background-color 0.4s ease;
     /* Kiosk: never select text or show the caret on a touchscreen. */
     -webkit-user-select: none;
     user-select: none;
