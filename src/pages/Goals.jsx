@@ -525,7 +525,6 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
       open={!!draft}
       onClose={onClose}
       title="List"
-      size="narrow"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -535,15 +534,17 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
         </>
       }
     >
-      <div className="space-y-4">
-        <input
-          autoFocus
-          className={fieldClass}
-          placeholder="List name (e.g. Justin's Goals)"
-          value={draft.title}
-          onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-        />
-
+      <div className="grid gap-5 md:grid-cols-2">
+        <div>
+          <label className="mb-2 block text-xs text-gray-500">Name</label>
+          <input
+            autoFocus
+            className={fieldClass}
+            placeholder="List name (e.g. Justin's Goals)"
+            value={draft.title}
+            onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+          />
+        </div>
         <div>
           <label className="mb-2 block text-xs text-gray-500">Color</label>
           <div className="flex flex-wrap gap-3">
@@ -553,7 +554,7 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
                 type="button"
                 onClick={() => setDraft({ ...draft, color: c })}
                 aria-label={`Color ${c}`}
-                className="h-9 w-9 rounded-full active:scale-90"
+                className="h-10 w-10 rounded-full active:scale-90"
                 style={{
                   backgroundColor: c,
                   outline: draft.color === c ? '3px solid white' : 'none',
