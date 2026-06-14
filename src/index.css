@@ -109,4 +109,13 @@
   .scroll-fat::-webkit-scrollbar-thumb:active {
     background-color: rgb(var(--c-accent));
   }
+
+  /* Hide scrollbar but keep scrolling (used by the swipeable tab bar). */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }

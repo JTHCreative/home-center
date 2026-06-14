@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Card, { PageHeader } from '../components/Card.jsx'
-import Tabs from '../components/Tabs.jsx'
+import ScrollTabs from '../components/ScrollTabs.jsx'
 import Sparkline from '../components/Sparkline.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
@@ -209,23 +209,25 @@ export default function Stocks() {
       <PageHeader
         title="Stocks & Crypto"
         subtitle={hasFinnhubKey ? 'Live via Finnhub' : 'Demo data — add VITE_FINNHUB_API_KEY for live quotes'}
-      >
-        <div className="flex max-w-full items-center gap-2 overflow-x-auto">
-          <Tabs
-            tabs={watchlists.map((w) => ({ id: w.id, label: w.name }))}
-            active={active?.id}
-            onChange={setActiveId}
-          />
-          <button
-            type="button"
-            onClick={() => setListDraft({ name: '' })}
-            aria-label="New watchlist"
-            className="flex-shrink-0 rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
-          >
-            <PlusIcon className="h-5 w-5" />
-          </button>
-        </div>
-      </PageHeader>
+      />
+
+      {/* Watchlist bar: shows 7 at a time, swipe or arrow to scroll */}
+      <div className="mb-4 flex items-center gap-2">
+        <ScrollTabs
+          tabs={watchlists.map((w) => ({ id: w.id, label: w.name }))}
+          active={active?.id}
+          onChange={setActiveId}
+          visible={7}
+        />
+        <button
+          type="button"
+          onClick={() => setListDraft({ name: '' })}
+          aria-label="New watchlist"
+          className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-gray-300 active:scale-95"
+        >
+          <PlusIcon className="h-6 w-6" />
+        </button>
+      </div>
 
       {/* Active list actions */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
