@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   DndContext,
   PointerSensor,
@@ -17,17 +17,17 @@ import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
 import { readStored, useLocalState } from '../lib/storage.js'
-import { CheckIcon, GripIcon, PlusIcon, TrashIcon } from '../components/Icons.jsx'
+import {
+  CheckIcon,
+  ChevronLeft,
+  ChevronRight,
+  GripIcon,
+  PlusIcon,
+  TrashIcon,
+} from '../components/Icons.jsx'
 
 // Section accent palette (tap to pick when creating/editing a section).
 const COLORS = ['#39D353', '#58A6FF', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
-
-const RESETS = [
-  { id: 'none', label: 'Never' },
-  { id: 'daily', label: 'Daily' },
-  { id: 'weekly', label: 'Weekly' },
-  { id: 'monthly', label: 'Monthly' },
-]
 
 // Calendar category colors (mirrors Calendar.jsx) for the Upcoming Events list.
 const CAL_COLORS = {
@@ -38,127 +38,108 @@ const CAL_COLORS = {
   Other: '#8B949E',
 }
 
-// --- Period keys: identify which period a section currently belongs to. ------
-function currentPeriodKey(reset, now = new Date()) {
-  if (reset === 'monthly') {
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  }
-  if (reset === 'weekly') {
-    const offset = (now.getDay() + 6) % 7 // week starts Monday
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - offset)
-    return `W-${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
-  }
-  if (reset === 'daily') {
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  }
-  return null // 'none' — never resets
-}
-
-// Reset a section's items (and any sub-items) when its period has rolled over.
-function withResets(sections) {
-  let changed = false
-  const next = sections.map((s) => {
-    if (!s.reset || s.reset === 'none') return s
-    const key = currentPeriodKey(s.reset)
-    if (s.periodKey === key) return s
-    changed = true
-    return {
-      ...s,
-      periodKey: key,
-      items: s.items.map((it) => ({
-        ...it,
-        done: false,
-        checks: [],
-        children: (it.children || []).map((c) => ({ ...c, done: false })),
-      })),
-    }
-  })
-  return changed ? next : sections
-}
-
-const SEED = [
-  { id: crypto.randomUUID(), title: "Justin's Goals", color: '#39D353', reset: 'none', periodKey: null, items: [] },
-  { id: crypto.randomUUID(), title: "Kitty's Goals", color: '#F0883E', reset: 'none', periodKey: null, items: [] },
-  { id: crypto.randomUUID(), title: 'Weekly Goals', color: '#58A6FF', reset: 'weekly', periodKey: currentPeriodKey('weekly'), items: [] },
-]
-
-// Completion as a 0–1 fraction. Items with sub-items roll up their children.
-function itemCompletion(it) {
-  const kids = it.children || []
-  if (kids.length > 0) {
-    return kids.filter((c) => c.done).length / kids.length
-  }
-  if (it.type === 'tally') {
-    const checked = (it.checks || []).slice(0, it.target).filter(Boolean).length
-    return it.target ? Math.max(0, Math.min(1, checked / it.target)) : 0
-  }
-  return it.done ? 1 : 0
-}
-
-const sectionCompletion = (s) =>
-  s.items.length === 0
-    ? 0
-    : (s.items.reduce((sum, it) => sum + itemCompletion(it), 0) / s.items.length) * 100
-
-const newSection = () => ({
-  id: crypto.randomUUID(),
-  title: '',
-  color: COLORS[1],
-  reset: 'none',
-  periodKey: null,
-  items: [],
-})
-
-const newItem = () => ({
-  id: crypto.randomUUID(),
-  title: '',
-  type: 'checkbox',
-  target: 7,
-  checks: [], // per-box state for tally type (each box toggles independently)
-  done: false,
-  note: '',
-  children: [],
-})
-
+// --- Date helpers ------------------------------------------------------------
 const iso = (d) => {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+const addDays = (d, n) => {
+  const c = new Date(d)
+  c.setDate(c.getDate() + n)
+  return c
+}
+const mondayOf = (d) => {
+  const c = new Date(d)
+  c.setHours(0, 0, 0, 0)
+  c.setDate(c.getDate() - ((c.getDay() + 6) % 7)) // week starts Monday
+  return c
+}
+
+const SEED = [
+  { id: crypto.randomUUID(), title: "Justin's Goals", color: '#39D353', items: [] },
+  { id: crypto.randomUUID(), title: "Kitty's Goals", color: '#F0883E', items: [] },
+  { id: crypto.randomUUID(), title: 'Weekly Goals', color: '#58A6FF', items: [] },
+]
+
+const EMPTY_WEEK = { items: {}, children: {} }
+
+// Completion (0–1) for an item, using the selected week's progress.
+function itemCompletion(item, wp) {
+  const kids = item.children || []
+  if (kids.length > 0) {
+    return kids.filter((c) => wp.children[c.id]).length / kids.length
+  }
+  if (item.type === 'tally') {
+    const checks = wp.items[item.id]?.checks || []
+    const done = checks.slice(0, item.target).filter(Boolean).length
+    return item.target ? Math.max(0, Math.min(1, done / item.target)) : 0
+  }
+  return wp.items[item.id]?.done ? 1 : 0
+}
+
+const sectionCompletion = (s, wp) =>
+  s.items.length === 0
+    ? 0
+    : (s.items.reduce((sum, it) => sum + itemCompletion(it, wp), 0) / s.items.length) * 100
+
+const newSection = () => ({ id: crypto.randomUUID(), title: '', color: COLORS[1], items: [] })
+
+const newItem = () => ({
+  id: crypto.randomUUID(),
+  title: '',
+  type: 'checkbox',
+  target: 7,
+  note: '',
+  children: [],
+})
 
 export default function Goals() {
   const [sections, setSections] = useLocalState('goals-sections', SEED)
+  const [progress, setProgress] = useLocalState('goals-progress', {}) // weekKey -> { items, children }
+  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
 
-  // Apply section resets on mount and every minute (covers rollover while the
-  // kiosk stays open).
-  useEffect(() => {
-    setSections((s) => withResets(s))
-    const id = setInterval(() => setSections((s) => withResets(s)), 60_000)
-    return () => clearInterval(id)
-  }, [setSections])
+  const weekKey = iso(weekStart)
+  const wp = progress[weekKey] || EMPTY_WEEK
+  const isCurrentWeek = weekKey === iso(mondayOf(new Date()))
 
   // Upcoming events pulled (read-only) from the Calendar page's stored events.
   const upcoming = useMemo(() => {
     const today = iso(new Date())
-    const events = readStored('calendar-events', [])
-    return events
+    return readStored('calendar-events', [])
       .filter((e) => e.date >= today)
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
       .slice(0, 8)
   }, [])
 
+  // --- Per-week progress mutations ------------------------------------------
+  const editWeek = (fn) =>
+    setProgress((p) => {
+      const cur = p[weekKey] || EMPTY_WEEK
+      return { ...p, [weekKey]: fn(cur) }
+    })
+  const toggleCheckbox = (itemId) =>
+    editWeek((wk) => {
+      const item = wk.items[itemId] || {}
+      return { ...wk, items: { ...wk.items, [itemId]: { ...item, done: !item.done } } }
+    })
+  const toggleTally = (itemId, index, target) =>
+    editWeek((wk) => {
+      const item = wk.items[itemId] || {}
+      const checks = Array.from({ length: target }, (_, i) => item.checks?.[i] || false)
+      checks[index] = !checks[index]
+      return { ...wk, items: { ...wk.items, [itemId]: { ...item, checks } } }
+    })
+  const toggleChild = (childId) =>
+    editWeek((wk) => ({ ...wk, children: { ...wk.children, [childId]: !wk.children[childId] } }))
+
   // --- Section ops ----------------------------------------------------------
   const saveSection = () => {
     if (!sectionDraft.title.trim()) return
-    const draft = {
-      ...sectionDraft,
-      title: sectionDraft.title.trim(),
-      periodKey: currentPeriodKey(sectionDraft.reset),
-    }
+    const draft = { ...sectionDraft, title: sectionDraft.title.trim() }
     setSections((list) => {
       const exists = list.some((s) => s.id === draft.id)
       return exists ? list.map((s) => (s.id === draft.id ? draft : s)) : [...list, draft]
@@ -167,8 +148,6 @@ export default function Goals() {
   }
   const removeSection = (id) => setSections((list) => list.filter((s) => s.id !== id))
 
-  // Drag-to-reorder sections. A small distance threshold keeps taps on the
-  // handle from being treated as drags; works for both touch and mouse.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
@@ -180,68 +159,14 @@ export default function Goals() {
   }
 
   // --- Item ops -------------------------------------------------------------
-  const patchItem = (sectionId, itemId, patch) =>
-    setSections((list) =>
-      list.map((s) =>
-        s.id === sectionId
-          ? { ...s, items: s.items.map((it) => (it.id === itemId ? { ...it, ...patch } : it)) }
-          : s,
-      ),
-    )
-
-  const toggleChild = (sectionId, itemId, childId) =>
-    setSections((list) =>
-      list.map((s) =>
-        s.id === sectionId
-          ? {
-              ...s,
-              items: s.items.map((it) =>
-                it.id === itemId
-                  ? {
-                      ...it,
-                      children: it.children.map((c) =>
-                        c.id === childId ? { ...c, done: !c.done } : c,
-                      ),
-                    }
-                  : it,
-              ),
-            }
-          : s,
-      ),
-    )
-
-  // Toggle a single tally box independently of the others.
-  const toggleTally = (sectionId, itemId, index) =>
-    setSections((list) =>
-      list.map((s) =>
-        s.id === sectionId
-          ? {
-              ...s,
-              items: s.items.map((it) => {
-                if (it.id !== itemId) return it
-                const checks = Array.from({ length: it.target }, (_, i) => it.checks?.[i] || false)
-                checks[index] = !checks[index]
-                return { ...it, checks }
-              }),
-            }
-          : s,
-      ),
-    )
-
   const saveItem = () => {
     if (!itemDraft.item.title.trim()) return
-    const target = Math.max(1, Number(itemDraft.item.target) || 1)
     const item = {
       ...itemDraft.item,
       title: itemDraft.item.title.trim(),
-      target,
-      // Resize the per-box state to the (possibly changed) target.
-      checks:
-        itemDraft.item.type === 'tally'
-          ? Array.from({ length: target }, (_, i) => itemDraft.item.checks?.[i] || false)
-          : [],
+      target: Math.max(1, Number(itemDraft.item.target) || 1),
       children: (itemDraft.item.children || [])
-        .map((c) => ({ ...c, title: c.title.trim() }))
+        .map((c) => ({ id: c.id, title: c.title.trim() }))
         .filter((c) => c.title),
     }
     setSections((list) =>
@@ -263,15 +188,68 @@ export default function Goals() {
       ),
     )
 
+  // Week label, e.g. "Jun 8 – Jun 14"
+  const weekEnd = addDays(weekStart, 6)
+  const rangeLabel = `${weekStart.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+  const weekDelta = Math.round((weekStart - mondayOf(new Date())) / (7 * 864e5))
+  const relLabel =
+    weekDelta === 0
+      ? 'This week'
+      : weekDelta === -1
+        ? 'Last week'
+        : weekDelta === 1
+          ? 'Next week'
+          : weekDelta < 0
+            ? `${-weekDelta} weeks ago`
+            : `In ${weekDelta} weeks`
+
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title="Goals" subtitle="Color-coded lists, optional auto-reset">
+      <PageHeader title="Goals" subtitle="Color-coded lists, tracked by week">
         <Button onClick={() => setSectionDraft(newSection())}>
           <span className="flex items-center gap-2">
             <PlusIcon className="h-5 w-5" /> Add List
           </span>
         </Button>
       </PageHeader>
+
+      {/* Week navigator */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setWeekStart((w) => addDays(w, -7))}
+            aria-label="Previous week"
+            className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setWeekStart(mondayOf(new Date()))}
+            className={[
+              'rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
+              isCurrentWeek ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
+            ].join(' ')}
+          >
+            This Week
+          </button>
+          <button
+            type="button"
+            onClick={() => setWeekStart((w) => addDays(w, 7))}
+            aria-label="Next week"
+            className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        </div>
+        <div className="text-right">
+          <div className="text-xl font-bold text-white">{rangeLabel}</div>
+          <div className={isCurrentWeek ? 'text-xs text-gray-500' : 'text-xs text-accent'}>
+            {relLabel}
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -280,11 +258,12 @@ export default function Goals() {
               <SortableSection
                 key={section.id}
                 section={section}
+                wp={wp}
                 onAddItem={() => setItemDraft({ sectionId: section.id, item: newItem() })}
                 onEditItem={(it) => setItemDraft({ sectionId: section.id, item: { ...it } })}
-                onPatchItem={(itemId, patch) => patchItem(section.id, itemId, patch)}
-                onToggleChild={(itemId, childId) => toggleChild(section.id, itemId, childId)}
-                onToggleTally={(itemId, index) => toggleTally(section.id, itemId, index)}
+                onToggleCheckbox={toggleCheckbox}
+                onToggleTally={toggleTally}
+                onToggleChild={toggleChild}
                 onRemoveItem={(itemId) => removeItem(section.id, itemId)}
                 onEditSection={() => setSectionDraft({ ...section })}
                 onRemoveSection={() => removeSection(section.id)}
@@ -349,9 +328,8 @@ function SortableSection({ section, ...props }) {
   )
 }
 
-function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchItem, onToggleChild, onToggleTally, onRemoveItem, onEditSection, onRemoveSection }) {
-  const pct = sectionCompletion(section)
-  const resetLabel = RESETS.find((r) => r.id === (section.reset || 'none')).label
+function SectionCard({ section, wp, dragHandleProps, onAddItem, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onEditSection, onRemoveSection }) {
+  const pct = sectionCompletion(section, wp)
 
   return (
     <Card>
@@ -369,11 +347,6 @@ function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchI
         <h2 className="flex-1 truncate text-lg font-bold" style={{ color: section.color }}>
           {section.title}
         </h2>
-        {section.reset && section.reset !== 'none' && (
-          <span className="rounded-md bg-white/5 px-2 py-1 font-mono text-[10px] uppercase text-gray-400">
-            {resetLabel}
-          </span>
-        )}
         <ProgressRing value={pct} size={44} color={section.color} />
       </div>
 
@@ -386,9 +359,10 @@ function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchI
             key={it.id}
             item={it}
             color={section.color}
-            onToggle={() => onPatchItem(it.id, { done: !it.done })}
-            onToggleBox={(index) => onToggleTally(it.id, index)}
-            onToggleChild={(childId) => onToggleChild(it.id, childId)}
+            wp={wp}
+            onToggle={() => onToggleCheckbox(it.id)}
+            onToggleBox={(index) => onToggleTally(it.id, index, it.target)}
+            onToggleChild={(childId) => onToggleChild(childId)}
             onEdit={() => onEditItem(it)}
             onRemove={() => onRemoveItem(it.id)}
           />
@@ -424,12 +398,14 @@ function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchI
   )
 }
 
-function GoalItem({ item, color, onToggle, onToggleBox, onToggleChild, onEdit, onRemove }) {
+function GoalItem({ item, color, wp, onToggle, onToggleBox, onToggleChild, onEdit, onRemove }) {
   const kids = item.children || []
   const isGroup = kids.length > 0
-  const complete = itemCompletion(item) >= 1
-  const doneCount = kids.filter((c) => c.done).length
-  const tallyDone = (item.checks || []).slice(0, item.target).filter(Boolean).length
+  const complete = itemCompletion(item, wp) >= 1
+  const doneCount = kids.filter((c) => wp.children[c.id]).length
+  const checks = wp.items[item.id]?.checks || []
+  const done = wp.items[item.id]?.done
+  const tallyDone = checks.slice(0, item.target).filter(Boolean).length
 
   return (
     <li className="rounded-lg px-1 py-1.5">
@@ -448,14 +424,14 @@ function GoalItem({ item, color, onToggle, onToggleBox, onToggleChild, onEdit, o
             aria-label={`Toggle ${item.title}`}
             className={[
               'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
-              item.done ? 'text-bg' : 'border-border',
+              done ? 'text-bg' : 'border-border',
             ].join(' ')}
-            style={item.done ? { backgroundColor: color, borderColor: color } : undefined}
+            style={done ? { backgroundColor: color, borderColor: color } : undefined}
           >
-            {item.done && <CheckIcon className="h-5 w-5" />}
+            {done && <CheckIcon className="h-5 w-5" />}
           </button>
         ) : (
-          <TallyBoxes checks={item.checks || []} target={item.target} color={color} onToggle={onToggleBox} />
+          <TallyBoxes checks={checks} target={item.target} color={color} onToggle={onToggleBox} />
         )}
 
         <button
@@ -487,25 +463,28 @@ function GoalItem({ item, color, onToggle, onToggleBox, onToggleChild, onEdit, o
       {/* Sub-items */}
       {isGroup && (
         <ul className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
-          {kids.map((c) => (
-            <li key={c.id} className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => onToggleChild(c.id)}
-                aria-label={`Toggle ${c.title}`}
-                className={[
-                  'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded border-2 active:scale-95',
-                  c.done ? 'text-bg' : 'border-border',
-                ].join(' ')}
-                style={c.done ? { backgroundColor: color, borderColor: color } : undefined}
-              >
-                {c.done && <CheckIcon className="h-4 w-4" />}
-              </button>
-              <span className={c.done ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}>
-                {c.title}
-              </span>
-            </li>
-          ))}
+          {kids.map((c) => {
+            const cdone = !!wp.children[c.id]
+            return (
+              <li key={c.id} className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => onToggleChild(c.id)}
+                  aria-label={`Toggle ${c.title}`}
+                  className={[
+                    'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded border-2 active:scale-95',
+                    cdone ? 'text-bg' : 'border-border',
+                  ].join(' ')}
+                  style={cdone ? { backgroundColor: color, borderColor: color } : undefined}
+                >
+                  {cdone && <CheckIcon className="h-4 w-4" />}
+                </button>
+                <span className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}>
+                  {c.title}
+                </span>
+              </li>
+            )
+          })}
         </ul>
       )}
     </li>
@@ -583,25 +562,6 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
             ))}
           </div>
         </div>
-
-        <div>
-          <label className="mb-2 block text-xs text-gray-500">Auto-reset</label>
-          <div className="flex flex-wrap gap-2">
-            {RESETS.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setDraft({ ...draft, reset: r.id })}
-                className={[
-                  'rounded-xl px-4 py-2.5 text-sm font-semibold active:scale-95',
-                  draft.reset === r.id ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-400',
-                ].join(' ')}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </Modal>
   )
@@ -615,7 +575,7 @@ function ItemModal({ draft, setDraft, onClose, onSave }) {
   const hasChildren = children.length > 0
 
   const addChild = () =>
-    set({ children: [...children, { id: crypto.randomUUID(), title: '', done: false }] })
+    set({ children: [...children, { id: crypto.randomUUID(), title: '' }] })
   const setChild = (id, title) =>
     set({ children: children.map((c) => (c.id === id ? { ...c, title } : c)) })
   const removeChild = (id) => set({ children: children.filter((c) => c.id !== id) })
