@@ -86,14 +86,40 @@ builds use a base path of `/home-center/` to match the project-pages subpath
 custom domain, override it: `VITE_BASE=/your-base/ npm run build` (or set the
 `VITE_BASE` env var in the workflow).
 
-## Kiosk mode on the Pi
+## Touch input
 
-Launch Chromium pointed at the built app (or the dev server):
+The app ships its own **on-screen keyboard** (`src/components/VirtualKeyboard.jsx`),
+so no OS-level virtual keyboard is needed. Focusing any text field raises a full
+QWERTY layout; focusing a number field raises a numeric keypad with large +/−
+stepper buttons. Date/time fields use the browser's native picker and the
+brightness/volume sliders stay tap-only. This works in any modern browser on any
+platform — a Raspberry Pi, a mini PC, or a tablet — because it's all in-app.
+
+## Kiosk mode
+
+Point the app at the built site (or `npm run dev`) and launch the browser
+fullscreen. The same app runs on a Raspberry Pi or a mini PC.
+
+**Raspberry Pi / Linux (Chromium):**
 
 ```bash
 chromium-browser --kiosk --noerrdialogs --disable-infobars \
   --check-for-update-interval=31536000 http://localhost:4173
 ```
+
+**Mini PC — Windows (Chrome or Edge):**
+
+```bat
+chrome.exe  --kiosk --no-first-run --disable-pinch http://localhost:4173
+msedge.exe  --kiosk --no-first-run --disable-pinch http://localhost:4173
+```
+
+**Mini PC — Linux (Chrome/Chromium):** same flags as the Pi above.
+
+You can point any of these at the GitHub Pages URL instead of a local server.
+The app uses a fixed full-height layout with overflow hidden, so it fills the
+screen cleanly in kiosk mode. To run a real (non-kiosk) browser fullscreen,
+press `F11`.
 
 ## Project structure
 

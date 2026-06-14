@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Sidebar from './components/Sidebar.jsx'
+import VirtualKeyboard from './components/VirtualKeyboard.jsx'
 import SmartHome from './pages/SmartHome.jsx'
 import Stocks from './pages/Stocks.jsx'
 import Calendar from './pages/Calendar.jsx'
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/smart-home" replace />} />
         </Routes>
       </main>
+      <VirtualKeyboard />
     </div>
   )
 }

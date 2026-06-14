@@ -1,9 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
 import { readStored, useLocalState } from '../lib/storage.js'
-import { CheckIcon, PlusIcon, TrashIcon } from '../components/Icons.jsx'
+import { CheckIcon, GripIcon, PlusIcon, TrashIcon } from '../components/Icons.jsx'
 
 // Section accent palette (tap to pick when creating/editing a section).
 const COLORS = ['#39D353', '#58A6FF', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
@@ -152,6 +166,18 @@ export default function Goals() {
   }
   const removeSection = (id) => setSections((list) => list.filter((s) => s.id !== id))
 
+  // Drag-to-reorder sections. A small distance threshold keeps taps on the
+  // handle from being treated as drags; works for both touch and mouse.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const onDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    setSections((list) => {
+      const from = list.findIndex((s) => s.id === active.id)
+      const to = list.findIndex((s) => s.id === over.id)
+      return from === -1 || to === -1 ? list : arrayMove(list, from, to)
+    })
+  }
+
   // --- Item ops -------------------------------------------------------------
   const patchItem = (sectionId, itemId, patch) =>
     setSections((list) =>
@@ -223,19 +249,23 @@ export default function Goals() {
       </PageHeader>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {sections.map((section) => (
-          <SectionCard
-            key={section.id}
-            section={section}
-            onAddItem={() => setItemDraft({ sectionId: section.id, item: newItem() })}
-            onEditItem={(it) => setItemDraft({ sectionId: section.id, item: { ...it } })}
-            onPatchItem={(itemId, patch) => patchItem(section.id, itemId, patch)}
-            onToggleChild={(itemId, childId) => toggleChild(section.id, itemId, childId)}
-            onRemoveItem={(itemId) => removeItem(section.id, itemId)}
-            onEditSection={() => setSectionDraft({ ...section })}
-            onRemoveSection={() => removeSection(section.id)}
-          />
-        ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={sections.map((s) => s.id)} strategy={rectSortingStrategy}>
+            {sections.map((section) => (
+              <SortableSection
+                key={section.id}
+                section={section}
+                onAddItem={() => setItemDraft({ sectionId: section.id, item: newItem() })}
+                onEditItem={(it) => setItemDraft({ sectionId: section.id, item: { ...it } })}
+                onPatchItem={(itemId, patch) => patchItem(section.id, itemId, patch)}
+                onToggleChild={(itemId, childId) => toggleChild(section.id, itemId, childId)}
+                onRemoveItem={(itemId) => removeItem(section.id, itemId)}
+                onEditSection={() => setSectionDraft({ ...section })}
+                onRemoveSection={() => removeSection(section.id)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
 
         {/* Upcoming events, pulled read-only from the Calendar */}
         <Card>
@@ -274,13 +304,41 @@ export default function Goals() {
   )
 }
 
-function SectionCard({ section, onAddItem, onEditItem, onPatchItem, onToggleChild, onRemoveItem, onEditSection, onRemoveSection }) {
+// Sortable wrapper: applies the drag transform and hands the handle props to the
+// card so only the grip initiates a drag (the rest stays tappable).
+function SortableSection({ section, ...props }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: section.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  }
+  return (
+    <div ref={setNodeRef} style={style}>
+      <SectionCard section={section} dragHandleProps={{ ...attributes, ...listeners }} {...props} />
+    </div>
+  )
+}
+
+function SectionCard({ section, dragHandleProps, onAddItem, onEditItem, onPatchItem, onToggleChild, onRemoveItem, onEditSection, onRemoveSection }) {
   const pct = sectionCompletion(section)
   const resetLabel = RESETS.find((r) => r.id === (section.reset || 'none')).label
 
   return (
     <Card>
       <div className="mb-4 flex items-center gap-3 border-b border-border pb-3">
+        <button
+          type="button"
+          {...dragHandleProps}
+          aria-label={`Reorder ${section.title}`}
+          style={{ touchAction: 'none' }}
+          className="-ml-1 flex-shrink-0 cursor-grab rounded-md p-1 text-gray-600 active:cursor-grabbing active:text-gray-300"
+        >
+          <GripIcon className="h-5 w-5" />
+        </button>
         <span className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: section.color }} />
         <h2 className="flex-1 truncate text-lg font-bold" style={{ color: section.color }}>
           {section.title}

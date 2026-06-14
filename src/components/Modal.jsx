@@ -5,11 +5,12 @@ export default function Modal({ open, onClose, title, children, footer }) {
   if (!open) return null
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      // Top-aligned so the on-screen keyboard at the bottom doesn't cover fields.
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-6 pt-[5vh]"
       onClick={onClose}
     >
       <div
-        className="scroll-area max-h-[85vh] w-full max-w-lg rounded-2xl border border-border bg-surface shadow-glow"
+        className="scroll-area max-h-[80vh] w-full max-w-lg rounded-2xl border border-border bg-surface shadow-glow"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-6 py-4">

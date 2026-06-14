@@ -124,3 +124,16 @@ export function TrashIcon(props) {
     </svg>
   )
 }
+
+export function GripIcon(props) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <circle cx="9" cy="6" r="1.6" />
+      <circle cx="15" cy="6" r="1.6" />
+      <circle cx="9" cy="12" r="1.6" />
+      <circle cx="15" cy="12" r="1.6" />
+      <circle cx="9" cy="18" r="1.6" />
+      <circle cx="15" cy="18" r="1.6" />
+    </svg>
+  )
+}
