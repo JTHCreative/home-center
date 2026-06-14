@@ -366,7 +366,6 @@ export default function Stocks() {
         open={!!symbolDraft}
         onClose={() => setSymbolDraft(null)}
         title={symbolDraft?.original ? 'Edit Symbol' : 'Add Symbol'}
-        size="narrow"
         footer={
           <>
             <Button variant="ghost" onClick={() => setSymbolDraft(null)}>Cancel</Button>
@@ -375,7 +374,7 @@ export default function Stocks() {
         }
       >
         {symbolDraft && (
-          <div className="space-y-4">
+          <div className="grid gap-5 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs text-gray-500">Symbol</label>
               <input
@@ -396,7 +395,7 @@ export default function Stocks() {
                 onChange={(e) => setSymbolDraft({ ...symbolDraft, name: e.target.value })}
               />
             </div>
-            <div>
+            <div className="md:col-span-2">
               <label className="mb-1 block text-xs text-gray-500">Quantity (optional — for value & P&amp;L)</label>
               <input
                 type="number"

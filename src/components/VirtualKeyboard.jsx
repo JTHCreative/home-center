@@ -390,40 +390,41 @@ function TextPad({ shift, onShift, onKey, onBackspace, onSpace, onEnter, onDone 
 function NumericPad({ onKey, onBackspace, onStep, onDone }) {
   const pad = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0']
   return (
-    <div className="mx-auto max-w-xl space-y-3">
-      {/* Keypad */}
-      <div className="grid grid-cols-3 gap-2">
+    // Keypad and controls side by side to use the width and keep the height low.
+    <div className="flex gap-3">
+      <div className="grid flex-1 grid-cols-3 gap-2">
         {pad.map((k) => (
           <Key key={k} label={k} onClick={() => onKey(k)} className="!h-14 !text-2xl" />
         ))}
         <Key label="⌫" onClick={onBackspace} className="!h-14 !text-2xl" />
       </div>
 
-      {/* Big left/right steppers */}
-      <div className="flex gap-3">
+      {/* Right column: large steppers + Done, filling the keypad height. */}
+      <div className="flex w-2/5 flex-col gap-2">
+        <div className="flex flex-1 gap-2">
+          <button
+            type="button"
+            onClick={() => onStep(-1)}
+            className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-accent/15 text-2xl font-bold text-accent active:scale-95"
+          >
+            <ChevronLeft className="h-7 w-7" /> −1
+          </button>
+          <button
+            type="button"
+            onClick={() => onStep(1)}
+            className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-accent/15 text-2xl font-bold text-accent active:scale-95"
+          >
+            +1 <ChevronRight className="h-7 w-7" />
+          </button>
+        </div>
         <button
           type="button"
-          onClick={() => onStep(-1)}
-          className="flex h-16 flex-1 items-center justify-center gap-2 rounded-xl bg-accent/15 text-2xl font-bold text-accent active:scale-95"
+          onClick={onDone}
+          className="flex h-14 items-center justify-center gap-2 rounded-xl bg-accent text-base font-semibold text-bg active:scale-95"
         >
-          <ChevronLeft className="h-8 w-8" /> −1
-        </button>
-        <button
-          type="button"
-          onClick={() => onStep(1)}
-          className="flex h-16 flex-1 items-center justify-center gap-2 rounded-xl bg-accent/15 text-2xl font-bold text-accent active:scale-95"
-        >
-          +1 <ChevronRight className="h-8 w-8" />
+          <CloseIcon className="h-5 w-5" /> Done
         </button>
       </div>
-
-      <button
-        type="button"
-        onClick={onDone}
-        className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-accent text-base font-semibold text-bg active:scale-95"
-      >
-        <CloseIcon className="h-5 w-5" /> Done
-      </button>
     </div>
   )
 }
