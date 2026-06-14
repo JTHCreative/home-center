@@ -2,30 +2,41 @@ import { useCallback, useEffect, useState } from 'react'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Tabs from '../components/Tabs.jsx'
 import Sparkline from '../components/Sparkline.jsx'
+import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
-import { readStored } from '../lib/storage.js'
+import { useLocalState } from '../lib/storage.js'
+import { PlusIcon, TrashIcon } from '../components/Icons.jsx'
 
-// Holdings. `symbol` is the Finnhub symbol; crypto uses exchange-prefixed
-// symbols (e.g. BINANCE:BTCUSDT). Edit here or override via localStorage key
-// `home-center:portfolio`.
-const DEFAULT_PORTFOLIO = {
-  stocks: [
-    { symbol: 'AAPL', name: 'Apple', shares: 25 },
-    { symbol: 'MSFT', name: 'Microsoft', shares: 12 },
-    { symbol: 'NVDA', name: 'NVIDIA', shares: 8 },
-    { symbol: 'TSLA', name: 'Tesla', shares: 15 },
-    { symbol: 'AMZN', name: 'Amazon', shares: 10 },
-  ],
-  crypto: [
-    { symbol: 'BINANCE:BTCUSDT', name: 'Bitcoin', shares: 0.4 },
-    { symbol: 'BINANCE:ETHUSDT', name: 'Ethereum', shares: 3.2 },
-    { symbol: 'BINANCE:SOLUSDT', name: 'Solana', shares: 40 },
-  ],
-}
+// Watchlists: named lists of symbols. `symbol` is the Finnhub symbol; crypto
+// uses exchange-prefixed symbols (e.g. BINANCE:BTCUSDT). `qty` is optional —
+// when set, the symbol contributes to the list's value and daily P&L.
+// Default lists below were imported from the user's Robinhood Legend watchlists.
+const mk = (id, name, symbols) => ({
+  id,
+  name,
+  items: symbols.map((symbol) => ({ symbol, name: '', qty: 0 })),
+})
 
-const TABS = [
-  { id: 'stocks', label: 'Stocks' },
-  { id: 'crypto', label: 'Crypto' },
+const DEFAULT_WATCHLISTS = [
+  mk('wl-growth', 'Growth Fund', [
+    'NEM', 'RYCEY', 'TSLA', 'BLOK', 'ABNB', 'DOCU', 'GOOGL', 'HOOD', 'BRK.B',
+    'CSGP', 'BABA', 'NVDA', 'AMZN', 'BA', 'DUOL', 'BLCN', 'AAPL', 'PLTR', 'RKT',
+  ]),
+  mk('wl-dividend', 'Dividend Fund', [
+    'VZ', 'STK', 'STAG', 'BSTZ', 'ARCC', 'O', 'SCHD', 'PG', 'VYM', 'JNJ', 'CVX',
+    'COST', 'JEPI', 'FDVV', 'KO', 'MAIN', 'IBM', 'BIPC',
+  ]),
+  mk('wl-ira', 'IRAs', [
+    'AMD', 'UAL', 'DAL', 'VYM', 'VTR', 'IVV', 'SPY', 'VOO', 'COST', 'SCHB',
+    'VONG', 'MSFT', 'DIS', 'CSCO',
+  ]),
+  mk('wl-eyeson', 'Eyes On', [
+    'ROKU', 'RIVN', 'STUB', 'KEYS', 'LUV', 'CMG', 'SCHW', 'RGTI', 'AMC', 'TGT',
+    'TTD', 'U', 'GEMI', 'TSM', 'OTIS', 'F', 'WAL', 'PYPL', 'IONQ', 'GM', 'ROP',
+    'LCID', 'WMT', 'ARKF', 'PFE', 'META', 'MCD', 'TOL', 'DHI', 'COIN', 'CRM',
+    'KLAR', 'UBER', 'NFLX', 'SNAP', 'ZG', 'QBTS', 'PTON', 'GME', 'AI', 'LLY',
+    'LULU', 'RVI', 'SNOW', 'SNDL', 'BRLT', 'LEN', 'PINS', 'ADBE',
+  ]),
 ]
 
 // Deterministic mock quote so the dashboard renders without an API key.
@@ -59,41 +70,65 @@ function seriesFromQuote(symbol, quote) {
   return out
 }
 
-function money(n) {
-  return n.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  })
+const money = (n) =>
+  n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
+
+const display = (symbol) => symbol.split(':').pop().replace('USDT', '').replace('USD', '')
+
+// Parse pasted text (from Robinhood Legend or anywhere) into watchlist items.
+// Accepts one symbol per line or comma/space separated, optionally "SYMBOL, qty".
+function parseSymbols(text) {
+  const seen = new Set()
+  const items = []
+  for (const line of text.split(/[\n,]+/)) {
+    const parts = line.trim().split(/[\s|]+/).filter(Boolean)
+    if (!parts.length) continue
+    const symbol = parts[0].toUpperCase()
+    if (!/^[A-Z0-9.:]+$/.test(symbol) || seen.has(symbol)) continue
+    seen.add(symbol)
+    const qty = Number(parts[1])
+    items.push({ symbol, name: '', qty: Number.isFinite(qty) ? qty : 0 })
+  }
+  return items
 }
 
 export default function Stocks() {
-  const [tab, setTab] = useState('stocks')
+  // Key is versioned (-v2) so the imported Robinhood lists replace the earlier
+  // demo Stocks/Crypto defaults on devices that already seeded them.
+  const [watchlists, setWatchlists] = useLocalState('watchlists-v2', DEFAULT_WATCHLISTS)
+  const [activeId, setActiveId] = useState(watchlists[0]?.id)
   const [quotes, setQuotes] = useState({})
   const [loading, setLoading] = useState(true)
   const [updatedAt, setUpdatedAt] = useState(null)
 
-  const portfolio = readStored('portfolio', DEFAULT_PORTFOLIO)
-  const holdings = portfolio[tab] || []
+  const [listDraft, setListDraft] = useState(null) // { id?, name }
+  const [symbolDraft, setSymbolDraft] = useState(null) // { symbol, name, qty, original? }
+  const [importing, setImporting] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importName, setImportName] = useState('')
+
+  const active = watchlists.find((w) => w.id === activeId) || watchlists[0]
+  const items = active?.items || []
+  const symbolsKey = items.map((i) => i.symbol).join(',')
 
   const load = useCallback(async () => {
+    const syms = symbolsKey ? symbolsKey.split(',') : []
+    if (!syms.length) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
-    const symbols = holdings.map((h) => h.symbol)
-    let result = {}
+    let result
     if (hasFinnhubKey) {
-      const live = await fetchQuotes(symbols)
-      // Fall back to mock for any symbol that failed.
-      result = Object.fromEntries(
-        symbols.map((s) => [s, live[s] || mockQuote(s)]),
-      )
+      const live = await fetchQuotes(syms)
+      result = Object.fromEntries(syms.map((s) => [s, live[s] || mockQuote(s)]))
     } else {
-      result = Object.fromEntries(symbols.map((s) => [s, mockQuote(s)]))
+      result = Object.fromEntries(syms.map((s) => [s, mockQuote(s)]))
     }
     setQuotes((prev) => ({ ...prev, ...result }))
     setUpdatedAt(new Date())
     setLoading(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab])
+  }, [symbolsKey])
 
   useEffect(() => {
     load()
@@ -101,106 +136,328 @@ export default function Stocks() {
     return () => clearInterval(id)
   }, [load])
 
-  // Portfolio totals for the active tab.
+  // --- Watchlist ops --------------------------------------------------------
+  const saveList = () => {
+    const name = listDraft.name.trim()
+    if (!name) return
+    if (listDraft.id) {
+      setWatchlists((ws) => ws.map((w) => (w.id === listDraft.id ? { ...w, name } : w)))
+    } else {
+      const id = crypto.randomUUID()
+      setWatchlists((ws) => [...ws, { id, name, items: [] }])
+      setActiveId(id)
+    }
+    setListDraft(null)
+  }
+  const deleteList = () => {
+    if (watchlists.length <= 1) return
+    setWatchlists((ws) => ws.filter((w) => w.id !== active.id))
+    setActiveId(watchlists.find((w) => w.id !== active.id)?.id)
+  }
+
+  const patchItems = (fn) =>
+    setWatchlists((ws) => ws.map((w) => (w.id === active.id ? { ...w, items: fn(w.items) } : w)))
+
+  const saveSymbol = () => {
+    const symbol = symbolDraft.symbol.trim().toUpperCase()
+    if (!symbol) return
+    const item = { symbol, name: symbolDraft.name.trim(), qty: Number(symbolDraft.qty) || 0 }
+    patchItems((list) => {
+      const idx = list.findIndex((i) => i.symbol === (symbolDraft.original || symbol))
+      if (idx >= 0) return list.map((i, k) => (k === idx ? item : i))
+      return [...list, item]
+    })
+    setSymbolDraft(null)
+  }
+  const removeSymbol = (symbol) => patchItems((list) => list.filter((i) => i.symbol !== symbol))
+
+  const runImport = () => {
+    const parsed = parseSymbols(importText)
+    if (!parsed.length) return
+    const name = importName.trim()
+    if (name) {
+      const id = crypto.randomUUID()
+      setWatchlists((ws) => [...ws, { id, name, items: parsed }])
+      setActiveId(id)
+    } else {
+      patchItems((list) => {
+        const have = new Set(list.map((i) => i.symbol))
+        return [...list, ...parsed.filter((i) => !have.has(i.symbol))]
+      })
+    }
+    setImporting(false)
+    setImportText('')
+    setImportName('')
+  }
+
+  // Totals for items that have a quantity.
   let total = 0
   let dayPL = 0
-  for (const h of holdings) {
-    const q = quotes[h.symbol]
-    if (!q) continue
-    total += q.price * h.shares
-    dayPL += q.change * h.shares
+  let hasPositions = false
+  for (const it of items) {
+    const q = quotes[it.symbol]
+    if (!q || !it.qty) continue
+    hasPositions = true
+    total += q.price * it.qty
+    dayPL += q.change * it.qty
   }
   const dayPct = total - dayPL !== 0 ? (dayPL / (total - dayPL)) * 100 : 0
   const up = dayPL >= 0
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="Stocks & Crypto" subtitle={
-        hasFinnhubKey ? 'Live via Finnhub' : 'Demo data — add VITE_FINNHUB_API_KEY for live quotes'
-      }>
-        <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      <PageHeader
+        title="Stocks & Crypto"
+        subtitle={hasFinnhubKey ? 'Live via Finnhub' : 'Demo data — add VITE_FINNHUB_API_KEY for live quotes'}
+      >
+        <div className="flex max-w-full items-center gap-2 overflow-x-auto">
+          <Tabs
+            tabs={watchlists.map((w) => ({ id: w.id, label: w.name }))}
+            active={active?.id}
+            onChange={setActiveId}
+          />
+          <button
+            type="button"
+            onClick={() => setListDraft({ name: '' })}
+            aria-label="New watchlist"
+            className="flex-shrink-0 rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+          >
+            <PlusIcon className="h-5 w-5" />
+          </button>
+        </div>
       </PageHeader>
 
-      {/* Portfolio summary */}
-      <Card className="mb-6" glow>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-sm text-gray-400">Portfolio Value</div>
-            <div className="font-mono text-4xl font-bold text-white">
-              {money(total)}
+      {/* Active list actions */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="mr-auto text-sm text-gray-400">
+          {items.length} symbol{items.length === 1 ? '' : 's'}
+        </span>
+        <Button variant="ghost" className="px-4 py-2" onClick={() => setSymbolDraft({ symbol: '', name: '', qty: '' })}>
+          <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> Add Symbol</span>
+        </Button>
+        <Button variant="ghost" className="px-4 py-2" onClick={() => setImporting(true)}>
+          Import
+        </Button>
+        <Button variant="ghost" className="px-4 py-2" onClick={() => setListDraft({ id: active.id, name: active.name })}>
+          Rename
+        </Button>
+        <Button
+          variant="danger"
+          className="px-4 py-2"
+          onClick={deleteList}
+          disabled={watchlists.length <= 1}
+        >
+          <TrashIcon className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Summary */}
+      <Card className="mb-6" glow={hasPositions}>
+        {hasPositions ? (
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <div className="text-sm text-gray-400">{active.name} Value</div>
+              <div className="font-mono text-4xl font-bold text-white">{money(total)}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm text-gray-400">Today&apos;s P&amp;L</div>
+              <div className={['font-mono text-3xl font-bold', up ? 'text-gain' : 'text-loss'].join(' ')}>
+                {up ? '+' : ''}
+                {money(dayPL)}{' '}
+                <span className="text-2xl">
+                  ({up ? '+' : ''}
+                  {dayPct.toFixed(2)}%)
+                </span>
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-400">Today&apos;s P&amp;L</div>
-            <div
-              className={[
-                'font-mono text-3xl font-bold',
-                up ? 'text-gain' : 'text-loss',
-              ].join(' ')}
-            >
-              {up ? '+' : ''}
-              {money(dayPL)}{' '}
-              <span className="text-2xl">
-                ({up ? '+' : ''}
-                {dayPct.toFixed(2)}%)
-              </span>
-            </div>
+        ) : (
+          <div className="text-sm text-gray-400">
+            Watchlist — add a quantity to a symbol to track its value and daily P&amp;L.
           </div>
-        </div>
+        )}
       </Card>
 
-      {/* Holdings list */}
-      <div className="space-y-3">
-        {holdings.map((h) => {
-          const q = quotes[h.symbol]
-          const hUp = q ? q.changePercent >= 0 : true
-          return (
-            <Card key={h.symbol} className="flex items-center gap-4 py-4">
-              <div className="w-40 flex-shrink-0">
-                <div className="font-semibold text-white">{h.symbol.split(':').pop().replace('USDT', '')}</div>
-                <div className="text-xs text-gray-400">{h.name}</div>
-              </div>
-
-              <div className="flex-shrink-0">
-                {q && <Sparkline data={seriesFromQuote(h.symbol, q)} up={hUp} />}
-              </div>
-
-              <div className="flex-1" />
-
-              <div className="text-right">
-                <div className="font-mono text-lg text-white">
-                  {q ? money(q.price) : '—'}
-                </div>
-                <div className="text-xs text-gray-500">
-                  {h.shares} {tab === 'crypto' ? 'coins' : 'sh'}
-                </div>
-              </div>
-
-              <div className="w-28 text-right">
-                <div
-                  className={[
-                    'font-mono text-lg font-bold',
-                    hUp ? 'text-gain' : 'text-loss',
-                  ].join(' ')}
+      {/* Symbol rows */}
+      {items.length === 0 ? (
+        <Card className="text-center text-gray-500">
+          No symbols yet. Add one or import a list.
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {items.map((it) => {
+            const q = quotes[it.symbol]
+            const hUp = q ? q.changePercent >= 0 : true
+            return (
+              <Card key={it.symbol} className="flex items-center gap-4 py-4">
+                <button
+                  type="button"
+                  onClick={() => setSymbolDraft({ symbol: it.symbol, name: it.name || '', qty: it.qty || '', original: it.symbol })}
+                  className="w-40 flex-shrink-0 text-left active:opacity-70"
                 >
-                  {q ? `${hUp ? '+' : ''}${q.changePercent.toFixed(2)}%` : '—'}
+                  <div className="font-semibold text-white">{display(it.symbol)}</div>
+                  <div className="text-xs text-gray-400">{it.name || ' '}</div>
+                </button>
+
+                <div className="flex-shrink-0">
+                  {q && <Sparkline data={seriesFromQuote(it.symbol, q)} up={hUp} />}
                 </div>
-                <div className="font-mono text-xs text-gray-500">
-                  {q ? money(q.price * h.shares) : ''}
+
+                <div className="flex-1" />
+
+                <div className="text-right">
+                  <div className="font-mono text-lg text-white">{q ? money(q.price) : '—'}</div>
+                  {it.qty > 0 && <div className="text-xs text-gray-500">{it.qty}</div>}
                 </div>
-              </div>
-            </Card>
-          )
-        })}
-      </div>
+
+                <div className="w-24 text-right">
+                  <div className={['font-mono text-lg font-bold', hUp ? 'text-gain' : 'text-loss'].join(' ')}>
+                    {q ? `${hUp ? '+' : ''}${q.changePercent.toFixed(2)}%` : '—'}
+                  </div>
+                  {it.qty > 0 && q && (
+                    <div className="font-mono text-xs text-gray-500">{money(q.price * it.qty)}</div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => removeSymbol(it.symbol)}
+                  aria-label={`Remove ${display(it.symbol)}`}
+                  className="rounded-lg p-2 text-gray-600 active:scale-95 active:text-loss"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       <div className="mt-4 text-right text-xs text-gray-600">
-        {loading
-          ? 'Updating…'
-          : updatedAt
-            ? `Updated ${updatedAt.toLocaleTimeString()}`
-            : ''}
+        {loading ? 'Updating…' : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : ''}
       </div>
+
+      {/* New / rename watchlist */}
+      <Modal
+        open={!!listDraft}
+        onClose={() => setListDraft(null)}
+        title={listDraft?.id ? 'Rename Watchlist' : 'New Watchlist'}
+        size="narrow"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setListDraft(null)}>Cancel</Button>
+            <Button onClick={saveList}>Save</Button>
+          </>
+        }
+      >
+        {listDraft && (
+          <input
+            autoFocus
+            className={fieldClass}
+            placeholder="Watchlist name (e.g. Tech, Dividends)"
+            value={listDraft.name}
+            onChange={(e) => setListDraft({ ...listDraft, name: e.target.value })}
+          />
+        )}
+      </Modal>
+
+      {/* Add / edit symbol */}
+      <Modal
+        open={!!symbolDraft}
+        onClose={() => setSymbolDraft(null)}
+        title={symbolDraft?.original ? 'Edit Symbol' : 'Add Symbol'}
+        size="narrow"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setSymbolDraft(null)}>Cancel</Button>
+            <Button onClick={saveSymbol}>Save</Button>
+          </>
+        }
+      >
+        {symbolDraft && (
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">Symbol</label>
+              <input
+                autoFocus
+                className={`${fieldClass} font-mono uppercase`}
+                placeholder="AAPL or BINANCE:BTCUSDT"
+                value={symbolDraft.symbol}
+                onChange={(e) => setSymbolDraft({ ...symbolDraft, symbol: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-gray-600">Crypto uses an exchange prefix, e.g. BINANCE:BTCUSDT.</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">Name (optional)</label>
+              <input
+                className={fieldClass}
+                placeholder="Apple"
+                value={symbolDraft.name}
+                onChange={(e) => setSymbolDraft({ ...symbolDraft, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">Quantity (optional — for value & P&amp;L)</label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className={fieldClass}
+                placeholder="0"
+                value={symbolDraft.qty}
+                onChange={(e) => setSymbolDraft({ ...symbolDraft, qty: e.target.value })}
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Import */}
+      <Modal
+        open={importing}
+        onClose={() => setImporting(false)}
+        title="Import Symbols"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setImporting(false)}>Cancel</Button>
+            <Button onClick={runImport}>Import</Button>
+          </>
+        }
+      >
+        <div className="grid gap-5 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">
+              Paste symbols (one per line or comma-separated)
+            </label>
+            <textarea
+              autoFocus
+              rows={8}
+              className={`${fieldClass} font-mono`}
+              placeholder={'AAPL\nMSFT, 12\nBINANCE:BTCUSDT, 0.4'}
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+            />
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">New list name (optional)</label>
+              <input
+                className={fieldClass}
+                placeholder={`Leave blank to add to “${active?.name}”`}
+                value={importName}
+                onChange={(e) => setImportName(e.target.value)}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              From Robinhood Legend, copy your watchlist tickers and paste them here.
+              Add a quantity after each symbol (e.g. <span className="font-mono">AAPL, 12</span>)
+              to track value and P&amp;L. {parseSymbols(importText).length > 0 && (
+                <span className="text-accent">{parseSymbols(importText).length} symbols detected.</span>
+              )}
+            </p>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
