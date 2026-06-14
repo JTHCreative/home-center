@@ -268,6 +268,7 @@ export default function Meals() {
         open={!!picker}
         onClose={() => setPicker(null)}
         title={picker ? `${picker.day} · ${picker.meal}` : ''}
+        size="narrow"
       >
         <div className="space-y-2">
           <button
@@ -313,31 +314,34 @@ export default function Meals() {
               value={recipeDraft.name}
               onChange={(e) => setRecipeDraft({ ...recipeDraft, name: e.target.value })}
             />
-            <div>
-              <label className="mb-1 block text-xs text-gray-500">
-                Ingredients (one per line)
-              </label>
-              <textarea
-                rows={5}
-                className={fieldClass}
-                placeholder={'Eggs\nFlour\nMilk'}
-                value={recipeDraft.ingredientsText}
-                onChange={(e) =>
-                  setRecipeDraft({ ...recipeDraft, ingredientsText: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-gray-500">Instructions</label>
-              <textarea
-                rows={4}
-                className={fieldClass}
-                placeholder="Steps…"
-                value={recipeDraft.instructions}
-                onChange={(e) =>
-                  setRecipeDraft({ ...recipeDraft, instructions: e.target.value })
-                }
-              />
+            {/* Ingredients and instructions side by side to keep the form short. */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">
+                  Ingredients (one per line)
+                </label>
+                <textarea
+                  rows={7}
+                  className={fieldClass}
+                  placeholder={'Eggs\nFlour\nMilk'}
+                  value={recipeDraft.ingredientsText}
+                  onChange={(e) =>
+                    setRecipeDraft({ ...recipeDraft, ingredientsText: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Instructions</label>
+                <textarea
+                  rows={7}
+                  className={fieldClass}
+                  placeholder="Steps…"
+                  value={recipeDraft.instructions}
+                  onChange={(e) =>
+                    setRecipeDraft({ ...recipeDraft, instructions: e.target.value })
+                  }
+                />
+              </div>
             </div>
           </div>
         )}

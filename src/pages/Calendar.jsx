@@ -333,6 +333,7 @@ function EventModal({ draft, setDraft, onClose, onSave, onDelete, isExisting }) 
       open={!!draft}
       onClose={onClose}
       title={isExisting ? 'Edit Event' : 'Add Event'}
+      size="narrow"
       footer={
         <>
           {isExisting && (

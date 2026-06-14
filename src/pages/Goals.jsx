@@ -525,6 +525,7 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
       open={!!draft}
       onClose={onClose}
       title="List"
+      size="narrow"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -594,7 +595,7 @@ function ItemModal({ draft, setDraft, onClose, onSave }) {
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
         <input
           autoFocus
           className={fieldClass}
@@ -603,87 +604,93 @@ function ItemModal({ draft, setDraft, onClose, onSave }) {
           onChange={(e) => set({ title: e.target.value })}
         />
 
-        {/* Type only applies to a single goal (no sub-items). */}
-        {!hasChildren && (
-          <div>
-            <label className="mb-2 block text-xs text-gray-500">Type</label>
-            <div className="flex gap-2">
-              {[
-                { id: 'checkbox', label: 'Checkbox' },
-                { id: 'tally', label: 'Tally boxes' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => set({ type: t.id })}
-                  className={[
-                    'flex-1 rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
-                    item.type === t.id ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-400',
-                  ].join(' ')}
-                >
-                  {t.label}
-                </button>
-              ))}
+        {/* Two columns: settings on the left, the sub-item checklist on the
+            right, so tall lists spread sideways instead of forcing a scroll. */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-4">
+            {/* Type only applies to a single goal (no sub-items). */}
+            {!hasChildren && (
+              <div>
+                <label className="mb-2 block text-xs text-gray-500">Type</label>
+                <div className="flex gap-2">
+                  {[
+                    { id: 'checkbox', label: 'Checkbox' },
+                    { id: 'tally', label: 'Tally boxes' },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => set({ type: t.id })}
+                      className={[
+                        'flex-1 rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
+                        item.type === t.id ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-400',
+                      ].join(' ')}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!hasChildren && item.type === 'tally' && (
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Number of boxes</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  className={fieldClass}
+                  value={item.target}
+                  onChange={(e) => set({ target: e.target.value })}
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">Note (optional)</label>
+              <input
+                className={fieldClass}
+                placeholder="e.g. 215 hours, $4,157.50"
+                value={item.note}
+                onChange={(e) => set({ note: e.target.value })}
+              />
             </div>
           </div>
-        )}
 
-        {!hasChildren && item.type === 'tally' && (
+          {/* Sub-items / checklist */}
           <div>
-            <label className="mb-1 block text-xs text-gray-500">Number of boxes</label>
-            <input
-              type="number"
-              min={1}
-              max={31}
-              className={fieldClass}
-              value={item.target}
-              onChange={(e) => set({ target: e.target.value })}
-            />
+            <label className="mb-2 block text-xs text-gray-500">
+              Sub-items {hasChildren && <span className="text-gray-600">(turns this into a checklist)</span>}
+            </label>
+            <div className="space-y-2">
+              {children.map((c) => (
+                <div key={c.id} className="flex items-center gap-2">
+                  <input
+                    className={fieldClass}
+                    placeholder="Sub-item (e.g. Papa Hui)"
+                    value={c.title}
+                    onChange={(e) => setChild(c.id, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeChild(c.id)}
+                    aria-label="Remove sub-item"
+                    className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addChild}
+                className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
+              >
+                <PlusIcon className="h-4 w-4" /> Add sub-item
+              </button>
+            </div>
           </div>
-        )}
-
-        {/* Sub-items / checklist */}
-        <div>
-          <label className="mb-2 block text-xs text-gray-500">
-            Sub-items {hasChildren && <span className="text-gray-600">(turns this into a checklist)</span>}
-          </label>
-          <div className="space-y-2">
-            {children.map((c) => (
-              <div key={c.id} className="flex items-center gap-2">
-                <input
-                  className={fieldClass}
-                  placeholder="Sub-item (e.g. Papa Hui)"
-                  value={c.title}
-                  onChange={(e) => setChild(c.id, e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeChild(c.id)}
-                  aria-label="Remove sub-item"
-                  className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
-                >
-                  <TrashIcon className="h-5 w-5" />
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addChild}
-              className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
-            >
-              <PlusIcon className="h-4 w-4" /> Add sub-item
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs text-gray-500">Note (optional)</label>
-          <input
-            className={fieldClass}
-            placeholder="e.g. 215 hours, $4,157.50"
-            value={item.note}
-            onChange={(e) => set({ note: e.target.value })}
-          />
         </div>
       </div>
     </Modal>

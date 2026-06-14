@@ -1,22 +1,24 @@
 import { CloseIcon } from './Icons.jsx'
 
-// Centered modal sheet for add/edit forms. Tap the backdrop or X to dismiss.
-export default function Modal({ open, onClose, title, children, footer }) {
+// Modal sheet for add/edit forms. Tap the backdrop or X to dismiss.
+// Header and footer are pinned; only the body scrolls (with a fat, grabbable
+// scrollbar), and the body uses the full space above the on-screen keyboard.
+export default function Modal({ open, onClose, title, children, footer, size = 'wide' }) {
   if (!open) return null
+  const maxWidth = size === 'narrow' ? 'max-w-lg' : 'max-w-3xl'
   return (
     <div
       // Top-aligned so the on-screen keyboard at the bottom doesn't cover fields.
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-6 pt-[5vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-6 pt-[3vh]"
       onClick={onClose}
     >
       <div
-        // Shrink so the on-screen keyboard never covers the modal; it scrolls
-        // internally and the focused field is scrolled into view.
-        className="scroll-area w-full max-w-lg rounded-2xl border border-border bg-surface shadow-glow"
-        style={{ maxHeight: 'calc(90vh - 5vh - var(--kb, 0px))' }}
+        // Shrink to the space above the keyboard; the body (not the buttons) scrolls.
+        className={`flex w-full ${maxWidth} flex-col rounded-2xl border border-border bg-surface shadow-glow`}
+        style={{ maxHeight: 'calc(97vh - var(--kb, 0px))' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-border px-6 py-4">
           <h2 className="text-xl font-bold text-white">{title}</h2>
           <button
             type="button"
@@ -27,9 +29,9 @@ export default function Modal({ open, onClose, title, children, footer }) {
             <CloseIcon className="h-6 w-6" />
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="scroll-fat flex-1 overflow-y-auto p-6">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-3 border-t border-border px-6 py-4">
+          <div className="flex flex-shrink-0 justify-end gap-3 border-t border-border px-6 py-4">
             {footer}
           </div>
         )}
