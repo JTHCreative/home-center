@@ -41,7 +41,7 @@ function currentPeriodKey(reset, now = new Date()) {
   return null // 'none' — never resets
 }
 
-// Reset a section's items when its period has rolled over.
+// Reset a section's items (and any sub-items) when its period has rolled over.
 function withResets(sections) {
   let changed = false
   const next = sections.map((s) => {
@@ -52,7 +52,12 @@ function withResets(sections) {
     return {
       ...s,
       periodKey: key,
-      items: s.items.map((it) => ({ ...it, done: false, value: 0 })),
+      items: s.items.map((it) => ({
+        ...it,
+        done: false,
+        value: 0,
+        children: (it.children || []).map((c) => ({ ...c, done: false })),
+      })),
     }
   })
   return changed ? next : sections
@@ -64,14 +69,17 @@ const SEED = [
   { id: crypto.randomUUID(), title: 'Weekly Goals', color: '#58A6FF', reset: 'weekly', periodKey: currentPeriodKey('weekly'), items: [] },
 ]
 
-const itemCompletion = (it) =>
-  it.type === 'tally'
-    ? it.target
-      ? Math.max(0, Math.min(1, it.value / it.target))
-      : 0
-    : it.done
-      ? 1
-      : 0
+// Completion as a 0–1 fraction. Items with sub-items roll up their children.
+function itemCompletion(it) {
+  const kids = it.children || []
+  if (kids.length > 0) {
+    return kids.filter((c) => c.done).length / kids.length
+  }
+  if (it.type === 'tally') {
+    return it.target ? Math.max(0, Math.min(1, it.value / it.target)) : 0
+  }
+  return it.done ? 1 : 0
+}
 
 const sectionCompletion = (s) =>
   s.items.length === 0
@@ -95,6 +103,7 @@ const newItem = () => ({
   value: 0,
   done: false,
   note: '',
+  children: [],
 })
 
 const iso = (d) => {
@@ -153,12 +162,36 @@ export default function Goals() {
       ),
     )
 
+  const toggleChild = (sectionId, itemId, childId) =>
+    setSections((list) =>
+      list.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              items: s.items.map((it) =>
+                it.id === itemId
+                  ? {
+                      ...it,
+                      children: it.children.map((c) =>
+                        c.id === childId ? { ...c, done: !c.done } : c,
+                      ),
+                    }
+                  : it,
+              ),
+            }
+          : s,
+      ),
+    )
+
   const saveItem = () => {
     if (!itemDraft.item.title.trim()) return
     const item = {
       ...itemDraft.item,
       title: itemDraft.item.title.trim(),
       target: Math.max(1, Number(itemDraft.item.target) || 1),
+      children: (itemDraft.item.children || [])
+        .map((c) => ({ ...c, title: c.title.trim() }))
+        .filter((c) => c.title),
     }
     setSections((list) =>
       list.map((s) => {
@@ -197,6 +230,7 @@ export default function Goals() {
             onAddItem={() => setItemDraft({ sectionId: section.id, item: newItem() })}
             onEditItem={(it) => setItemDraft({ sectionId: section.id, item: { ...it } })}
             onPatchItem={(itemId, patch) => patchItem(section.id, itemId, patch)}
+            onToggleChild={(itemId, childId) => toggleChild(section.id, itemId, childId)}
             onRemoveItem={(itemId) => removeItem(section.id, itemId)}
             onEditSection={() => setSectionDraft({ ...section })}
             onRemoveSection={() => removeSection(section.id)}
@@ -240,7 +274,7 @@ export default function Goals() {
   )
 }
 
-function SectionCard({ section, onAddItem, onEditItem, onPatchItem, onRemoveItem, onEditSection, onRemoveSection }) {
+function SectionCard({ section, onAddItem, onEditItem, onPatchItem, onToggleChild, onRemoveItem, onEditSection, onRemoveSection }) {
   const pct = sectionCompletion(section)
   const resetLabel = RESETS.find((r) => r.id === (section.reset || 'none')).label
 
@@ -270,6 +304,7 @@ function SectionCard({ section, onAddItem, onEditItem, onPatchItem, onRemoveItem
             color={section.color}
             onToggle={() => onPatchItem(it.id, { done: !it.done })}
             onTally={(value) => onPatchItem(it.id, { value })}
+            onToggleChild={(childId) => onToggleChild(it.id, childId)}
             onEdit={() => onEditItem(it)}
             onRemove={() => onRemoveItem(it.id)}
           />
@@ -305,51 +340,89 @@ function SectionCard({ section, onAddItem, onEditItem, onPatchItem, onRemoveItem
   )
 }
 
-function GoalItem({ item, color, onToggle, onTally, onEdit, onRemove }) {
+function GoalItem({ item, color, onToggle, onTally, onToggleChild, onEdit, onRemove }) {
+  const kids = item.children || []
+  const isGroup = kids.length > 0
   const complete = itemCompletion(item) >= 1
+  const doneCount = kids.filter((c) => c.done).length
+
   return (
-    <li className="group flex items-center gap-3 rounded-lg px-1 py-1.5">
-      {item.type === 'checkbox' ? (
+    <li className="rounded-lg px-1 py-1.5">
+      <div className="flex items-center gap-3">
+        {isGroup ? (
+          <span
+            className="flex h-7 min-w-[2.75rem] flex-shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold"
+            style={{ backgroundColor: `${color}22`, color }}
+          >
+            {doneCount}/{kids.length}
+          </span>
+        ) : item.type === 'checkbox' ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={`Toggle ${item.title}`}
+            className={[
+              'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
+              item.done ? 'text-bg' : 'border-border',
+            ].join(' ')}
+            style={item.done ? { backgroundColor: color, borderColor: color } : undefined}
+          >
+            {item.done && <CheckIcon className="h-5 w-5" />}
+          </button>
+        ) : (
+          <TallyBoxes value={item.value} target={item.target} color={color} onChange={onTally} />
+        )}
+
         <button
           type="button"
-          onClick={onToggle}
-          aria-label={`Toggle ${item.title}`}
-          className={[
-            'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
-            item.done ? 'text-bg' : 'border-border',
-          ].join(' ')}
-          style={item.done ? { backgroundColor: color, borderColor: color } : undefined}
+          onClick={onEdit}
+          className="flex flex-1 items-center gap-2 truncate text-left active:opacity-70"
         >
-          {item.done && <CheckIcon className="h-5 w-5" />}
-        </button>
-      ) : (
-        <TallyBoxes value={item.value} target={item.target} color={color} onChange={onTally} />
-      )}
-
-      <button
-        type="button"
-        onClick={onEdit}
-        className="flex flex-1 items-center gap-2 truncate text-left active:opacity-70"
-      >
-        <span className={complete ? 'truncate text-gray-500 line-through' : 'truncate text-gray-100'}>
-          {item.title}
-        </span>
-        {item.type === 'tally' && (
-          <span className="font-mono text-xs text-gray-500">
-            {item.value}/{item.target}
+          <span className={complete ? 'truncate text-gray-500 line-through' : 'truncate text-gray-100'}>
+            {item.title}
           </span>
-        )}
-        {item.note && <span className="font-mono text-xs text-gray-500">· {item.note}</span>}
-      </button>
+          {!isGroup && item.type === 'tally' && (
+            <span className="font-mono text-xs text-gray-500">
+              {item.value}/{item.target}
+            </span>
+          )}
+          {item.note && <span className="font-mono text-xs text-gray-500">· {item.note}</span>}
+        </button>
 
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`Delete ${item.title}`}
-        className="rounded p-1.5 text-gray-600 active:scale-95 active:text-loss"
-      >
-        <TrashIcon className="h-4 w-4" />
-      </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Delete ${item.title}`}
+          className="rounded p-1.5 text-gray-600 active:scale-95 active:text-loss"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Sub-items */}
+      {isGroup && (
+        <ul className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
+          {kids.map((c) => (
+            <li key={c.id} className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => onToggleChild(c.id)}
+                aria-label={`Toggle ${c.title}`}
+                className={[
+                  'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded border-2 active:scale-95',
+                  c.done ? 'text-bg' : 'border-border',
+                ].join(' ')}
+                style={c.done ? { backgroundColor: color, borderColor: color } : undefined}
+              >
+                {c.done && <CheckIcon className="h-4 w-4" />}
+              </button>
+              <span className={c.done ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}>
+                {c.title}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </li>
   )
 }
@@ -451,6 +524,15 @@ function ItemModal({ draft, setDraft, onClose, onSave }) {
   if (!draft) return null
   const item = draft.item
   const set = (patch) => setDraft({ ...draft, item: { ...item, ...patch } })
+  const children = item.children || []
+  const hasChildren = children.length > 0
+
+  const addChild = () =>
+    set({ children: [...children, { id: crypto.randomUUID(), title: '', done: false }] })
+  const setChild = (id, title) =>
+    set({ children: children.map((c) => (c.id === id ? { ...c, title } : c)) })
+  const removeChild = (id) => set({ children: children.filter((c) => c.id !== id) })
+
   return (
     <Modal
       open={!!draft}
@@ -469,34 +551,37 @@ function ItemModal({ draft, setDraft, onClose, onSave }) {
         <input
           autoFocus
           className={fieldClass}
-          placeholder="Goal (e.g. Work out, Read bible)"
+          placeholder="Goal (e.g. Work out, Father's Day Cards)"
           value={item.title}
           onChange={(e) => set({ title: e.target.value })}
         />
 
-        <div>
-          <label className="mb-2 block text-xs text-gray-500">Type</label>
-          <div className="flex gap-2">
-            {[
-              { id: 'checkbox', label: 'Checkbox' },
-              { id: 'tally', label: 'Tally boxes' },
-            ].map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => set({ type: t.id })}
-                className={[
-                  'flex-1 rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
-                  item.type === t.id ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-400',
-                ].join(' ')}
-              >
-                {t.label}
-              </button>
-            ))}
+        {/* Type only applies to a single goal (no sub-items). */}
+        {!hasChildren && (
+          <div>
+            <label className="mb-2 block text-xs text-gray-500">Type</label>
+            <div className="flex gap-2">
+              {[
+                { id: 'checkbox', label: 'Checkbox' },
+                { id: 'tally', label: 'Tally boxes' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => set({ type: t.id })}
+                  className={[
+                    'flex-1 rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
+                    item.type === t.id ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-400',
+                  ].join(' ')}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {item.type === 'tally' && (
+        {!hasChildren && item.type === 'tally' && (
           <div>
             <label className="mb-1 block text-xs text-gray-500">Number of boxes</label>
             <input
@@ -509,6 +594,40 @@ function ItemModal({ draft, setDraft, onClose, onSave }) {
             />
           </div>
         )}
+
+        {/* Sub-items / checklist */}
+        <div>
+          <label className="mb-2 block text-xs text-gray-500">
+            Sub-items {hasChildren && <span className="text-gray-600">(turns this into a checklist)</span>}
+          </label>
+          <div className="space-y-2">
+            {children.map((c) => (
+              <div key={c.id} className="flex items-center gap-2">
+                <input
+                  className={fieldClass}
+                  placeholder="Sub-item (e.g. Papa Hui)"
+                  value={c.title}
+                  onChange={(e) => setChild(c.id, e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeChild(c.id)}
+                  aria-label="Remove sub-item"
+                  className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addChild}
+              className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
+            >
+              <PlusIcon className="h-4 w-4" /> Add sub-item
+            </button>
+          </div>
+        </div>
 
         <div>
           <label className="mb-1 block text-xs text-gray-500">Note (optional)</label>
