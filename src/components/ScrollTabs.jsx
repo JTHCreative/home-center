@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight } from './Icons.jsx'
+import { ChevronLeft, ChevronRight, PlusIcon } from './Icons.jsx'
 
 // Fixed-width, swipeable tab bar. Shows `visible` tabs at a time; the rest
 // scroll. Drag with finger (native) or mouse (manual), or tap the large arrows.
-// Gradient masks at each edge fade tabs in/out toward the arrows.
+// Gradient masks at each edge fade tabs in/out toward the arrows. Empty slots
+// (when there are fewer than `visible` tabs) show a "+" that calls `onAdd`.
 const TAB_W = 150 // px per tab
 
-export default function ScrollTabs({ tabs, active, onChange, visible = 7 }) {
+export default function ScrollTabs({ tabs, active, onChange, onAdd, visible = 7 }) {
   const viewportRef = useRef(null)
   const drag = useRef(null)
   const [atStart, setAtStart] = useState(true)
@@ -118,6 +119,24 @@ export default function ScrollTabs({ tabs, active, onChange, visible = 7 }) {
               </div>
             )
           })}
+
+          {/* Empty slots: each is a "+" that adds a new watchlist. */}
+          {onAdd &&
+            Array.from({ length: Math.max(0, visible - tabs.length) }, (_, i) => (
+              <div key={`empty-${i}`} className="flex-none p-0.5" style={{ width: TAB_W }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (drag.current?.moved) return
+                    onAdd()
+                  }}
+                  aria-label="New watchlist"
+                  className="flex w-full items-center justify-center rounded-xl border border-dashed border-border py-2.5 text-gray-600 active:scale-[0.97] active:text-accent"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                </button>
+              </div>
+            ))}
         </div>
 
         {/* Edge fades — tabs appear to dissolve toward the arrows. */}
