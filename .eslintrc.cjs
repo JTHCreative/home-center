@@ -14,4 +14,11 @@ module.exports = {
     'react/prop-types': 'off',
     'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
   },
+  overrides: [
+    {
+      // Build/config files run in Node, not the browser.
+      files: ['*.config.js', '*.cjs', 'postcss.config.js', 'tailwind.config.js'],
+      env: { node: true },
+    },
+  ],
 }
