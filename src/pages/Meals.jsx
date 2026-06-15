@@ -696,14 +696,14 @@ export default function Meals() {
                         <PencilIcon className="h-5 w-5" />
                       </button>
                     </div>
-                    <ul className="mb-3 space-y-1.5">
+                    <ul className="mb-3 space-y-2">
                       {memMeals.length === 0 && (
                         <li className="text-sm text-gray-500">No meals assigned yet.</li>
                       )}
                       {memMeals.map((m) => {
                         const takeout = mealType(m) === 'takeout'
                         return (
-                          <li key={m.id} className="flex items-center gap-2">
+                          <li key={m.id} className="flex items-center gap-2 rounded-lg bg-white/5 py-1.5 pl-2.5 pr-1.5">
                             <span
                               className="h-2 w-2 flex-shrink-0 rounded-full"
                               style={{ backgroundColor: takeout ? TAKEOUT_COLOR : 'rgb(var(--c-accent))' }}
@@ -722,9 +722,9 @@ export default function Meals() {
                               type="button"
                               onClick={() => toggleMemberMeal(mem.id, m.id)}
                               aria-label={`Remove ${m.name} from ${mem.name}`}
-                              className="rounded p-1 text-gray-600 active:scale-95 active:text-loss"
+                              className="flex-shrink-0 rounded-lg bg-loss/15 p-2.5 text-loss active:scale-95"
                             >
-                              <TrashIcon className="h-4 w-4" />
+                              <TrashIcon className="h-5 w-5" />
                             </button>
                           </li>
                         )
