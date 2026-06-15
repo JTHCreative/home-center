@@ -7,6 +7,8 @@ import {
   CheckIcon,
   ChevronLeft,
   ChevronRight,
+  CloseIcon,
+  FilterIcon,
   MoonIcon,
   PencilIcon,
   PlusIcon,
@@ -174,6 +176,11 @@ export default function Meals() {
   const [memberMealsFor, setMemberMealsFor] = useState(null) // member id whose meal list is being edited
   const [mealsTab, setMealsTab] = useState('recipe') // Meals library: 'recipe' | 'takeout'
   const [subpage, setSubpage] = useState('schedule') // Schedule | Household | Meals | Groceries
+
+  // Schedule filter: highlight matching meals, fade the rest.
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [filterProviders, setFilterProviders] = useState([]) // member ids
+  const [filterType, setFilterType] = useState('all') // 'all' | 'recipe' | 'takeout'
 
   const weekKey = iso(weekStart)
   const plan = useMemo(() => plans[weekKey] || {}, [plans, weekKey])
@@ -377,6 +384,25 @@ export default function Meals() {
 
   const isEditing = mealDraft && meals.some((m) => m.id === mealDraft.id)
 
+  // --- Schedule filter ------------------------------------------------------
+  const filterActive = filterProviders.length > 0 || filterType !== 'all'
+  const toggleFilterProvider = (id) =>
+    setFilterProviders((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const clearFilter = () => {
+    setFilterProviders([])
+    setFilterType('all')
+  }
+  // A planned slot matches when it has a meal of the chosen type AND at least
+  // one of the chosen providers (each active facet must be satisfied).
+  const slotMatchesFilter = (val, meal) => {
+    if (!filterActive) return true
+    if (!meal) return false
+    if (filterType !== 'all' && mealType(meal) !== filterType) return false
+    if (filterProviders.length > 0 && !filterProviders.some((id) => slotProviders(val).includes(id)))
+      return false
+    return true
+  }
+
   // Week navigator, shared by the Schedule and Groceries subpages.
   const weekNav = (
     <div className="mb-6 flex items-center justify-center gap-3">
@@ -419,7 +445,40 @@ export default function Meals() {
       {/* ---- Schedule (fills the available height) ---- */}
       {subpage === 'schedule' && (
         <div className="flex min-h-0 flex-1 flex-col">
-          {weekNav}
+          <div className="relative">
+            {weekNav}
+            {/* Filter sits top-right, where the old "This Week" button was. */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2">
+              <button
+                type="button"
+                onClick={() => setFilterOpen((o) => !o)}
+                aria-label="Filter schedule"
+                className={[
+                  'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
+                  filterActive ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
+                ].join(' ')}
+              >
+                <FilterIcon className="h-5 w-5" />
+                <span>Filter</span>
+                {filterActive && (
+                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-bg">
+                    {filterProviders.length + (filterType !== 'all' ? 1 : 0)}
+                  </span>
+                )}
+              </button>
+              {filterOpen && (
+                <ScheduleFilter
+                  members={members}
+                  filterProviders={filterProviders}
+                  filterType={filterType}
+                  onToggleProvider={toggleFilterProvider}
+                  onSetType={setFilterType}
+                  onClear={clearFilter}
+                  onClose={() => setFilterOpen(false)}
+                />
+              )}
+            </div>
+          </div>
           <Card className="min-h-0 flex-1 overflow-auto p-0">
         {/* CSS grid (not a <table>) so the meal rows are guaranteed equal
             height — tables dump leftover vertical space into the first row,
@@ -463,6 +522,7 @@ export default function Meals() {
                   const accent = takeout ? TAKEOUT_COLOR : theme.color
                   const providers = slotProviders(val)
                   const guests = slotGuests(val)
+                  const faded = filterActive && !slotMatchesFilter(val, m)
                   return (
                     <div
                       key={day}
@@ -473,8 +533,9 @@ export default function Meals() {
                         type="button"
                         onClick={() => openSlot(day, slot)}
                         className={[
-                          'flex h-full min-h-[88px] w-full flex-col items-center justify-center gap-2 rounded-lg px-2 py-3 text-center text-base active:scale-[0.98]',
+                          'flex h-full min-h-[88px] w-full flex-col items-center justify-center gap-2 rounded-lg px-2 py-3 text-center text-base transition-opacity active:scale-[0.98]',
                           m ? 'font-semibold shadow-glow' : 'bg-white/5 text-gray-600',
+                          faded ? 'opacity-25' : '',
                         ].join(' ')}
                         style={m ? { backgroundColor: `${accent}26`, color: accent, border: `1.5px solid ${accent}` } : undefined}
                       >
@@ -991,6 +1052,61 @@ function MemberMealsModal({ member, meals, onToggle, onClose }) {
         </div>
       )}
     </Modal>
+  )
+}
+
+// Popover for filtering the schedule by provider and/or meal type.
+function ScheduleFilter({ members, filterProviders, filterType, onToggleProvider, onSetType, onClear, onClose }) {
+  const active = filterProviders.length > 0 || filterType !== 'all'
+  return (
+    <>
+      {/* Click-away backdrop. */}
+      <button
+        type="button"
+        aria-label="Close filter"
+        onClick={onClose}
+        className="fixed inset-0 z-10 cursor-default"
+      />
+      <div className="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border border-border bg-surface p-4 text-left shadow-glow">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-white">Filter schedule</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg p-1 text-gray-400 active:scale-90"
+          >
+            <CloseIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        <label className="mb-2 block text-xs text-gray-500">Meal type</label>
+        <div className="mb-4">
+          <Tabs
+            tabs={[
+              { id: 'all', label: 'All' },
+              { id: 'recipe', label: 'Homecooked' },
+              { id: 'takeout', label: 'Takeout' },
+            ]}
+            active={filterType}
+            onChange={onSetType}
+          />
+        </div>
+
+        <label className="mb-2 block text-xs text-gray-500">Provider</label>
+        <MemberPicker members={members} selected={filterProviders} onToggle={onToggleProvider} />
+
+        {active && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="mt-4 w-full rounded-xl bg-white/5 px-4 py-2 text-sm font-semibold text-gray-300 active:scale-95"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+    </>
   )
 }
 

@@ -67,6 +67,14 @@ export function PlusIcon(props) {
   )
 }
 
+export function FilterIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M3 5h18l-7 8v6l-4 2v-8z" />
+    </svg>
+  )
+}
+
 export function CloseIcon(props) {
   return (
     <svg {...base} {...props}>
