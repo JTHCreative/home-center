@@ -2,10 +2,48 @@ import { useMemo, useState } from 'react'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import { useLocalState } from '../lib/storage.js'
-import { CheckIcon, PlusIcon, TrashIcon } from '../components/Icons.jsx'
+import {
+  CheckIcon,
+  ChevronLeft,
+  ChevronRight,
+  PlusIcon,
+  TrashIcon,
+} from '../components/Icons.jsx'
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
+const DAY_SET = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+
+// --- Date helpers (local, no library; weeks start Sunday) --------------------
+const iso = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+const addDays = (d, n) => {
+  const c = new Date(d)
+  c.setDate(c.getDate() + n)
+  return c
+}
+const sundayOf = (d) => {
+  const c = new Date(d)
+  c.setHours(0, 0, 0, 0)
+  c.setDate(c.getDate() - c.getDay())
+  return c
+}
+
+// Plans are stored per week: { [weekKey]: { [day]: { [slot]: mealId } } }.
+// Older saves were a flat { [day]: { [slot]: mealId } } — fold those into the
+// current week so existing plans aren't lost.
+function migratePlan(stored) {
+  if (!stored || typeof stored !== 'object') return {}
+  const keys = Object.keys(stored)
+  if (keys.length && keys.some((k) => DAY_SET.has(k))) {
+    return { [iso(sundayOf(new Date()))]: stored }
+  }
+  return stored
+}
 
 // A meal is either a custom 'recipe' (with ingredients) or 'takeout' (purchased).
 const SEED_MEALS = [
@@ -45,16 +83,22 @@ const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 
 export default function Meals() {
   const [meals, setMeals] = useLocalState('meals-recipes', SEED_MEALS)
-  const [plan, setPlan] = useLocalState('meals-plan', {})
-  const [checked, setChecked] = useLocalState('meals-grocery-checked', {})
+  const [plans, setPlans] = useLocalState('meals-plan', {}, migratePlan)
+  const [checkedByWeek, setCheckedByWeek] = useLocalState('meals-grocery-checked', {})
+  const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
 
   const [mealDraft, setMealDraft] = useState(null)
   const [picker, setPicker] = useState(null) // { day, slot }
 
+  const weekKey = iso(weekStart)
+  const plan = useMemo(() => plans[weekKey] || {}, [plans, weekKey])
+  const checked = checkedByWeek[weekKey] || {}
+  const isCurrentWeek = weekKey === iso(sundayOf(new Date()))
+
   const mealById = useMemo(() => Object.fromEntries(meals.map((m) => [m.id, m])), [meals])
 
-  // Auto-generated grocery list: ingredients across all planned recipes (takeout
-  // has nothing to buy), grouped by name with their quantities collected.
+  // Auto-generated grocery list: ingredients across all recipes planned for the
+  // selected week (takeout has nothing to buy), grouped by name with quantities.
   const grocery = useMemo(() => {
     const map = new Map() // lower name -> { name, qtys: [] }
     for (const day of DAYS) {
@@ -78,9 +122,33 @@ export default function Meals() {
   }, [plan, mealById])
 
   const assign = (day, slot, mealId) => {
-    setPlan((p) => ({ ...p, [day]: { ...p[day], [slot]: mealId } }))
+    setPlans((p) => ({
+      ...p,
+      [weekKey]: { ...p[weekKey], [day]: { ...p[weekKey]?.[day], [slot]: mealId } },
+    }))
     setPicker(null)
   }
+
+  const toggleChecked = (key) =>
+    setCheckedByWeek((c) => ({
+      ...c,
+      [weekKey]: { ...c[weekKey], [key]: !c[weekKey]?.[key] },
+    }))
+
+  // Week label, e.g. "Jun 14 – Jun 20"
+  const weekEnd = addDays(weekStart, 6)
+  const rangeLabel = `${weekStart.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+  const weekDelta = Math.round((weekStart - sundayOf(new Date())) / (7 * 864e5))
+  const relLabel =
+    weekDelta === 0
+      ? 'This week'
+      : weekDelta === -1
+        ? 'Last week'
+        : weekDelta === 1
+          ? 'Next week'
+          : weekDelta < 0
+            ? `${-weekDelta} weeks ago`
+            : `In ${weekDelta} weeks`
 
   const saveMeal = () => {
     if (!mealDraft.name.trim()) return
@@ -136,11 +204,15 @@ export default function Meals() {
 
   const deleteMeal = (id) => {
     setMeals((list) => list.filter((m) => m.id !== id))
-    setPlan((p) => {
+    // Clear the meal from every planned slot across all weeks.
+    setPlans((p) => {
       const next = {}
-      for (const [day, slots] of Object.entries(p)) {
-        next[day] = {}
-        for (const [slot, mid] of Object.entries(slots)) next[day][slot] = mid === id ? undefined : mid
+      for (const [wk, days] of Object.entries(p)) {
+        next[wk] = {}
+        for (const [day, slots] of Object.entries(days)) {
+          next[wk][day] = {}
+          for (const [slot, mid] of Object.entries(slots)) next[wk][day][slot] = mid === id ? undefined : mid
+        }
       }
       return next
     })
@@ -152,15 +224,56 @@ export default function Meals() {
     <div className="mx-auto max-w-6xl">
       <PageHeader title="Meals" subtitle="Plan the week with recipes & takeout, build the grocery list" />
 
+      {/* Week navigator — browse future or past weeks */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setWeekStart((w) => addDays(w, -7))}
+            aria-label="Previous week"
+            className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setWeekStart(sundayOf(new Date()))}
+            className={[
+              'rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
+              isCurrentWeek ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
+            ].join(' ')}
+          >
+            This Week
+          </button>
+          <button
+            type="button"
+            onClick={() => setWeekStart((w) => addDays(w, 7))}
+            aria-label="Next week"
+            className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        </div>
+        <div className="text-right">
+          <div className="text-xl font-bold text-white">{rangeLabel}</div>
+          <div className={isCurrentWeek ? 'text-xs text-gray-500' : 'text-xs text-accent'}>
+            {relLabel}
+          </div>
+        </div>
+      </div>
+
       {/* Weekly planner grid */}
       <Card className="mb-8 overflow-x-auto p-0">
         <table className="w-full border-collapse">
           <thead>
             <tr>
               <th className="w-24 border-b border-r border-border p-3 text-left text-xs font-semibold text-gray-500" />
-              {DAYS.map((d) => (
+              {DAYS.map((d, i) => (
                 <th key={d} className="border-b border-r border-border p-3 text-xs font-semibold text-gray-400">
-                  {d}
+                  <div>{d}</div>
+                  <div className="font-mono text-[10px] font-normal text-gray-600">
+                    {addDays(weekStart, i).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -297,7 +410,7 @@ export default function Meals() {
                     <li key={key}>
                       <button
                         type="button"
-                        onClick={() => setChecked((c) => ({ ...c, [key]: !isChecked }))}
+                        onClick={() => toggleChecked(key)}
                         className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left active:bg-white/5"
                       >
                         <span

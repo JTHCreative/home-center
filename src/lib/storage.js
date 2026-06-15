@@ -24,9 +24,15 @@ export function writeStored(key, value) {
 /**
  * useLocalState — like useState, but persisted to localStorage under `key`.
  * Survives reboots, which is the whole point on a kiosk Pi.
+ *
+ * An optional `migrate` function runs on the initial stored value, letting a
+ * page upgrade an older saved shape before it ever hits state.
  */
-export function useLocalState(key, initial) {
-  const [value, setValue] = useState(() => readStored(key, initial))
+export function useLocalState(key, initial, migrate) {
+  const [value, setValue] = useState(() => {
+    const stored = readStored(key, initial)
+    return migrate ? migrate(stored) : stored
+  })
 
   useEffect(() => {
     writeStored(key, value)

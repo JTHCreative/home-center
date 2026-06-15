@@ -14,14 +14,15 @@ touch targets and no hover-only interactions.
   % change, and a per-asset sparkline. Separate Stocks / Crypto tabs. Live data
   from the [Finnhub API](https://finnhub.io/) when a key is set, mock data
   otherwise.
-- **Calendar** — Month / Week / Day views, tap any slot to add an event,
-  color-coded categories, today always highlighted.
-- **Meals** — weekly planner grid (Mon–Sun × Breakfast/Lunch/Dinner), recipe
-  storage with ingredients and instructions, an auto-generated grocery list from
-  planned meals, and checkable grocery items.
-- **Goals** — Daily / Weekly / Monthly tabs. Each goal is a checkbox or a
-  progress bar (chosen at creation). Daily goals reset each day, weekly each
-  Monday, monthly on the 1st. A completion summary ring sits atop each tab.
+- **Calendar** — Month / Week / Day views (weeks start Sunday), tap any slot to
+  add an event, color-coded categories, today always highlighted.
+- **Meals** — weekly planner grid (Sun–Sat × Breakfast/Lunch/Dinner) with a week
+  navigator to plan ahead or look back, recipe storage with ingredients and
+  instructions, a per-week auto-generated grocery list from planned meals, and
+  checkable grocery items.
+- **Goals** — color-coded lists tracked by week (weeks start Sunday), browsable
+  with a week navigator. Each goal is a checkbox, tally boxes, or a sub-item
+  checklist. A completion summary ring sits atop each list.
 
 All data (goals, meals, events, smart-home state, portfolio) persists to
 `localStorage`, so it survives reboots. No backend required.
