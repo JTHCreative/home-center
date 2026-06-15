@@ -172,14 +172,9 @@ export default function Stocks() {
       return
     }
 
-    // Live: refresh quotes every cycle; fetch metrics only for symbols we don't
-    // have cached yet (they barely change), keeping call volume under the limit.
-    const missingMetrics = syms.filter((s) => !metricsRef.current[s])
-    const [liveQ, liveM] = await Promise.all([
-      fetchQuotes(syms),
-      missingMetrics.length ? fetchMetrics(missingMetrics) : Promise.resolve({}),
-    ])
-    for (const [s, m] of Object.entries(liveM)) if (m) metricsRef.current[s] = m
+    // Live: refresh quotes every cycle. Metrics (52W high / P/E) are loaded once
+    // per symbol by a separate effect, and read here from the cache.
+    const liveQ = await fetchQuotes(syms)
 
     setQuotes((prev) => {
       const next = { ...prev }
@@ -211,9 +206,40 @@ export default function Stocks() {
 
   useEffect(() => {
     load()
-    const id = setInterval(load, 60_000) // refresh each minute
+    const id = setInterval(load, 60_000) // refresh quotes each minute
     return () => clearInterval(id)
   }, [load])
+
+  // Load 52-week high and P/E once per symbol when the panel opens or the list
+  // changes — they barely move intraday, so one pull keeps them current.
+  useEffect(() => {
+    if (!hasFinnhubKey) return
+    const syms = symbolsKey ? symbolsKey.split(',') : []
+    const missing = syms.filter((s) => !metricsRef.current[s])
+    if (!missing.length) return
+    let cancelled = false
+    fetchMetrics(missing).then((liveM) => {
+      if (cancelled) return
+      for (const [s, m] of Object.entries(liveM)) if (m) metricsRef.current[s] = m
+      setQuotes((prev) => {
+        const next = { ...prev }
+        for (const s of missing) {
+          const m = metricsRef.current[s]
+          if (!m) continue
+          const base = prev[s] || {}
+          next[s] = {
+            ...base,
+            week52High: m.week52High ?? base.week52High ?? null,
+            pe: m.pe ?? base.pe ?? null,
+          }
+        }
+        return next
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [symbolsKey])
 
   // --- Watchlist ops --------------------------------------------------------
   const saveList = () => {
