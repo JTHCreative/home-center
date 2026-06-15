@@ -50,10 +50,10 @@ const addDays = (d, n) => {
   c.setDate(c.getDate() + n)
   return c
 }
-const mondayOf = (d) => {
+const sundayOf = (d) => {
   const c = new Date(d)
   c.setHours(0, 0, 0, 0)
-  c.setDate(c.getDate() - ((c.getDay() + 6) % 7)) // week starts Monday
+  c.setDate(c.getDate() - c.getDay()) // week starts Sunday
   return c
 }
 
@@ -98,13 +98,13 @@ const newItem = () => ({
 export default function Goals() {
   const [sections, setSections] = useLocalState('goals-sections', SEED)
   const [progress, setProgress] = useLocalState('goals-progress', {}) // weekKey -> { items, children }
-  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()))
+  const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
 
   const weekKey = iso(weekStart)
   const wp = progress[weekKey] || EMPTY_WEEK
-  const isCurrentWeek = weekKey === iso(mondayOf(new Date()))
+  const isCurrentWeek = weekKey === iso(sundayOf(new Date()))
 
   // Upcoming events pulled (read-only) from the Calendar page's stored events.
   const upcoming = useMemo(() => {
@@ -191,7 +191,7 @@ export default function Goals() {
   // Week label, e.g. "Jun 8 – Jun 14"
   const weekEnd = addDays(weekStart, 6)
   const rangeLabel = `${weekStart.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
-  const weekDelta = Math.round((weekStart - mondayOf(new Date())) / (7 * 864e5))
+  const weekDelta = Math.round((weekStart - sundayOf(new Date())) / (7 * 864e5))
   const relLabel =
     weekDelta === 0
       ? 'This week'
@@ -226,7 +226,7 @@ export default function Goals() {
           </button>
           <button
             type="button"
-            onClick={() => setWeekStart(mondayOf(new Date()))}
+            onClick={() => setWeekStart(sundayOf(new Date()))}
             className={[
               'rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
               isCurrentWeek ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',

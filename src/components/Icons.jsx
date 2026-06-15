@@ -180,3 +180,32 @@ export function GripIcon(props) {
     </svg>
   )
 }
+
+// Sun rising over the horizon — breakfast / morning.
+export function SunriseIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 2v3M4.2 10.2l1.4 1.4M2 18h2M20 18h2M18.4 11.6l1.4-1.4M3 22h18M3 18h18" />
+      <path d="M8 18a4 4 0 0 1 8 0" />
+    </svg>
+  )
+}
+
+// Full midday sun — lunch.
+export function SunIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  )
+}
+
+// Crescent moon — dinner / night.
+export function MoonIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+    </svg>
+  )
+}
