@@ -7,11 +7,14 @@ touch targets and no hover-only interactions.
 ## Features
 
 - **Home** — a customizable dashboard summarizing the day, landing page of the
-  app. Pick which modules to show/hide, drag to reorder them, and configure each
-  one in place: favorite Smart Home controls, a chosen Stocks/Crypto watchlist
-  with live quotes, today's planned meals (breakfast/lunch/dinner), a chosen
-  Goals list (interactive), and today's calendar events. Layout and per-module
-  settings persist via Firestore like the rest of the app.
+  app. Pick which modules to show/hide, drag to reorder them, add more from the
+  customize screen, and configure each one in place: favorite Smart Home
+  controls, a chosen Stocks/Crypto watchlist with live quotes, today's planned
+  meals (breakfast/lunch/dinner), a chosen Goals list (interactive), today's
+  calendar events, and **Traffic** routes showing live drive time with current
+  traffic from Google (set a start + destination; add as many routes as you
+  like). Layout and per-module settings persist via Firestore like the rest of
+  the app.
 - **Smart Home** — light toggles with brightness sliders by room, TV/media
   controls (power, volume, input), and a smart-plug on/off card grid. Uses mock
   state today; structured so Home Assistant calls can be swapped in later (see

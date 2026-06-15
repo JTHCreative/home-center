@@ -14,20 +14,24 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
-import Modal, { Button } from '../components/Modal.jsx'
+import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Toggle from '../components/Toggle.jsx'
 import Slider from '../components/Slider.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
+import { directionsUrl, fetchTravelTime, hasGoogleMapsKey } from '../lib/googleMaps.js'
 import {
+  CarIcon,
   CheckIcon,
   GearIcon,
   GripIcon,
   MoonIcon,
+  PlusIcon,
   PowerIcon,
   SunIcon,
   SunriseIcon,
+  TrashIcon,
   VolumeIcon,
 } from '../components/Icons.jsx'
 // Seed defaults are shared with the source pages (one source of truth) so the
@@ -40,47 +44,87 @@ import {
 } from '../lib/seeds.js'
 
 // --- Module registry ---------------------------------------------------------
-// The dashboard is a customizable stack of "modules", each a compact, live view
-// of another page. Order, visibility, and per-module settings are all persisted
-// (and shared across devices) under the single `dashboard` state key.
-const MODULES = [
-  { id: 'meals', title: "Today's Meals" },
-  { id: 'smarthome', title: 'Smart Home' },
-  { id: 'stocks', title: 'Stocks & Crypto' },
-  { id: 'goals', title: 'Goals' },
-  { id: 'calendar', title: "Today's Events" },
-]
-const MODULE_IDS = MODULES.map((m) => m.id)
-const TITLE = Object.fromEntries(MODULES.map((m) => [m.id, m.title]))
-// Modules that expose a settings gear (the others have nothing to configure).
-const CONFIGURABLE = new Set(['smarthome', 'stocks', 'goals'])
-
-const DEFAULT_DASHBOARD = {
-  order: [...MODULE_IDS],
-  enabled: { meals: true, smarthome: true, stocks: true, goals: true, calendar: true },
-  settings: {
-    smarthome: { controls: [] }, // [{ kind:'light', room, id } | { kind:'plug', id } | { kind:'media' }]
-    stocks: { watchlistId: null }, // null → first watchlist
-    goals: { sectionId: null }, // null → first list
-  },
+// The dashboard is a customizable stack of module *instances*. Each instance has
+// a stable id, a `type` from this registry, an enabled flag, and its own
+// settings. Singleton types exist once (toggle to show/hide); `multi` types
+// (Traffic) can be added any number of times from the customize screen.
+const MODULE_TYPES = {
+  meals: { title: "Today's Meals", configurable: false, multi: false },
+  smarthome: { title: 'Smart Home', configurable: true, multi: false },
+  stocks: { title: 'Stocks & Crypto', configurable: true, multi: false },
+  goals: { title: 'Goals', configurable: true, multi: false },
+  calendar: { title: "Today's Events", configurable: false, multi: false },
+  traffic: { title: 'Traffic', configurable: true, multi: true },
 }
+// Order in which singleton instances seed a fresh dashboard / get backfilled.
+const SINGLETONS = ['meals', 'smarthome', 'stocks', 'goals', 'calendar']
 
-// Fold older/partial saved configs into the current shape: append any module
-// added since the config was written, and backfill missing settings.
-function migrateDashboard(stored) {
-  if (!stored || typeof stored !== 'object') return DEFAULT_DASHBOARD
-  const order = Array.isArray(stored.order) ? stored.order.filter((id) => MODULE_IDS.includes(id)) : []
-  for (const id of MODULE_IDS) if (!order.includes(id)) order.push(id)
-  return {
-    order,
-    enabled: { ...DEFAULT_DASHBOARD.enabled, ...(stored.enabled || {}) },
-    settings: {
-      smarthome: { ...DEFAULT_DASHBOARD.settings.smarthome, ...(stored.settings?.smarthome || {}) },
-      stocks: { ...DEFAULT_DASHBOARD.settings.stocks, ...(stored.settings?.stocks || {}) },
-      goals: { ...DEFAULT_DASHBOARD.settings.goals, ...(stored.settings?.goals || {}) },
-    },
+function defaultSettings(type) {
+  switch (type) {
+    case 'smarthome':
+      return { controls: [] } // [{ kind:'light', room, id } | { kind:'plug', id } | { kind:'media' }]
+    case 'stocks':
+      return { watchlistId: null } // null → first watchlist
+    case 'goals':
+      return { sectionId: null } // null → first list
+    case 'traffic':
+      return { label: '', origin: '', destination: '' }
+    default:
+      return {}
   }
 }
+
+const newInstance = (type) => ({
+  id: crypto.randomUUID(),
+  type,
+  enabled: true,
+  settings: defaultSettings(type),
+})
+
+const defaultDashboard = () => ({ modules: SINGLETONS.map((t) => ({ ...newInstance(t), id: t })) })
+
+// Sanitize a module instance into the current shape.
+function cleanModule(m) {
+  if (!m || !MODULE_TYPES[m.type]) return null
+  return {
+    id: m.id || crypto.randomUUID(),
+    type: m.type,
+    enabled: m.enabled !== false,
+    settings: { ...defaultSettings(m.type), ...(m.settings || {}) },
+  }
+}
+
+// Guarantee every singleton type is present at least once (so it can always be
+// re-shown from the Add Module screen).
+function ensureSingletons(modules) {
+  const have = new Set(modules.map((m) => m.type))
+  const out = [...modules]
+  for (const t of SINGLETONS) if (!have.has(t)) out.push({ ...newInstance(t), id: t })
+  return out
+}
+
+// Fold older/partial configs into the instance model. Handles both the new
+// `{ modules }` shape and the original `{ order, enabled, settings }` shape.
+function migrateDashboard(stored) {
+  if (!stored || typeof stored !== 'object') return defaultDashboard()
+  if (Array.isArray(stored.modules)) {
+    const modules = stored.modules.map(cleanModule).filter(Boolean)
+    return { modules: ensureSingletons(modules) }
+  }
+  // Original shape: a fixed list of singleton modules keyed by type.
+  const order = Array.isArray(stored.order) ? stored.order.filter((t) => SINGLETONS.includes(t)) : []
+  for (const t of SINGLETONS) if (!order.includes(t)) order.push(t)
+  const modules = order.map((t) => ({
+    id: t,
+    type: t,
+    enabled: stored.enabled?.[t] !== false,
+    settings: { ...defaultSettings(t), ...(stored.settings?.[t] || {}) },
+  }))
+  return { modules }
+}
+
+const moduleTitle = (m) =>
+  m.type === 'traffic' ? m.settings.label?.trim() || 'Traffic' : MODULE_TYPES[m.type].title
 
 // --- Shared date helpers (local, weeks start Sunday) -------------------------
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -175,6 +219,52 @@ function useQuotes(symbols) {
     }
   }, [key])
   return { quotes, updatedAt }
+}
+
+// --- Traffic helper ----------------------------------------------------------
+// Live drive time with current traffic, refreshed every few minutes.
+function useTravelTime(origin, destination) {
+  const o = origin?.trim() || ''
+  const d = destination?.trim() || ''
+  const [data, setData] = useState(null)
+  const [updatedAt, setUpdatedAt] = useState(null)
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    if (!o || !d) {
+      setData(null)
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      const r = await fetchTravelTime(o, d)
+      if (!cancelled) {
+        setData(r)
+        setUpdatedAt(new Date())
+        setLoading(false)
+      }
+    }
+    load()
+    const id = setInterval(load, 180_000) // every 3 minutes
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [o, d])
+  return { data, updatedAt, loading }
+}
+
+const fmtDuration = (sec) => {
+  const min = Math.max(1, Math.round(sec / 60))
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m ? `${h} hr ${m} min` : `${h} hr`
+}
+const fmtMiles = (meters) => {
+  if (meters == null) return null
+  const mi = meters / 1609.34
+  return `${mi < 10 ? mi.toFixed(1) : Math.round(mi)} mi`
 }
 
 // --- Goals completion helpers (mirror Goals.jsx) -----------------------------
@@ -355,7 +445,9 @@ function StocksModule({ watchlistId }) {
   const { quotes, updatedAt } = useQuotes(symbols)
 
   const rows = useMemo(() => {
-    return [...symbols].sort((a, b) => (quotes[b]?.changePercent ?? -Infinity) - (quotes[a]?.changePercent ?? -Infinity))
+    return [...symbols].sort(
+      (a, b) => (quotes[b]?.changePercent ?? -Infinity) - (quotes[a]?.changePercent ?? -Infinity),
+    )
   }, [symbols, quotes])
 
   if (!list || symbols.length === 0) {
@@ -368,7 +460,9 @@ function StocksModule({ watchlistId }) {
         <span className="font-semibold text-gray-300">{list.name}</span>
         <span className="text-gray-600">
           {!hasFinnhubKey && 'Demo · '}
-          {updatedAt ? `Updated ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Updating…'}
+          {updatedAt
+            ? `Updated ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            : 'Updating…'}
         </span>
       </div>
       <div className="scroll-area -mr-1 max-h-72 overflow-y-auto pr-1">
@@ -404,8 +498,7 @@ function GoalsModule({ sectionId }) {
   const wk = weekKeyNow()
   const wp = progress[wk] || EMPTY_WEEK
 
-  const editWeek = (fn) =>
-    setProgress((p) => ({ ...p, [wk]: fn(p[wk] || EMPTY_WEEK) }))
+  const editWeek = (fn) => setProgress((p) => ({ ...p, [wk]: fn(p[wk] || EMPTY_WEEK) }))
   const toggleCheckbox = (itemId) =>
     editWeek((w) => {
       const item = w.items[itemId] || {}
@@ -464,7 +557,11 @@ function GoalsModule({ sectionId }) {
                     {done && <CheckIcon className="h-4 w-4" />}
                   </button>
                 )}
-                <span className={complete ? 'flex-1 truncate text-gray-500 line-through' : 'flex-1 truncate text-gray-100'}>
+                <span
+                  className={
+                    complete ? 'flex-1 truncate text-gray-500 line-through' : 'flex-1 truncate text-gray-100'
+                  }
+                >
                   {it.title}
                 </span>
                 {it.note && <span className="font-mono text-[11px] text-gray-500">{it.note}</span>}
@@ -487,7 +584,9 @@ function GoalsModule({ sectionId }) {
                         >
                           {cdone && <CheckIcon className="h-3.5 w-3.5" />}
                         </button>
-                        <span className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}>
+                        <span
+                          className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}
+                        >
                           {c.title}
                         </span>
                       </li>
@@ -537,18 +636,95 @@ function CalendarModule() {
   )
 }
 
-function ModuleBody({ id, settings }) {
-  switch (id) {
+function TrafficModule({ settings }) {
+  const { origin, destination } = settings
+  const { data, updatedAt, loading } = useTravelTime(origin, destination)
+
+  if (!origin?.trim() || !destination?.trim()) {
+    return (
+      <p className="text-sm text-gray-500">
+        Set a start and destination with the <GearIcon className="inline h-4 w-4" /> in customize mode to
+        see live drive time.
+      </p>
+    )
+  }
+
+  // Delay vs the typical (no-traffic) duration.
+  let delayLabel = 'Live traffic'
+  let delayClass = 'text-gray-400'
+  if (data) {
+    const delayMin = Math.round((data.durationSec - data.staticDurationSec) / 60)
+    if (delayMin >= 2) {
+      delayLabel = `+${delayMin} min vs usual`
+      delayClass = 'text-loss'
+    } else if (delayMin <= -2) {
+      delayLabel = `${-delayMin} min faster than usual`
+      delayClass = 'text-gain'
+    } else {
+      delayLabel = 'Typical traffic'
+      delayClass = 'text-gain'
+    }
+  }
+  const miles = data ? fmtMiles(data.distanceMeters) : null
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-2 text-sm text-gray-300">
+        <CarIcon className="h-5 w-5 flex-shrink-0 text-accent" />
+        <span className="truncate">
+          <span className="text-white">{origin}</span>
+          <span className="mx-1.5 text-gray-600">→</span>
+          <span className="text-white">{destination}</span>
+        </span>
+      </div>
+
+      {data ? (
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <div className="font-mono text-4xl font-bold text-white">{fmtDuration(data.durationSec)}</div>
+            <div className={`mt-1 text-sm font-semibold ${delayClass}`}>{delayLabel}</div>
+          </div>
+          <div className="text-right">
+            {miles && <div className="font-mono text-lg text-gray-300">{miles}</div>}
+            <a
+              href={directionsUrl(origin, destination)}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-block text-xs font-semibold text-accent underline decoration-dotted underline-offset-2"
+            >
+              Open in Maps
+            </a>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500">{loading ? 'Checking traffic…' : 'No route found.'}</p>
+      )}
+
+      <div className="mt-3 text-right text-xs text-gray-600">
+        {data?.mock && (hasGoogleMapsKey ? 'Traffic unavailable · ' : 'Demo data · ')}
+        {updatedAt
+          ? `Updated ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+          : ''}
+      </div>
+    </div>
+  )
+}
+
+function ModuleBody({ module }) {
+  const { type, settings } = module
+  switch (type) {
     case 'meals':
       return <MealsModule />
     case 'smarthome':
-      return <SmartHomeModule controls={settings.smarthome.controls} />
+      return <SmartHomeModule controls={settings.controls} />
     case 'stocks':
-      return <StocksModule watchlistId={settings.stocks.watchlistId} />
+      return <StocksModule watchlistId={settings.watchlistId} />
     case 'goals':
-      return <GoalsModule sectionId={settings.goals.sectionId} />
+      return <GoalsModule sectionId={settings.sectionId} />
     case 'calendar':
       return <CalendarModule />
+    case 'traffic':
+      return <TrafficModule settings={settings} />
     default:
       return null
   }
@@ -670,11 +846,84 @@ function GoalsConfig({ value, onChange }) {
   )
 }
 
+function TrafficConfig({ settings, onChange }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Label (optional)</label>
+        <input
+          className={fieldClass}
+          placeholder="e.g. Commute to work"
+          value={settings.label || ''}
+          onChange={(e) => onChange({ label: e.target.value })}
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Start location</label>
+        <input
+          className={fieldClass}
+          placeholder="Home address, place, or business name"
+          value={settings.origin || ''}
+          onChange={(e) => onChange({ origin: e.target.value })}
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Destination</label>
+        <input
+          className={fieldClass}
+          placeholder="Work address, place, or business name"
+          value={settings.destination || ''}
+          onChange={(e) => onChange({ destination: e.target.value })}
+        />
+      </div>
+      <p className="text-xs text-gray-600">
+        Shows the current driving time with live traffic from Google.{' '}
+        {hasGoogleMapsKey
+          ? ''
+          : 'Add VITE_GOOGLE_MAPS_API_KEY for live data — showing demo estimates until then.'}
+      </p>
+    </div>
+  )
+}
+
+function ModuleConfig({ module, onPatch }) {
+  switch (module.type) {
+    case 'smarthome':
+      return (
+        <SmartHomeConfig value={module.settings.controls} onChange={(controls) => onPatch({ controls })} />
+      )
+    case 'stocks':
+      return (
+        <StocksConfig
+          value={module.settings.watchlistId}
+          onChange={(watchlistId) => onPatch({ watchlistId })}
+        />
+      )
+    case 'goals':
+      return <GoalsConfig value={module.settings.sectionId} onChange={(sectionId) => onPatch({ sectionId })} />
+    case 'traffic':
+      return <TrafficConfig settings={module.settings} onChange={onPatch} />
+    default:
+      return null
+  }
+}
+
 // =============================================================================
 // Module card + sortable wrapper
 // =============================================================================
 
-function ModuleCard({ title, enabled, editing, hasConfig, dragHandleProps, onToggle, onConfigure, children }) {
+function ModuleCard({
+  title,
+  enabled,
+  editing,
+  hasConfig,
+  canRemove,
+  dragHandleProps,
+  onToggle,
+  onConfigure,
+  onRemove,
+  children,
+}) {
   return (
     <Card className={editing && !enabled ? 'opacity-60' : ''}>
       <div className="mb-4 flex items-center gap-3 border-b border-border pb-3">
@@ -700,6 +949,16 @@ function ModuleCard({ title, enabled, editing, hasConfig, dragHandleProps, onTog
             <GearIcon className="h-5 w-5" />
           </button>
         )}
+        {editing && canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remove ${title}`}
+            className="rounded-lg bg-loss/15 p-2 text-loss active:scale-95"
+          >
+            <TrashIcon className="h-5 w-5" />
+          </button>
+        )}
         {editing && <Toggle checked={enabled} onChange={onToggle} label={`Show ${title}`} />}
       </div>
       {children}
@@ -722,53 +981,111 @@ function SortableModule({ id, children }) {
   )
 }
 
+// Picker for adding modules: re-show any hidden singletons, or add a new
+// Traffic route (which can have several instances).
+function AddModuleModal({ open, onClose, modules, onShow, onAddTraffic }) {
+  const hidden = modules.filter((m) => MODULE_TYPES[m.type] && !MODULE_TYPES[m.type].multi && !m.enabled)
+  return (
+    <Modal open={open} onClose={onClose} title="Add a module" footer={<Button onClick={onClose}>Done</Button>}>
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={onAddTraffic}
+          className="flex w-full items-center gap-3 rounded-xl bg-white/5 px-4 py-3 text-left text-gray-200 active:scale-[0.98]"
+        >
+          <CarIcon className="h-5 w-5 flex-shrink-0 text-accent" />
+          <span className="flex-1">
+            <span className="block font-semibold text-white">Traffic route</span>
+            <span className="text-xs text-gray-500">Live drive time with current traffic</span>
+          </span>
+          <PlusIcon className="h-5 w-5 text-accent" />
+        </button>
+
+        {hidden.length > 0 && (
+          <>
+            <div className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Hidden modules
+            </div>
+            {hidden.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onShow(m.id)}
+                className="flex w-full items-center gap-3 rounded-xl bg-white/5 px-4 py-3 text-left text-gray-200 active:scale-[0.98]"
+              >
+                <span className="flex-1 font-semibold text-white">{MODULE_TYPES[m.type].title}</span>
+                <PlusIcon className="h-5 w-5 text-accent" />
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 // =============================================================================
 // Page
 // =============================================================================
 
 export default function Dashboard() {
-  const [cfg, setCfg] = useLocalState('dashboard', DEFAULT_DASHBOARD, migrateDashboard)
+  const [cfg, setCfg] = useLocalState('dashboard', defaultDashboard(), migrateDashboard)
   const [editing, setEditing] = useState(false)
-  const [configFor, setConfigFor] = useState(null)
+  const [configFor, setConfigFor] = useState(null) // instance id
+  const [adding, setAdding] = useState(false)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
-  const setEnabled = (id, on) => setCfg((c) => ({ ...c, enabled: { ...c.enabled, [id]: on } }))
-  const setSetting = (mod, key, val) =>
-    setCfg((c) => ({ ...c, settings: { ...c.settings, [mod]: { ...c.settings[mod], [key]: val } } }))
+  const modules = cfg.modules
+  const setModules = (fn) => setCfg((c) => ({ ...c, modules: fn(c.modules) }))
+  const setEnabled = (id, on) =>
+    setModules((ms) => ms.map((m) => (m.id === id ? { ...m, enabled: on } : m)))
+  const patchSettings = (id, patch) =>
+    setModules((ms) => ms.map((m) => (m.id === id ? { ...m, settings: { ...m.settings, ...patch } } : m)))
+  const removeModule = (id) => setModules((ms) => ms.filter((m) => m.id !== id))
+
+  const addTraffic = () => {
+    const inst = newInstance('traffic')
+    setModules((ms) => [...ms, inst])
+    setAdding(false)
+    setConfigFor(inst.id) // jump straight into setting the route
+  }
+  const showModule = (id) => {
+    setEnabled(id, true)
+    setAdding(false)
+  }
 
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
-    setCfg((c) => {
-      const from = c.order.indexOf(active.id)
-      const to = c.order.indexOf(over.id)
-      return from === -1 || to === -1 ? c : { ...c, order: arrayMove(c.order, from, to) }
+    setModules((ms) => {
+      const from = ms.findIndex((m) => m.id === active.id)
+      const to = ms.findIndex((m) => m.id === over.id)
+      return from === -1 || to === -1 ? ms : arrayMove(ms, from, to)
     })
   }
 
-  const today = new Date().toLocaleDateString([], {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  })
+  const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+  const visible = editing ? modules : modules.filter((m) => m.enabled)
+  const configModule = modules.find((m) => m.id === configFor) || null
 
-  const visible = editing ? cfg.order : cfg.order.filter((id) => cfg.enabled[id])
-
-  const renderCard = (id, handleProps) => {
-    const body = cfg.enabled[id] ? (
-      <ModuleBody id={id} settings={cfg.settings} />
+  const renderCard = (m, handleProps) => {
+    const meta = MODULE_TYPES[m.type]
+    const body = m.enabled ? (
+      <ModuleBody module={m} />
     ) : (
       <p className="text-sm text-gray-500">Hidden — toggle to show this on your dashboard.</p>
     )
     return (
       <ModuleCard
-        title={TITLE[id]}
-        enabled={cfg.enabled[id]}
+        title={moduleTitle(m)}
+        enabled={m.enabled}
         editing={editing}
-        hasConfig={CONFIGURABLE.has(id)}
+        hasConfig={meta.configurable}
+        canRemove={meta.multi}
         dragHandleProps={handleProps}
-        onToggle={(on) => setEnabled(id, on)}
-        onConfigure={() => setConfigFor(id)}
+        onToggle={(on) => setEnabled(m.id, on)}
+        onConfigure={() => setConfigFor(m.id)}
+        onRemove={() => removeModule(m.id)}
       >
         {body}
       </ModuleCard>
@@ -777,13 +1094,13 @@ export default function Dashboard() {
 
   const grid = (
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-      {visible.map((id) =>
+      {visible.map((m) =>
         editing ? (
-          <SortableModule key={id} id={id}>
-            {(handle) => renderCard(id, handle)}
+          <SortableModule key={m.id} id={m.id}>
+            {(handle) => renderCard(m, handle)}
           </SortableModule>
         ) : (
-          <div key={id}>{renderCard(id, null)}</div>
+          <div key={m.id}>{renderCard(m, null)}</div>
         ),
       )}
     </div>
@@ -792,15 +1109,25 @@ export default function Dashboard() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="Home" subtitle={today}>
-        <Button variant={editing ? 'primary' : 'ghost'} onClick={() => setEditing((e) => !e)}>
-          {editing ? 'Done' : 'Customize'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {editing && (
+            <Button variant="ghost" onClick={() => setAdding(true)}>
+              <span className="flex items-center gap-2">
+                <PlusIcon className="h-5 w-5" /> Add Module
+              </span>
+            </Button>
+          )}
+          <Button variant={editing ? 'primary' : 'ghost'} onClick={() => setEditing((e) => !e)}>
+            {editing ? 'Done' : 'Customize'}
+          </Button>
+        </div>
       </PageHeader>
 
       {editing && (
         <p className="mb-4 text-sm text-gray-500">
-          Drag <GripIcon className="inline h-4 w-4" /> to reorder, toggle to show/hide, and tap{' '}
-          <GearIcon className="inline h-4 w-4" /> to choose what each module displays.
+          Drag <GripIcon className="inline h-4 w-4" /> to reorder, toggle to show/hide, tap{' '}
+          <GearIcon className="inline h-4 w-4" /> to configure, and use <span className="text-gray-300">Add Module</span> for
+          more.
         </p>
       )}
 
@@ -810,7 +1137,7 @@ export default function Dashboard() {
         </Card>
       ) : editing ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={cfg.order} strategy={rectSortingStrategy}>
+          <SortableContext items={modules.map((m) => m.id)} strategy={rectSortingStrategy}>
             {grid}
           </SortableContext>
         </DndContext>
@@ -820,30 +1147,24 @@ export default function Dashboard() {
 
       {/* Per-module configuration */}
       <Modal
-        open={!!configFor}
+        open={!!configModule}
         onClose={() => setConfigFor(null)}
-        title={configFor ? `Configure ${TITLE[configFor]}` : ''}
+        title={configModule ? `Configure ${moduleTitle(configModule)}` : ''}
         footer={<Button onClick={() => setConfigFor(null)}>Done</Button>}
       >
-        {configFor === 'smarthome' && (
-          <SmartHomeConfig
-            value={cfg.settings.smarthome.controls}
-            onChange={(controls) => setSetting('smarthome', 'controls', controls)}
-          />
-        )}
-        {configFor === 'stocks' && (
-          <StocksConfig
-            value={cfg.settings.stocks.watchlistId}
-            onChange={(id) => setSetting('stocks', 'watchlistId', id)}
-          />
-        )}
-        {configFor === 'goals' && (
-          <GoalsConfig
-            value={cfg.settings.goals.sectionId}
-            onChange={(id) => setSetting('goals', 'sectionId', id)}
-          />
+        {configModule && (
+          <ModuleConfig module={configModule} onPatch={(patch) => patchSettings(configModule.id, patch)} />
         )}
       </Modal>
+
+      {/* Add a module */}
+      <AddModuleModal
+        open={adding}
+        onClose={() => setAdding(false)}
+        modules={modules}
+        onShow={showModule}
+        onAddTraffic={addTraffic}
+      />
     </div>
   )
 }
