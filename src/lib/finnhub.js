@@ -124,9 +124,10 @@ export async function fetchQuotes(symbols) {
 }
 
 /**
- * Basic financials for a symbol — used for 52-week high and P/E. These are
- * lower priority than quotes and run best-effort (the basic-financials endpoint
- * is restricted on some free keys); failures never flip the connection status.
+ * Basic financials for a symbol — used for 52-week high, P/E and the latest
+ * dividend per share. These are lower priority than quotes and run best-effort
+ * (the basic-financials endpoint is restricted on some free keys); failures
+ * never flip the connection status.
  */
 export async function fetchMetric(symbol) {
   const data = await get('/stock/metric', { symbol, metric: 'all' }, { priority: 1, track: false })
@@ -134,6 +135,9 @@ export async function fetchMetric(symbol) {
   return {
     week52High: m['52WeekHigh'] ?? null,
     pe: m.peTTM ?? m.peBasicExclExtraTTM ?? m.peNormalizedAnnual ?? null,
+    // Most recent per-share dividend Finnhub exposes on the free tier (TTM,
+    // falling back to the annual figure). 0 / null means non-dividend payer.
+    dividend: m.dividendPerShareTTM ?? m.dividendPerShareAnnual ?? null,
   }
 }
 

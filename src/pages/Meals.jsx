@@ -49,9 +49,9 @@ const TAKEOUT_COLOR = '#F0883E'
 // Top-level subpages — cycle the page instead of scrolling (touch-friendly).
 const SUBPAGES = [
   { id: 'schedule', label: 'Schedule' },
-  { id: 'household', label: 'Household' },
   { id: 'meals', label: 'Meals' },
   { id: 'groceries', label: 'Groceries' },
+  { id: 'household', label: 'Household' },
 ]
 
 // Household member accent palette (tap to pick when adding/editing a member).
@@ -148,12 +148,15 @@ const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 // Grocery list sections, shown as separate columns. 'other' catches anything
 // that doesn't match (grains, baking staples, etc.) so nothing is dropped.
 const GROCERY_CATEGORIES = [
-  { id: 'produce', label: 'Fruits & Veggies', color: '#39D353' },
   { id: 'meatdairy', label: 'Meats & Dairy', color: '#F85149' },
-  { id: 'sauces', label: 'Sauces', color: '#D29922' },
-  { id: 'seasonings', label: 'Seasonings', color: '#A371F7' },
+  { id: 'produce', label: 'Fruits & Veggies', color: '#39D353' },
+  { id: 'saucesseasonings', label: 'Sauces & Seasonings', color: '#D29922' },
   { id: 'other', label: 'Other', color: '#8B949E' },
 ]
+
+// Older saves used separate 'sauces'/'seasonings' columns — fold any saved
+// category overrides into the combined column.
+const LEGACY_CAT = { sauces: 'saucesseasonings', seasonings: 'saucesseasonings' }
 
 // Keyword → category. Produce is checked first so "eggplant" / "butternut
 // squash" land in produce before "egg" / "butter" can claim them for meat & dairy.
@@ -172,16 +175,16 @@ const CAT_KEYWORDS = {
     'wing', 'brisket', 'cod', 'tilapia',
     'milk', 'cheese', 'butter', 'yogurt', 'yoghurt', 'cream', 'egg', 'mozzarella', 'cheddar',
     'parmesan', 'feta', 'ricotta', 'ghee', 'dairy'],
-  sauces: ['sauce', 'ketchup', 'mustard', 'mayo', 'mayonnaise', 'sriracha', 'salsa', 'pesto',
-    'marinara', 'gravy', 'dressing', 'vinegar', 'honey', 'syrup', 'jam', 'jelly', 'broth',
-    'stock', 'hoisin', 'teriyaki', 'worcestershire', 'tahini', 'hummus', 'guacamole', 'chutney',
-    'relish', 'aioli', 'vinaigrette', 'paste'],
-  seasonings: ['salt', 'cumin', 'paprika', 'oregano', 'thyme', 'rosemary', 'cinnamon', 'nutmeg',
+  saucesseasonings: ['sauce', 'ketchup', 'mustard', 'mayo', 'mayonnaise', 'sriracha', 'salsa',
+    'pesto', 'marinara', 'gravy', 'dressing', 'vinegar', 'honey', 'syrup', 'jam', 'jelly',
+    'broth', 'stock', 'hoisin', 'teriyaki', 'worcestershire', 'tahini', 'hummus', 'guacamole',
+    'chutney', 'relish', 'aioli', 'vinaigrette', 'paste',
+    'salt', 'cumin', 'paprika', 'oregano', 'thyme', 'rosemary', 'cinnamon', 'nutmeg',
     'turmeric', 'curry', 'cayenne', 'coriander', 'seasoning', 'spice', 'bay leaf', 'cardamom',
     'clove', 'sage', 'dill', 'fennel', 'allspice', 'vanilla', 'peppercorn', 'masala', 'chili',
     'chilli', 'garam'],
 }
-const CAT_ORDER = ['produce', 'meatdairy', 'sauces', 'seasonings']
+const CAT_ORDER = ['produce', 'meatdairy', 'saucesseasonings']
 function categorize(name) {
   const n = name.toLowerCase()
   for (const cat of CAT_ORDER) {
@@ -203,6 +206,8 @@ export default function Meals() {
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
 
   const [mealDraft, setMealDraft] = useState(null)
+  // When a meal is created from the slot editor, auto-select it back into the slot on save.
+  const [pendingSlotSelect, setPendingSlotSelect] = useState(false)
   const [slotDraft, setSlotDraft] = useState(null) // { day, slot, mealId, providers, guests }
   const [memberDraft, setMemberDraft] = useState(null) // { id, name, color }
   const [memberMealsFor, setMemberMealsFor] = useState(null) // member id whose meal list is being edited
@@ -253,7 +258,8 @@ export default function Meals() {
     const cols = Object.fromEntries(GROCERY_CATEGORIES.map((c) => [c.id, []]))
     for (const item of grocery) {
       const key = item.name.toLowerCase()
-      const cat = groceryCat[key] || categorize(item.name)
+      const saved = groceryCat[key]
+      const cat = (saved && (LEGACY_CAT[saved] || saved)) || categorize(item.name)
       ;(cols[cat] || cols.other).push({ ...item, key })
     }
     const orderIndex = new Map(groceryOrder.map((n, i) => [n, i]))
@@ -406,7 +412,26 @@ export default function Meals() {
       const exists = list.some((m) => m.id === meal.id)
       return exists ? list.map((m) => (m.id === meal.id ? meal : m)) : [...list, meal]
     })
+    // If we opened the meal editor from the slot, drop the new meal into that slot.
+    if (pendingSlotSelect) {
+      setSlotDraft((d) =>
+        d
+          ? { ...d, mealId: meal.id, providers: members.filter((mem) => (mem.meals || []).includes(meal.id)).map((mem) => mem.id) }
+          : d,
+      )
+    }
     setMealDraft(null)
+    setPendingSlotSelect(false)
+  }
+
+  // Open the meal editor from the slot picker, prefilled to the chosen type.
+  const createMealForSlot = (type) => {
+    setPendingSlotSelect(true)
+    setMealDraft({ ...emptyMeal(), type })
+  }
+  const closeMealDraft = () => {
+    setMealDraft(null)
+    setPendingSlotSelect(false)
   }
 
   const editMeal = (m) =>
@@ -612,10 +637,20 @@ export default function Meals() {
                           'flex h-full min-h-[88px] w-full flex-col items-center gap-1.5 overflow-hidden rounded-lg px-2 py-2 text-center text-base transition-opacity active:scale-[0.98]',
                           // Filled cells anchor to the top so the meal name is never
                           // pushed out of view by the member badges; empty cells center the +.
-                          m ? 'justify-start font-semibold shadow-glow' : 'justify-center bg-white/5 text-gray-600',
+                          m ? 'justify-start font-semibold' : 'justify-center bg-white/5 text-gray-600',
                           faded ? 'opacity-25' : '',
                         ].join(' ')}
-                        style={m ? { backgroundColor: `${accent}26`, color: accent, border: `1.5px solid ${accent}` } : undefined}
+                        // Glow tracks the slot/takeout color instead of the fixed blue accent.
+                        style={
+                          m
+                            ? {
+                                backgroundColor: `${accent}26`,
+                                color: accent,
+                                border: `1.5px solid ${accent}`,
+                                boxShadow: `0 0 0 1px ${accent}66, 0 0 16px ${accent}40`,
+                              }
+                            : undefined
+                        }
                       >
                         {m ? (
                           <>
@@ -682,14 +717,14 @@ export default function Meals() {
                         <PencilIcon className="h-5 w-5" />
                       </button>
                     </div>
-                    <ul className="mb-3 space-y-1.5">
+                    <ul className="mb-3 space-y-2">
                       {memMeals.length === 0 && (
                         <li className="text-sm text-gray-500">No meals assigned yet.</li>
                       )}
                       {memMeals.map((m) => {
                         const takeout = mealType(m) === 'takeout'
                         return (
-                          <li key={m.id} className="flex items-center gap-2">
+                          <li key={m.id} className="flex items-center gap-2 rounded-lg bg-white/5 py-1.5 pl-2.5 pr-1.5">
                             <span
                               className="h-2 w-2 flex-shrink-0 rounded-full"
                               style={{ backgroundColor: takeout ? TAKEOUT_COLOR : 'rgb(var(--c-accent))' }}
@@ -708,9 +743,9 @@ export default function Meals() {
                               type="button"
                               onClick={() => toggleMemberMeal(mem.id, m.id)}
                               aria-label={`Remove ${m.name} from ${mem.name}`}
-                              className="rounded p-1 text-gray-600 active:scale-95 active:text-loss"
+                              className="flex-shrink-0 rounded-lg bg-loss/15 p-2.5 text-loss active:scale-95"
                             >
-                              <TrashIcon className="h-4 w-4" />
+                              <TrashIcon className="h-5 w-5" />
                             </button>
                           </li>
                         )
@@ -879,16 +914,17 @@ export default function Meals() {
         onSave={saveSlot}
         meals={meals}
         members={members}
+        onCreateMeal={createMealForSlot}
       />
 
       {/* Add / edit meal */}
       <Modal
         open={!!mealDraft}
-        onClose={() => setMealDraft(null)}
+        onClose={closeMealDraft}
         title={isEditing ? 'Edit Meal' : 'New Meal'}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setMealDraft(null)}>Cancel</Button>
+            <Button variant="ghost" onClick={closeMealDraft}>Cancel</Button>
             <Button onClick={saveMeal}>Save</Button>
           </>
         }
@@ -1185,7 +1221,8 @@ function GroceryBoard({ categories, board, checked, onToggleChecked, onCommit })
   }
 
   // While dragging, also show empty categories as drop targets.
-  const visibleCats = categories.filter((c) => cols[c.id]?.length || activeId)
+  // Always show every category (even empty ones) so the columns stay put.
+  const visibleCats = categories
 
   return (
     <DndContext
@@ -1195,7 +1232,7 @@ function GroceryBoard({ categories, board, checked, onToggleChecked, onCommit })
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
     >
-      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {visibleCats.map((cat) => (
           <GroceryColumn key={cat.id} cat={cat} items={cols[cat.id] || []} overId={overId}>
             {(cols[cat.id] || []).map((item) => (
@@ -1240,7 +1277,7 @@ function GroceryColumn({ cat, items, overId, children }) {
                 isOver ? 'border-accent text-accent' : 'border-border text-gray-600',
               ].join(' ')}
             >
-              Drop here
+              {isOver ? 'Drop here' : 'Empty'}
             </li>
           ) : (
             children
@@ -1419,8 +1456,10 @@ function MemberPicker({ members, selected, onToggle }) {
   )
 }
 
-function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
+function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateMeal }) {
+  const [tab, setTab] = useState('recipe') // 'recipe' | 'takeout'
   if (!draft) return null
+  const tabMeals = meals.filter((m) => mealType(m) === tab)
   const toggleIn = (key, id) =>
     setDraft((d) => ({
       ...d,
@@ -1452,7 +1491,17 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
       <div className="space-y-5">
         {/* Meal selection */}
         <div>
-          <label className="mb-2 block text-xs text-gray-500">Meal</label>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <label className="block text-xs text-gray-500">Meal</label>
+            <Tabs
+              tabs={[
+                { id: 'recipe', label: 'Homecooked' },
+                { id: 'takeout', label: 'Takeout' },
+              ]}
+              active={tab}
+              onChange={setTab}
+            />
+          </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"
@@ -1465,7 +1514,7 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
               <div className="font-medium">None</div>
               <div className="font-mono text-[10px] uppercase opacity-70">Empty slot</div>
             </button>
-            {meals.map((m) => {
+            {tabMeals.map((m) => {
               const takeout = mealType(m) === 'takeout'
               const on = draft.mealId === m.id
               return (
@@ -1489,6 +1538,14 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
                 </button>
               )
             })}
+            {/* Create a new meal of the current type without leaving the planner. */}
+            <button
+              type="button"
+              onClick={() => onCreateMeal(tab)}
+              className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border px-4 py-3 text-sm font-semibold text-gray-400 active:scale-[0.98]"
+            >
+              <PlusIcon className="h-5 w-5" /> New {tab === 'takeout' ? 'takeout' : 'homecooked'}
+            </button>
           </div>
         </div>
 
