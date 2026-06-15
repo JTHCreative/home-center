@@ -126,36 +126,32 @@ const ingName = (ing) => (typeof ing === 'string' ? ing : ing?.name || '')
 const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 
 // Grocery list sections, shown as separate columns. 'other' catches anything
-// that doesn't match (dairy, grains, fruit, etc.) so nothing is dropped.
+// that doesn't match (sauces, grains, seasonings, etc.) so nothing is dropped.
 const GROCERY_CATEGORIES = [
-  { id: 'meats', label: 'Meats', color: '#F85149' },
-  { id: 'veggies', label: 'Veggies', color: '#39D353' },
-  { id: 'sauces', label: 'Sauces', color: '#F0883E' },
-  { id: 'seasonings', label: 'Seasonings', color: '#D29922' },
+  { id: 'produce', label: 'Fruits & Veggies', color: '#39D353' },
+  { id: 'meatdairy', label: 'Meats & Dairy', color: '#F85149' },
   { id: 'other', label: 'Other', color: '#8B949E' },
 ]
 
-// Keyword → category. Checked in CAT_ORDER, first match wins, so more specific
-// forms (e.g. "black pepper", "garlic powder") land in seasonings before the
-// produce keywords claim them.
+// Keyword → category. Produce is checked first so "eggplant" / "butternut
+// squash" land in produce before "egg" / "butter" can claim them for meat & dairy.
 const CAT_KEYWORDS = {
-  meats: ['chicken', 'beef', 'pork', 'steak', 'bacon', 'sausage', 'turkey', 'ham', 'lamb',
-    'fish', 'salmon', 'tuna', 'shrimp', 'prawn', 'crab', 'mince', 'ground beef',
-    'ground turkey', 'ground pork', 'ribs', 'chorizo', 'meat', 'filet', 'thigh',
-    'breast', 'wing', 'brisket', 'cod', 'tilapia'],
-  sauces: ['sauce', 'ketchup', 'mayo', 'mayonnaise', 'mustard', 'salsa', 'dressing',
-    'vinegar', 'soy', 'sriracha', 'hoisin', 'teriyaki', 'bbq', 'marinara', 'pesto',
-    'broth', 'stock', 'oil', 'paste'],
-  seasonings: ['salt', 'black pepper', 'peppercorn', 'powder', 'spice', 'seasoning',
-    'cumin', 'paprika', 'oregano', 'thyme', 'rosemary', 'cinnamon', 'chili', 'chilli',
-    'flake', 'bay leaf', 'nutmeg', 'turmeric', 'curry'],
-  veggies: ['onion', 'garlic', 'tomato', 'lettuce', 'spinach', 'kale', 'carrot', 'potato',
+  produce: ['onion', 'garlic', 'tomato', 'lettuce', 'spinach', 'kale', 'carrot', 'potato',
     'pepper', 'bell', 'broccoli', 'cucumber', 'celery', 'mushroom', 'zucchini', 'avocado',
-    'cilantro', 'parsley', 'basil', 'lime', 'lemon', 'corn', 'beans', 'peas', 'cabbage',
-    'ginger', 'scallion', 'leek', 'squash', 'eggplant', 'asparagus', 'jalapeno', 'radish',
-    'beet', 'chard', 'herb'],
+    'cilantro', 'parsley', 'basil', 'corn', 'beans', 'peas', 'cabbage', 'ginger', 'scallion',
+    'leek', 'squash', 'eggplant', 'asparagus', 'jalapeno', 'radish', 'beet', 'chard', 'herb',
+    'apple', 'banana', 'berry', 'berries', 'blueberry', 'strawberry', 'raspberry',
+    'blackberry', 'grape', 'orange', 'lemon', 'lime', 'mango', 'peach', 'pear', 'pineapple',
+    'melon', 'watermelon', 'cantaloupe', 'cherry', 'kiwi', 'plum', 'apricot', 'fig',
+    'pomegranate', 'coconut', 'fruit', 'veg'],
+  meatdairy: ['chicken', 'beef', 'pork', 'steak', 'bacon', 'sausage', 'turkey', 'ham', 'lamb',
+    'fish', 'salmon', 'tuna', 'shrimp', 'prawn', 'crab', 'mince', 'ground beef',
+    'ground turkey', 'ground pork', 'ribs', 'chorizo', 'meat', 'filet', 'thigh', 'breast',
+    'wing', 'brisket', 'cod', 'tilapia',
+    'milk', 'cheese', 'butter', 'yogurt', 'yoghurt', 'cream', 'egg', 'mozzarella', 'cheddar',
+    'parmesan', 'feta', 'ricotta', 'ghee', 'dairy'],
 }
-const CAT_ORDER = ['meats', 'sauces', 'seasonings', 'veggies']
+const CAT_ORDER = ['produce', 'meatdairy']
 function categorize(name) {
   const n = name.toLowerCase()
   for (const cat of CAT_ORDER) {
