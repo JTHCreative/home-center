@@ -109,9 +109,10 @@ export default function Goals() {
   // Upcoming events pulled (read-only) from the Calendar page's stored events.
   const upcoming = useMemo(() => {
     const today = iso(new Date())
-    return readStored('calendar-events', [])
-      .filter((e) => e.date >= today)
-      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+    const stored = readStored('calendar-events', [])
+    return (Array.isArray(stored) ? stored : [])
+      .filter((e) => e && typeof e.date === 'string' && e.date >= today)
+      .sort((a, b) => `${a.date}${a.time || ''}`.localeCompare(`${b.date}${b.time || ''}`))
       .slice(0, 8)
   }, [])
 

@@ -50,10 +50,16 @@ export default function Calendar() {
 
   const today = new Date()
 
+  // Guard against malformed stored events (missing/non-string date or time) so
+  // one bad entry can't crash the whole page.
+  const timeOf = (e) => (typeof e?.time === 'string' ? e.time : '')
   const eventsByDate = useMemo(() => {
     const map = {}
-    for (const e of events) (map[e.date] ||= []).push(e)
-    for (const k in map) map[k].sort((a, b) => a.time.localeCompare(b.time))
+    for (const e of events) {
+      if (!e || typeof e !== 'object' || typeof e.date !== 'string' || !e.date) continue
+      ;(map[e.date] ||= []).push(e)
+    }
+    for (const k in map) map[k].sort((a, b) => timeOf(a).localeCompare(timeOf(b)))
     return map
   }, [events])
 
@@ -299,7 +305,7 @@ function DayView({ cursor, today, eventsByDate, onAdd, onOpen }) {
     <div>
       {HOURS.map((h) => {
         const hh = String(h).padStart(2, '0')
-        const slotEvents = dayEvents.filter((e) => Number(e.time.slice(0, 2)) === h)
+        const slotEvents = dayEvents.filter((e) => Number(String(e.time ?? '').slice(0, 2)) === h)
         const isNow = isToday && today.getHours() === h
         return (
           <button
