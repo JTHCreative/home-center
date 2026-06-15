@@ -16,7 +16,7 @@ import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
-import { readStored, useLocalState } from '../lib/storage.js'
+import { useLocalState } from '../lib/storage.js'
 import {
   CheckIcon,
   ChevronLeft,
@@ -98,6 +98,7 @@ const newItem = () => ({
 export default function Goals() {
   const [sections, setSections] = useLocalState('goals-sections', SEED)
   const [progress, setProgress] = useLocalState('goals-progress', {}) // weekKey -> { items, children }
+  const [calendarEvents] = useLocalState('calendar-events', []) // read-only, shared with Calendar
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
@@ -109,12 +110,12 @@ export default function Goals() {
   // Upcoming events pulled (read-only) from the Calendar page's stored events.
   const upcoming = useMemo(() => {
     const today = iso(new Date())
-    const stored = readStored('calendar-events', [])
-    return (Array.isArray(stored) ? stored : [])
+    const stored = Array.isArray(calendarEvents) ? calendarEvents : []
+    return stored
       .filter((e) => e && typeof e.date === 'string' && e.date >= today)
       .sort((a, b) => `${a.date}${a.time || ''}`.localeCompare(`${b.date}${b.time || ''}`))
       .slice(0, 8)
-  }, [])
+  }, [calendarEvents])
 
   // --- Per-week progress mutations ------------------------------------------
   const editWeek = (fn) =>

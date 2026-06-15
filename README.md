@@ -28,8 +28,33 @@ touch targets and no hover-only interactions.
   with a week navigator. Each goal is a checkbox, tally boxes, or a sub-item
   checklist. A completion summary ring sits atop each list.
 
-All data (goals, meals, events, smart-home state, portfolio) persists to
-`localStorage`, so it survives reboots. No backend required.
+All data (goals, meals, events, smart-home state, watchlists) is stored in
+**Cloud Firestore**, so it's shared live across every browser/device pointed at
+the same Firebase project — edits on one screen show up on the others. A
+`localStorage` cache mirrors everything for instant loads and offline use, then
+syncs back when the connection returns.
+
+### Firestore setup
+
+State lives in one document per key under an `appState` collection (the value is
+stored as a JSON string). The web SDK config is in `src/lib/firebase.js`. Because
+the app has no user auth, the project's **Firestore security rules** must allow
+reading/writing that collection, e.g.:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /appState/{doc} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+> ⚠️ These rules are open to anyone with the project config. Fine for a private
+> household dashboard on a trusted network; add Firebase Auth and tighten the
+> rules if you expose it publicly.
 
 ## Tech stack
 
@@ -133,5 +158,6 @@ src/
   components/   shared UI (Sidebar, Card, Toggle, Slider, Tabs, Sparkline,
                 ProgressRing, Modal, Icons)
   pages/        one file per page (SmartHome, Stocks, Calendar, Meals, Goals)
-  lib/          storage (localStorage hook) and finnhub (API client)
+  lib/          firebase (Firestore init), storage (Firestore-backed state
+                hook with localStorage cache), and finnhub (API client)
 ```
