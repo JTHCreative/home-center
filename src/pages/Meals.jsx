@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
+import Tabs from '../components/Tabs.jsx'
 import { useLocalState } from '../lib/storage.js'
 import {
   CheckIcon,
   ChevronLeft,
   ChevronRight,
   MoonIcon,
+  PencilIcon,
   PlusIcon,
   SunIcon,
   SunriseIcon,
@@ -125,6 +127,7 @@ export default function Meals() {
   const [mealDraft, setMealDraft] = useState(null)
   const [slotDraft, setSlotDraft] = useState(null) // { day, slot, mealId, providers, guests }
   const [memberDraft, setMemberDraft] = useState(null) // { id, name, color }
+  const [mealsTab, setMealsTab] = useState('recipe') // Meals library: 'recipe' | 'takeout'
 
   const weekKey = iso(weekStart)
   const plan = useMemo(() => plans[weekKey] || {}, [plans, weekKey])
@@ -133,6 +136,7 @@ export default function Meals() {
 
   const mealById = useMemo(() => Object.fromEntries(meals.map((m) => [m.id, m])), [meals])
   const memberById = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members])
+  const visibleMeals = useMemo(() => meals.filter((m) => mealType(m) === mealsTab), [meals, mealsTab])
 
   // Auto-generated grocery list: ingredients across all recipes planned for the
   // selected week (takeout has nothing to buy), grouped by name with quantities.
@@ -400,7 +404,9 @@ export default function Meals() {
                         {m ? (
                           <>
                             <span className="line-clamp-2">{m.name}</span>
-                            {takeout && <span className="text-[9px] uppercase opacity-70">Takeout</span>}
+                            <span className="text-[9px] uppercase opacity-70">
+                              {takeout ? 'Takeout' : 'Homecooked'}
+                            </span>
                             {(providers.length > 0 || guests.length > 0) && (
                               <MemberRow
                                 providers={providers}
@@ -455,75 +461,84 @@ export default function Meals() {
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Meals (recipes + takeout) */}
+        {/* Meals — Recipe / Takeout tabs */}
         <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-300">Meals</h2>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                className="px-4 py-2"
-                onClick={() => setMealDraft({ ...emptyMeal(), type: 'takeout' })}
-              >
-                <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> Takeout</span>
-              </Button>
-              <Button className="px-4 py-2" onClick={() => setMealDraft(emptyMeal())}>
-                <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> Recipe</span>
-              </Button>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-gray-300">Meals</h2>
+              <Tabs
+                tabs={[
+                  { id: 'recipe', label: 'Recipe' },
+                  { id: 'takeout', label: 'Takeout' },
+                ]}
+                active={mealsTab}
+                onChange={setMealsTab}
+              />
             </div>
+            <Button
+              className="px-4 py-2"
+              onClick={() =>
+                setMealDraft(mealsTab === 'takeout' ? { ...emptyMeal(), type: 'takeout' } : emptyMeal())
+              }
+            >
+              <span className="flex items-center gap-2">
+                <PlusIcon className="h-4 w-4" /> {mealsTab === 'takeout' ? 'Takeout' : 'Recipe'}
+              </span>
+            </Button>
           </div>
           <div className="space-y-3">
-            {meals.length === 0 && <Card className="text-sm text-gray-500">No meals yet.</Card>}
-            {meals.map((m) => {
+            {visibleMeals.length === 0 && (
+              <Card className="text-sm text-gray-500">No {mealsTab} meals yet.</Card>
+            )}
+            {visibleMeals.map((m) => {
               const takeout = mealType(m) === 'takeout'
               return (
                 <Card key={m.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-white">{m.name}</h3>
-                        <span
-                          className="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
-                          style={
-                            takeout
-                              ? { backgroundColor: '#F0883E22', color: '#F0883E' }
-                              : { backgroundColor: 'rgb(var(--c-accent) / 0.15)', color: 'rgb(var(--c-accent))' }
-                          }
-                        >
-                          {takeout ? 'Takeout' : 'Recipe'}
-                        </span>
-                      </div>
-                      {takeout ? (
-                        <p className="mt-1 text-xs text-gray-400">
-                          {m.place ? `from ${m.place}` : 'Takeout'}
-                          {m.cost != null && m.cost !== '' ? ` · $${Number(m.cost).toFixed(2)}` : ''}
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-xs text-gray-400">{(m.ingredients || []).length} ingredients</p>
-                      )}
-                      {(takeout ? m.details : m.instructions) && (
-                        <p className="mt-2 line-clamp-2 text-sm text-gray-400">
-                          {takeout ? m.details : m.instructions}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        type="button"
-                        onClick={() => editMeal(m)}
-                        className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-gray-300 active:scale-95"
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-white">{m.name}</h3>
+                      <span
+                        className="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
+                        style={
+                          takeout
+                            ? { backgroundColor: '#F0883E22', color: '#F0883E' }
+                            : { backgroundColor: 'rgb(var(--c-accent) / 0.15)', color: 'rgb(var(--c-accent))' }
+                        }
                       >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteMeal(m.id)}
-                        aria-label={`Delete ${m.name}`}
-                        className="rounded-lg bg-loss/15 px-3 py-2 text-loss active:scale-95"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
+                        {takeout ? 'Takeout' : 'Recipe'}
+                      </span>
                     </div>
+                    {takeout ? (
+                      <p className="mt-1 text-xs text-gray-400">
+                        {m.place ? `from ${m.place}` : 'Takeout'}
+                        {m.cost != null && m.cost !== '' ? ` · $${Number(m.cost).toFixed(2)}` : ''}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-gray-400">{(m.ingredients || []).length} ingredients</p>
+                    )}
+                    {(takeout ? m.details : m.instructions) && (
+                      <p className="mt-2 line-clamp-2 text-sm text-gray-400">
+                        {takeout ? m.details : m.instructions}
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-3 flex gap-2 border-t border-border pt-3">
+                    <button
+                      type="button"
+                      onClick={() => editMeal(m)}
+                      aria-label={`Edit ${m.name}`}
+                      className="flex flex-1 items-center justify-center rounded-lg bg-white/5 px-3 py-3 text-gray-300 active:scale-95"
+                    >
+                      <PencilIcon className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteMeal(m.id)}
+                      aria-label={`Delete ${m.name}`}
+                      className="flex flex-1 items-center justify-center rounded-lg bg-loss/15 px-3 py-3 text-loss active:scale-95"
+                    >
+                      <TrashIcon className="h-5 w-5" />
+                    </button>
                   </div>
                 </Card>
               )
