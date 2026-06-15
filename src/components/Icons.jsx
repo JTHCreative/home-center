@@ -33,6 +33,16 @@ export function GridIcon(props) {
   )
 }
 
+export function CarIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5 11l1.6-4A2 2 0 0 1 8.5 6h7a2 2 0 0 1 1.9 1.3L19 11" />
+      <rect x="3" y="11" width="18" height="6" rx="2" />
+      <path d="M7 17v1.5M17 17v1.5M6.5 14h.01M17.5 14h.01" />
+    </svg>
+  )
+}
+
 export function ChartIcon(props) {
   return (
     <svg {...base} {...props}>
