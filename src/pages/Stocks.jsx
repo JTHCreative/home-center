@@ -7,38 +7,7 @@ import { fetchMetrics, fetchQuotes, hasFinnhubKey, subscribeFinnhubStatus } from
 import { useLocalState } from '../lib/storage.js'
 import { useDragScroll } from '../lib/useDragScroll.js'
 import { BellIcon, ChevronDown, ChevronUp, PlusIcon, TrashIcon } from '../components/Icons.jsx'
-
-// Watchlists: named lists of symbols. `symbol` is the Finnhub symbol; crypto
-// uses exchange-prefixed symbols (e.g. BINANCE:BTCUSDT). `qty` is optional —
-// when set, the symbol contributes to the list's value and daily P&L.
-// Default lists below were imported from the user's Robinhood Legend watchlists.
-const mk = (id, name, symbols) => ({
-  id,
-  name,
-  items: symbols.map((symbol) => ({ symbol, name: '', qty: 0 })),
-})
-
-const DEFAULT_WATCHLISTS = [
-  mk('wl-growth', 'Growth Fund', [
-    'NEM', 'RYCEY', 'TSLA', 'BLOK', 'ABNB', 'DOCU', 'GOOGL', 'HOOD', 'BRK.B',
-    'CSGP', 'BABA', 'NVDA', 'AMZN', 'BA', 'DUOL', 'BLCN', 'AAPL', 'PLTR', 'RKT',
-  ]),
-  mk('wl-dividend', 'Dividend Fund', [
-    'VZ', 'STK', 'STAG', 'BSTZ', 'ARCC', 'O', 'SCHD', 'PG', 'VYM', 'JNJ', 'CVX',
-    'COST', 'JEPI', 'FDVV', 'KO', 'MAIN', 'IBM', 'BIPC',
-  ]),
-  mk('wl-ira', 'IRAs', [
-    'AMD', 'UAL', 'DAL', 'VYM', 'VTR', 'IVV', 'SPY', 'VOO', 'COST', 'SCHB',
-    'VONG', 'MSFT', 'DIS', 'CSCO',
-  ]),
-  mk('wl-eyeson', 'Eyes On', [
-    'ROKU', 'RIVN', 'STUB', 'KEYS', 'LUV', 'CMG', 'SCHW', 'RGTI', 'AMC', 'TGT',
-    'TTD', 'U', 'GEMI', 'TSM', 'OTIS', 'F', 'WAL', 'PYPL', 'IONQ', 'GM', 'ROP',
-    'LCID', 'WMT', 'ARKF', 'PFE', 'META', 'MCD', 'TOL', 'DHI', 'COIN', 'CRM',
-    'KLAR', 'UBER', 'NFLX', 'SNAP', 'ZG', 'QBTS', 'PTON', 'GME', 'AI', 'LLY',
-    'LULU', 'RVI', 'SNOW', 'SNDL', 'BRLT', 'LEN', 'PINS', 'ADBE',
-  ]),
-]
+import { DEFAULT_WATCHLISTS } from '../lib/seeds.js'
 
 // Deterministic mock quote so the dashboard renders without an API key.
 function mockQuote(symbol) {

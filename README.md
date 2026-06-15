@@ -6,6 +6,12 @@ touch targets and no hover-only interactions.
 
 ## Features
 
+- **Home** — a customizable dashboard summarizing the day, landing page of the
+  app. Pick which modules to show/hide, drag to reorder them, and configure each
+  one in place: favorite Smart Home controls, a chosen Stocks/Crypto watchlist
+  with live quotes, today's planned meals (breakfast/lunch/dinner), a chosen
+  Goals list (interactive), and today's calendar events. Layout and per-module
+  settings persist via Firestore like the rest of the app.
 - **Smart Home** — light toggles with brightness sliders by room, TV/media
   controls (power, volume, input), and a smart-plug on/off card grid. Uses mock
   state today; structured so Home Assistant calls can be swapped in later (see
@@ -157,7 +163,9 @@ press `F11`.
 src/
   components/   shared UI (Sidebar, Card, Toggle, Slider, Tabs, Sparkline,
                 ProgressRing, Modal, Icons)
-  pages/        one file per page (SmartHome, Stocks, Calendar, Meals, Goals)
+  pages/        one file per page (Dashboard, SmartHome, Stocks, Calendar,
+                Meals, Goals)
   lib/          firebase (Firestore init), storage (Firestore-backed state
-                hook with localStorage cache), and finnhub (API client)
+                hook with localStorage cache), finnhub (API client), and
+                seeds (default state shared by pages + the dashboard)
 ```
