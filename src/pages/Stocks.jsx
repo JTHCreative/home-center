@@ -50,7 +50,9 @@ function mockQuote(symbol) {
   const change = (price * changePercent) / 100
   const week52High = price * (1.05 + rnd() * 0.6)
   const pe = symbol.includes(':') ? null : 8 + rnd() * 45 // crypto has no P/E
-  return { price, change, changePercent, previousClose: price - change, week52High, pe }
+  // ~60% of mock equities pay a dividend; crypto pays none.
+  const dividend = symbol.includes(':') || rnd() < 0.4 ? null : Number((rnd() * 1.5).toFixed(2))
+  return { price, change, changePercent, previousClose: price - change, week52High, pe, dividend }
 }
 
 // Numeric filter test: op is 'lt' | 'eq' | 'gt'. Empty value = no filter.
@@ -204,6 +206,7 @@ export default function Stocks() {
           previousClose: q?.previousClose ?? base.previousClose,
           week52High: m.week52High ?? base.week52High ?? null,
           pe: m.pe ?? base.pe ?? null,
+          dividend: m.dividend ?? base.dividend ?? null,
         }
       }
       return next
@@ -242,6 +245,7 @@ export default function Stocks() {
             ...base,
             week52High: m.week52High ?? base.week52High ?? null,
             pe: m.pe ?? base.pe ?? null,
+            dividend: m.dividend ?? base.dividend ?? null,
           }
         }
         return next
@@ -448,6 +452,7 @@ export default function Stocks() {
                 <SortTh label="Change %" k="changePercent" sort={sort} onSort={toggleSort} />
                 <SortTh label="52W High" k="week52High" sort={sort} onSort={toggleSort} />
                 <SortTh label="P/E" k="pe" sort={sort} onSort={toggleSort} />
+                <SortTh label="Last Div" k="dividend" sort={sort} onSort={toggleSort} />
                 {hasPositions && <SortTh label="Qty" k="qty" sort={sort} onSort={toggleSort} />}
                 <th className="px-3 py-2" />
               </tr>
@@ -513,6 +518,9 @@ export default function Stocks() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-gray-300">
                       {q?.pe != null ? q.pe.toFixed(2) : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-300">
+                      {q?.dividend ? money(q.dividend) : '—'}
                     </td>
                     {hasPositions && (
                       <td className="px-3 py-2 text-right font-mono text-gray-400">{it.qty || '·'}</td>
