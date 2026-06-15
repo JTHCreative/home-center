@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Card, { PageHeader } from '../components/Card.jsx'
 import ScrollTabs from '../components/ScrollTabs.jsx'
 import Sparkline from '../components/Sparkline.jsx'
@@ -150,6 +150,7 @@ export default function Stocks() {
   const active = watchlists.find((w) => w.id === activeId) || watchlists[0]
   const items = useMemo(() => active?.items || [], [active])
   const symbolsKey = items.map((i) => i.symbol).join(',')
+  const metricsRef = useRef({}) // cached 52W high / P/E (rarely change)
 
   const load = useCallback(async () => {
     const syms = symbolsKey ? symbolsKey.split(',') : []
@@ -158,31 +159,52 @@ export default function Stocks() {
       return
     }
     setLoading(true)
-    let result
-    if (hasFinnhubKey) {
-      const [liveQ, liveM] = await Promise.all([fetchQuotes(syms), fetchMetrics(syms)])
-      result = Object.fromEntries(
-        syms.map((s) => {
-          const base = mockQuote(s)
-          const q = liveQ[s] || {}
-          const m = liveM[s] || {}
-          return [
-            s,
-            {
-              price: q.price ?? base.price,
-              change: q.change ?? base.change,
-              changePercent: q.changePercent ?? base.changePercent,
-              previousClose: q.previousClose ?? base.previousClose,
-              week52High: m.week52High ?? base.week52High,
-              pe: m.pe ?? base.pe,
-            },
-          ]
-        }),
-      )
-    } else {
-      result = Object.fromEntries(syms.map((s) => [s, mockQuote(s)]))
+
+    if (!hasFinnhubKey) {
+      // No key — demo mode with deterministic mock data.
+      setQuotes((prev) => {
+        const next = { ...prev }
+        for (const s of syms) next[s] = prev[s] || mockQuote(s)
+        return next
+      })
+      setUpdatedAt(new Date())
+      setLoading(false)
+      return
     }
-    setQuotes((prev) => ({ ...prev, ...result }))
+
+    // Live: refresh quotes every cycle; fetch metrics only for symbols we don't
+    // have cached yet (they barely change), keeping call volume under the limit.
+    const missingMetrics = syms.filter((s) => !metricsRef.current[s])
+    const [liveQ, liveM] = await Promise.all([
+      fetchQuotes(syms),
+      missingMetrics.length ? fetchMetrics(missingMetrics) : Promise.resolve({}),
+    ])
+    for (const [s, m] of Object.entries(liveM)) if (m) metricsRef.current[s] = m
+
+    setQuotes((prev) => {
+      const next = { ...prev }
+      for (const s of syms) {
+        const q = liveQ[s]
+        const prevQ = prev[s]
+        // Keep the last good value on a failed/rate-limited fetch; never show mock
+        // when a real key is configured (avoids plausible-but-wrong numbers).
+        if (!q && !prevQ) {
+          next[s] = null
+          continue
+        }
+        const base = prevQ || {}
+        const m = metricsRef.current[s] || {}
+        next[s] = {
+          price: q?.price ?? base.price,
+          change: q?.change ?? base.change,
+          changePercent: q?.changePercent ?? base.changePercent,
+          previousClose: q?.previousClose ?? base.previousClose,
+          week52High: m.week52High ?? base.week52High ?? null,
+          pe: m.pe ?? base.pe ?? null,
+        }
+      }
+      return next
+    })
     setUpdatedAt(new Date())
     setLoading(false)
   }, [symbolsKey])
