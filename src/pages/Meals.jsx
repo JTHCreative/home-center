@@ -559,7 +559,7 @@ export default function Meals() {
         <div
           className="grid h-full min-w-[720px]"
           style={{
-            gridTemplateColumns: '7rem repeat(7, minmax(0, 1fr))',
+            gridTemplateColumns: 'max-content repeat(7, minmax(0, 1fr))',
             gridTemplateRows: `auto repeat(${SLOTS.length}, minmax(0, 1fr))`,
           }}
         >
