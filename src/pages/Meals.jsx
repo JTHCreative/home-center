@@ -444,7 +444,7 @@ export default function Meals() {
               const theme = SLOT_THEME[slot]
               const SlotIcon = theme.Icon
               return (
-              <tr key={slot} style={{ backgroundColor: `${theme.color}0D` }}>
+              <tr key={slot} style={{ height: `${100 / SLOTS.length}%`, backgroundColor: `${theme.color}0D` }}>
                 <td
                   className="border-b border-r border-border p-3"
                   style={{ borderLeft: `4px solid ${theme.color}` }}
