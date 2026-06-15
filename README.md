@@ -17,9 +17,10 @@ touch targets and no hover-only interactions.
 - **Calendar** — Month / Week / Day views (weeks start Sunday), tap any slot to
   add an event, color-coded categories, today always highlighted.
 - **Meals** — weekly planner grid (Sun–Sat × Breakfast/Lunch/Dinner) with a week
-  navigator to plan ahead or look back, recipe storage with ingredients and
-  instructions, a per-week auto-generated grocery list from planned meals, and
-  checkable grocery items.
+  navigator to plan ahead or look back, color-coded meal slots, recipe storage
+  with ingredients and instructions, a per-week auto-generated grocery list from
+  planned meals, and checkable grocery items. Household members can be assigned
+  to each meal as providers (cooking/bringing) or guests (eating).
 - **Goals** — color-coded lists tracked by week (weeks start Sunday), browsable
   with a week navigator. Each goal is a checkbox, tally boxes, or a sub-item
   checklist. A completion summary ring sits atop each list.
