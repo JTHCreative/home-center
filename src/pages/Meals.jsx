@@ -117,6 +117,7 @@ const emptyMeal = () => ({
   ingredients: [{ id: crypto.randomUUID(), qty: '', text: '' }],
   instructions: '',
   place: '',
+  mapsUrl: '',
   details: '',
   cost: '',
 })
@@ -310,6 +311,7 @@ export default function Meals() {
         ? {
             ...base,
             place: mealDraft.place.trim(),
+            mapsUrl: mealDraft.mapsUrl.trim(),
             details: mealDraft.details.trim(),
             cost: mealDraft.cost === '' ? null : Number(mealDraft.cost),
           }
@@ -339,6 +341,7 @@ export default function Meals() {
       })),
       instructions: m.instructions || '',
       place: m.place || '',
+      mapsUrl: m.mapsUrl || '',
       details: m.details || '',
       cost: m.cost ?? '',
     })
@@ -646,7 +649,23 @@ export default function Meals() {
                     </div>
                     {takeout ? (
                       <p className="mt-1 text-xs text-gray-400">
-                        {m.place ? `from ${m.place}` : 'Takeout'}
+                        {m.place ? 'from ' : 'Takeout'}
+                        {m.place && (
+                          m.mapsUrl ? (
+                            <a
+                              href={m.mapsUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="font-semibold underline decoration-dotted underline-offset-2"
+                              style={{ color: TAKEOUT_COLOR }}
+                            >
+                              {m.place}
+                            </a>
+                          ) : (
+                            m.place
+                          )
+                        )}
                         {m.cost != null && m.cost !== '' ? ` · $${Number(m.cost).toFixed(2)}` : ''}
                       </p>
                     ) : (
@@ -802,16 +821,30 @@ export default function Meals() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-gray-500">Cost (optional)</label>
+                    <label className="mb-1 block text-xs text-gray-500">Google Maps link (optional)</label>
                     <input
-                      type="number"
-                      min={0}
-                      step="any"
+                      type="url"
+                      inputMode="url"
                       className={fieldClass}
-                      placeholder="0.00"
-                      value={mealDraft.cost}
-                      onChange={(e) => setMealDraft({ ...mealDraft, cost: e.target.value })}
+                      placeholder="https://maps.google.com/…"
+                      value={mealDraft.mapsUrl}
+                      onChange={(e) => setMealDraft({ ...mealDraft, mapsUrl: e.target.value })}
                     />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">Cost (optional)</label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-500">$</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        className={`${fieldClass} pl-7`}
+                        placeholder="0.00"
+                        value={mealDraft.cost}
+                        onChange={(e) => setMealDraft({ ...mealDraft, cost: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -833,13 +866,13 @@ export default function Meals() {
                     {mealDraft.ingredients.map((ing) => (
                       <div key={ing.id} className="flex items-center gap-2">
                         <input
-                          className={`${fieldClass} w-24 flex-shrink-0`}
+                          className={`${fieldClass} !w-16 flex-none px-2 text-center`}
                           placeholder="Qty"
                           value={ing.qty}
                           onChange={(e) => setIngredient(ing.id, { qty: e.target.value })}
                         />
                         <input
-                          className={fieldClass}
+                          className={`${fieldClass} min-w-0 flex-1`}
                           placeholder="Ingredient (e.g. eggs)"
                           value={ing.text}
                           onChange={(e) => setIngredient(ing.id, { text: e.target.value })}
