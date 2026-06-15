@@ -904,8 +904,10 @@ export default function Meals() {
 }
 
 function MemberMealsModal({ member, meals, onToggle, onClose }) {
+  const [tab, setTab] = useState('recipe') // 'recipe' | 'takeout'
   if (!member) return null
   const selected = member.meals || []
+  const tabMeals = meals.filter((m) => mealType(m) === tab)
   return (
     <Modal
       open={!!member}
@@ -913,11 +915,21 @@ function MemberMealsModal({ member, meals, onToggle, onClose }) {
       title={`${member.name}'s meals`}
       footer={<Button onClick={onClose}>Done</Button>}
     >
-      {meals.length === 0 ? (
-        <p className="text-sm text-gray-500">No meals or takeout in the library yet.</p>
+      <div className="mb-4">
+        <Tabs
+          tabs={[
+            { id: 'recipe', label: 'Recipe' },
+            { id: 'takeout', label: 'Takeout' },
+          ]}
+          active={tab}
+          onChange={setTab}
+        />
+      </div>
+      {tabMeals.length === 0 ? (
+        <p className="text-sm text-gray-500">No {tab === 'takeout' ? 'takeout' : 'recipes'} in the library yet.</p>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
-          {meals.map((m) => {
+          {tabMeals.map((m) => {
             const takeout = mealType(m) === 'takeout'
             const on = selected.includes(m.id)
             const color = takeout ? TAKEOUT_COLOR : '#58A6FF'
