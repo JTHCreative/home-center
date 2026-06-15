@@ -108,7 +108,9 @@ npm run preview -- --host
   it, the Stocks page renders deterministic demo data.
 - `VITE_GOOGLE_MAPS_API_KEY` — Google Maps Platform key for the dashboard Traffic
   module's live drive times (enable the **Routes API** on the key). Without it,
-  the Traffic module shows demo estimates.
+  the Traffic module shows demo estimates. Requests use the *Compute Routes
+  Essentials* SKU (first 10k calls/month free, then $5/1k); with commute-window
+  polling, a handful of routes stay within the free tier.
 - Edit holdings in `DEFAULT_PORTFOLIO` (`src/pages/Stocks.jsx`) or override via
   the `home-center:portfolio` localStorage key.
 
