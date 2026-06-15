@@ -17,6 +17,23 @@ async function get(path, params = {}) {
   return res.json()
 }
 
+// Run async work over items with limited concurrency, so we don't fire dozens of
+// requests at once and trip Finnhub's rate limit (free tier ~60/min).
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length)
+  let i = 0
+  const worker = async () => {
+    while (i < items.length) {
+      const idx = i++
+      results[idx] = await fn(items[idx], idx)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
+
+const CONCURRENCY = 5
+
 /**
  * Quote for a single symbol.
  * Finnhub /quote returns: c (current), d (change), dp (% change),
@@ -25,6 +42,8 @@ async function get(path, params = {}) {
  */
 export async function fetchQuote(symbol) {
   const q = await get('/quote', { symbol })
+  // Finnhub returns 0/null for unknown symbols; treat that as no data.
+  if (!q || !q.c) return null
   return {
     price: q.c,
     change: q.d,
@@ -33,17 +52,15 @@ export async function fetchQuote(symbol) {
   }
 }
 
-/** Fetch quotes for many symbols in parallel. Returns a map keyed by symbol. */
+/** Fetch quotes for many symbols (rate-limited). Returns a map keyed by symbol. */
 export async function fetchQuotes(symbols) {
-  const entries = await Promise.all(
-    symbols.map(async (symbol) => {
-      try {
-        return [symbol, await fetchQuote(symbol)]
-      } catch {
-        return [symbol, null]
-      }
-    }),
-  )
+  const entries = await mapLimit(symbols, CONCURRENCY, async (symbol) => {
+    try {
+      return [symbol, await fetchQuote(symbol)]
+    } catch {
+      return [symbol, null]
+    }
+  })
   return Object.fromEntries(entries)
 }
 
@@ -60,16 +77,14 @@ export async function fetchMetric(symbol) {
   }
 }
 
-/** Fetch metrics for many symbols in parallel. Returns a map keyed by symbol. */
+/** Fetch metrics for many symbols (rate-limited). Returns a map keyed by symbol. */
 export async function fetchMetrics(symbols) {
-  const entries = await Promise.all(
-    symbols.map(async (symbol) => {
-      try {
-        return [symbol, await fetchMetric(symbol)]
-      } catch {
-        return [symbol, null]
-      }
-    }),
-  )
+  const entries = await mapLimit(symbols, CONCURRENCY, async (symbol) => {
+    try {
+      return [symbol, await fetchMetric(symbol)]
+    } catch {
+      return [symbol, null]
+    }
+  })
   return Object.fromEntries(entries)
 }

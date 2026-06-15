@@ -169,6 +169,10 @@ const LETTER_ROWS = [
   ['z', 'x', 'c', 'v', 'b', 'n', 'm'],
 ]
 const NUMBER_ROW = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
+const SYMBOL_ROWS = [
+  ['@', '#', '$', '_', '&', '-', '+', '(', ')', '/'],
+  ['*', '"', "'", ':', ';', '!', '?', '=', '%'],
+]
 
 // Sets the global --kb variable (px) that pages/modals use to reserve space so
 // the keyboard never covers the focused field. 0 when hidden/collapsed.
@@ -180,6 +184,7 @@ export default function VirtualKeyboard() {
   const [target, setTarget] = useState(null)
   const [shift, setShift] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [layout, setLayout] = useState('letters') // 'letters' | 'symbols'
   const [suggestions, setSuggestions] = useState([])
   const panelRef = useRef(null)
   const dictRef = useRef(null)
@@ -195,7 +200,10 @@ export default function VirtualKeyboard() {
       if (TOUCH_ONLY && !touchInput) return setTarget(null)
       const next = classify(e.target) ? e.target : null
       setTarget(next)
-      if (next) setCollapsed(false) // re-show on each new field
+      if (next) {
+        setCollapsed(false) // re-show on each new field
+        setLayout('letters')
+      }
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('focusin', onFocusIn)
@@ -280,15 +288,15 @@ export default function VirtualKeyboard() {
       onMouseDown={(e) => e.preventDefault()}
       className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-surface/95 px-3 pb-3 backdrop-blur"
     >
-      {/* Hide handle */}
-      <div className="flex justify-center py-1">
+      {/* Hide button — top-right so it's away from the number keys */}
+      <div className="flex justify-end py-1">
         <button
           type="button"
           onClick={() => setCollapsed(true)}
           aria-label="Hide keyboard"
-          className="flex items-center gap-2 rounded-full bg-white/5 px-6 py-1.5 text-sm font-medium text-gray-400 active:scale-95"
+          className="flex items-center gap-1.5 rounded-lg bg-white/5 px-4 py-1.5 text-sm font-medium text-gray-400 active:scale-95"
         >
-          <ChevronDown className="h-5 w-5" /> Hide
+          Hide <ChevronDown className="h-5 w-5" />
         </button>
       </div>
 
@@ -320,8 +328,10 @@ export default function VirtualKeyboard() {
           <TextPad
             shift={shift}
             onShift={() => setShift((s) => !s)}
+            layout={layout}
+            onToggleLayout={() => setLayout((l) => (l === 'symbols' ? 'letters' : 'symbols'))}
             onKey={(ch) => {
-              type(shift ? ch.toUpperCase() : ch)
+              type(shift && layout === 'letters' ? ch.toUpperCase() : ch)
             }}
             onBackspace={() => act(backspace)}
             onSpace={() => type(' ')}
@@ -350,7 +360,8 @@ function Key({ label, onClick, className = '', flex = 1 }) {
   )
 }
 
-function TextPad({ shift, onShift, onKey, onBackspace, onSpace, onEnter, onDone }) {
+function TextPad({ shift, onShift, layout, onToggleLayout, onKey, onBackspace, onSpace, onEnter, onDone }) {
+  const symbols = layout === 'symbols'
   return (
     <div className="space-y-2">
       <div className="flex gap-1.5">
@@ -358,29 +369,55 @@ function TextPad({ shift, onShift, onKey, onBackspace, onSpace, onEnter, onDone 
           <Key key={k} label={k} onClick={() => onKey(k)} />
         ))}
       </div>
-      <div className="flex gap-1.5">
-        {LETTER_ROWS[0].map((k) => (
-          <Key key={k} label={shift ? k.toUpperCase() : k} onClick={() => onKey(k)} />
-        ))}
-      </div>
-      <div className="flex gap-1.5 px-7">
-        {LETTER_ROWS[1].map((k) => (
-          <Key key={k} label={shift ? k.toUpperCase() : k} onClick={() => onKey(k)} />
-        ))}
-      </div>
+
+      {symbols ? (
+        <>
+          <div className="flex gap-1.5">
+            {SYMBOL_ROWS[0].map((k) => (
+              <Key key={k} label={k} onClick={() => onKey(k)} />
+            ))}
+          </div>
+          <div className="flex gap-1.5">
+            {SYMBOL_ROWS[1].map((k) => (
+              <Key key={k} label={k} onClick={() => onKey(k)} />
+            ))}
+            <Key label="⌫" onClick={onBackspace} flex={1.5} />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex gap-1.5">
+            {LETTER_ROWS[0].map((k) => (
+              <Key key={k} label={shift ? k.toUpperCase() : k} onClick={() => onKey(k)} />
+            ))}
+          </div>
+          <div className="flex gap-1.5 px-7">
+            {LETTER_ROWS[1].map((k) => (
+              <Key key={k} label={shift ? k.toUpperCase() : k} onClick={() => onKey(k)} />
+            ))}
+          </div>
+          <div className="flex gap-1.5">
+            <Key
+              label="⇧"
+              onClick={onShift}
+              flex={1.5}
+              className={shift ? '!bg-accent/30 text-accent shadow-glow' : ''}
+            />
+            {LETTER_ROWS[2].map((k) => (
+              <Key key={k} label={shift ? k.toUpperCase() : k} onClick={() => onKey(k)} />
+            ))}
+            <Key label="⌫" onClick={onBackspace} flex={1.5} />
+          </div>
+        </>
+      )}
+
       <div className="flex gap-1.5">
         <Key
-          label="⇧"
-          onClick={onShift}
-          flex={1.5}
-          className={shift ? '!bg-accent/30 text-accent shadow-glow' : ''}
+          label={symbols ? 'ABC' : '?123'}
+          onClick={onToggleLayout}
+          flex={1.6}
+          className="!text-base font-semibold"
         />
-        {LETTER_ROWS[2].map((k) => (
-          <Key key={k} label={shift ? k.toUpperCase() : k} onClick={() => onKey(k)} />
-        ))}
-        <Key label="⌫" onClick={onBackspace} flex={1.5} />
-      </div>
-      <div className="flex gap-1.5">
         <Key label="," onClick={() => onKey(',')} />
         <Key label="space" onClick={onSpace} flex={5} />
         <Key label="." onClick={() => onKey('.')} />
