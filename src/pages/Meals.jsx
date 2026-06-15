@@ -27,6 +27,14 @@ const SLOT_THEME = {
 }
 const TAKEOUT_COLOR = '#F0883E'
 
+// Top-level subpages — cycle the page instead of scrolling (touch-friendly).
+const SUBPAGES = [
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'household', label: 'Household' },
+  { id: 'meals', label: 'Meals' },
+  { id: 'groceries', label: 'Groceries' },
+]
+
 // Household member accent palette (tap to pick when adding/editing a member).
 const MEMBER_COLORS = ['#58A6FF', '#39D353', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
 
@@ -127,7 +135,9 @@ export default function Meals() {
   const [mealDraft, setMealDraft] = useState(null)
   const [slotDraft, setSlotDraft] = useState(null) // { day, slot, mealId, providers, guests }
   const [memberDraft, setMemberDraft] = useState(null) // { id, name, color }
+  const [memberMealsFor, setMemberMealsFor] = useState(null) // member id whose meal list is being edited
   const [mealsTab, setMealsTab] = useState('recipe') // Meals library: 'recipe' | 'takeout'
+  const [subpage, setSubpage] = useState('schedule') // Schedule | Household | Meals | Groceries
 
   const weekKey = iso(weekStart)
   const plan = useMemo(() => plans[weekKey] || {}, [plans, weekKey])
@@ -193,6 +203,16 @@ export default function Meals() {
     })
     setMemberDraft(null)
   }
+  // Toggle a meal in a member's personal list (who likes / makes / orders what).
+  const toggleMemberMeal = (memberId, mealId) =>
+    setMembers((list) =>
+      list.map((m) => {
+        if (m.id !== memberId) return m
+        const cur = m.meals || []
+        return { ...m, meals: cur.includes(mealId) ? cur.filter((x) => x !== mealId) : [...cur, mealId] }
+      }),
+    )
+
   const deleteMember = (id) => {
     setMembers((list) => list.filter((m) => m.id !== id))
     // Drop the member from every provider/guest list across all weeks.
@@ -294,6 +314,8 @@ export default function Meals() {
 
   const deleteMeal = (id) => {
     setMeals((list) => list.filter((m) => m.id !== id))
+    // Drop the meal from every member's personal list.
+    setMembers((list) => list.map((m) => ({ ...m, meals: (m.meals || []).filter((x) => x !== id) })))
     // Clear the meal from every planned slot across all weeks.
     setPlans((p) => {
       const next = {}
@@ -310,50 +332,57 @@ export default function Meals() {
 
   const isEditing = mealDraft && meals.some((m) => m.id === mealDraft.id)
 
-  return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader title="Meals" subtitle="Plan the week with recipes & takeout, build the grocery list" />
-
-      {/* Week navigator — browse future or past weeks */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setWeekStart((w) => addDays(w, -7))}
-            aria-label="Previous week"
-            className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setWeekStart(sundayOf(new Date()))}
-            className={[
-              'rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
-              isCurrentWeek ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
-            ].join(' ')}
-          >
-            This Week
-          </button>
-          <button
-            type="button"
-            onClick={() => setWeekStart((w) => addDays(w, 7))}
-            aria-label="Next week"
-            className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
-          >
-            <ChevronRight className="h-6 w-6" />
-          </button>
-        </div>
-        <div className="text-right">
-          <div className="text-xl font-bold text-white">{rangeLabel}</div>
-          <div className={isCurrentWeek ? 'text-xs text-gray-500' : 'text-xs text-accent'}>
-            {relLabel}
-          </div>
+  // Week navigator, shared by the Schedule and Groceries subpages.
+  const weekNav = (
+    <div className="mb-6 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setWeekStart((w) => addDays(w, -7))}
+          aria-label="Previous week"
+          className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setWeekStart(sundayOf(new Date()))}
+          className={[
+            'rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
+            isCurrentWeek ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
+          ].join(' ')}
+        >
+          This Week
+        </button>
+        <button
+          type="button"
+          onClick={() => setWeekStart((w) => addDays(w, 7))}
+          aria-label="Next week"
+          className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+      </div>
+      <div className="text-right">
+        <div className="text-xl font-bold text-white">{rangeLabel}</div>
+        <div className={isCurrentWeek ? 'text-xs text-gray-500' : 'text-xs text-accent'}>
+          {relLabel}
         </div>
       </div>
+    </div>
+  )
 
-      {/* Weekly planner grid */}
-      <Card className="mb-8 overflow-x-auto p-0">
+  return (
+    <div className="mx-auto max-w-6xl">
+      <PageHeader title="Meals">
+        <Tabs tabs={SUBPAGES} active={subpage} onChange={setSubpage} />
+      </PageHeader>
+
+      {/* ---- Schedule ---- */}
+      {subpage === 'schedule' && (
+        <>
+          {weekNav}
+          <Card className="overflow-x-auto p-0">
         <table className="w-full border-collapse">
           <thead>
             <tr>
@@ -425,43 +454,99 @@ export default function Meals() {
               </tr>
               )
             })}
-          </tbody>
-        </table>
-      </Card>
+            </tbody>
+          </table>
+          </Card>
+        </>
+      )}
 
-      {/* Household members — assignable as providers/guests on each meal */}
-      <Card className="mb-8">
-        <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
-          <h2 className="text-lg font-semibold text-gray-300">Household</h2>
-          <Button
-            className="px-4 py-2"
-            onClick={() => setMemberDraft({ id: crypto.randomUUID(), name: '', color: MEMBER_COLORS[0] })}
-          >
-            <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> Member</span>
-          </Button>
-        </div>
-        {members.length === 0 ? (
-          <p className="text-sm text-gray-500">Add household members to assign meal providers and guests.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {members.map((mem) => (
-              <button
-                key={mem.id}
-                type="button"
-                onClick={() => setMemberDraft({ ...mem })}
-                className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold active:scale-95"
-                style={{ backgroundColor: `${mem.color}22`, color: mem.color }}
-              >
-                <MemberBadge member={mem} />
-                {mem.name}
-              </button>
-            ))}
+      {/* ---- Household: one card per member, each with their own meals ---- */}
+      {subpage === 'household' && (
+        <>
+          <div className="mb-6 flex items-center justify-between">
+            <p className="text-sm text-gray-500">
+              Assign the meals & takeout each person likes to make or order.
+            </p>
+            <Button
+              className="px-4 py-2"
+              onClick={() => setMemberDraft({ id: crypto.randomUUID(), name: '', color: MEMBER_COLORS[0] })}
+            >
+              <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> Member</span>
+            </Button>
           </div>
-        )}
-      </Card>
+          {members.length === 0 ? (
+            <Card className="text-sm text-gray-500">Add household members to get started.</Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {members.map((mem) => {
+                const memMeals = (mem.meals || []).map((id) => mealById[id]).filter(Boolean)
+                return (
+                  <Card key={mem.id} style={{ borderColor: `${mem.color}66` }}>
+                    <div className="mb-3 flex items-center gap-3 border-b border-border pb-3">
+                      <MemberBadge member={mem} size={34} />
+                      <h3 className="flex-1 truncate text-lg font-bold" style={{ color: mem.color }}>
+                        {mem.name}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setMemberDraft({ ...mem })}
+                        aria-label={`Edit ${mem.name}`}
+                        className="rounded-lg bg-white/5 p-2 text-gray-300 active:scale-95"
+                      >
+                        <PencilIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <ul className="mb-3 space-y-1.5">
+                      {memMeals.length === 0 && (
+                        <li className="text-sm text-gray-500">No meals assigned yet.</li>
+                      )}
+                      {memMeals.map((m) => {
+                        const takeout = mealType(m) === 'takeout'
+                        return (
+                          <li key={m.id} className="flex items-center gap-2">
+                            <span
+                              className="h-2 w-2 flex-shrink-0 rounded-full"
+                              style={{ backgroundColor: takeout ? TAKEOUT_COLOR : 'rgb(var(--c-accent))' }}
+                            />
+                            <span className="flex-1 truncate text-gray-200">{m.name}</span>
+                            <span
+                              className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                              style={{
+                                color: takeout ? TAKEOUT_COLOR : 'rgb(var(--c-accent))',
+                                backgroundColor: takeout ? '#F0883E22' : 'rgb(var(--c-accent) / 0.15)',
+                              }}
+                            >
+                              {takeout ? 'Takeout' : 'Recipe'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleMemberMeal(mem.id, m.id)}
+                              aria-label={`Remove ${m.name} from ${mem.name}`}
+                              className="rounded p-1 text-gray-600 active:scale-95 active:text-loss"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() => setMemberMealsFor(mem.id)}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/5 px-3 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
+                    >
+                      <PlusIcon className="h-4 w-4" /> Assign meals
+                    </button>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Meals — Recipe / Takeout tabs */}
+      {/* ---- Meals library: Recipe / Takeout tabs ---- */}
+      {subpage === 'meals' && (
         <div>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -486,7 +571,7 @@ export default function Meals() {
               </span>
             </Button>
           </div>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleMeals.length === 0 && (
               <Card className="text-sm text-gray-500">No {mealsTab} meals yet.</Card>
             )}
@@ -545,9 +630,12 @@ export default function Meals() {
             })}
           </div>
         </div>
+      )}
 
-        {/* Grocery list */}
-        <div>
+      {/* ---- Groceries (for the selected week) ---- */}
+      {subpage === 'groceries' && (
+        <>
+          {weekNav}
           <h2 className="mb-3 text-lg font-semibold text-gray-300">
             Grocery List <span className="font-mono text-sm text-gray-500">({grocery.length})</span>
           </h2>
@@ -584,8 +672,8 @@ export default function Meals() {
               </ul>
             )}
           </Card>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Slot editor: pick a meal, then assign providers & guests */}
       <SlotModal
@@ -741,7 +829,68 @@ export default function Meals() {
         }}
         isExisting={memberDraft && members.some((m) => m.id === memberDraft.id)}
       />
+
+      {/* Assign meals to a household member */}
+      <MemberMealsModal
+        member={members.find((m) => m.id === memberMealsFor) || null}
+        meals={meals}
+        onToggle={(mealId) => toggleMemberMeal(memberMealsFor, mealId)}
+        onClose={() => setMemberMealsFor(null)}
+      />
     </div>
+  )
+}
+
+function MemberMealsModal({ member, meals, onToggle, onClose }) {
+  if (!member) return null
+  const selected = member.meals || []
+  return (
+    <Modal
+      open={!!member}
+      onClose={onClose}
+      title={`${member.name}'s meals`}
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      {meals.length === 0 ? (
+        <p className="text-sm text-gray-500">No meals or takeout in the library yet.</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {meals.map((m) => {
+            const takeout = mealType(m) === 'takeout'
+            const on = selected.includes(m.id)
+            const color = takeout ? TAKEOUT_COLOR : '#58A6FF'
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onToggle(m.id)}
+                className={[
+                  'flex items-center gap-3 rounded-xl px-4 py-3 text-left active:scale-[0.98]',
+                  on ? 'shadow-glow' : 'bg-white/5',
+                ].join(' ')}
+                style={on ? { backgroundColor: `${color}22`, outline: `2px solid ${color}` } : undefined}
+              >
+                <span
+                  className={[
+                    'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2',
+                    on ? 'text-bg' : 'border-border',
+                  ].join(' ')}
+                  style={on ? { backgroundColor: color, borderColor: color } : undefined}
+                >
+                  {on && <CheckIcon className="h-4 w-4" />}
+                </span>
+                <span className="flex-1">
+                  <span className="block font-medium text-white">{m.name}</span>
+                  <span className="font-mono text-[10px] uppercase" style={{ color }}>
+                    {takeout ? 'Takeout' : 'Recipe'}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </Modal>
   )
 }
 
