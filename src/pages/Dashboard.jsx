@@ -222,20 +222,41 @@ function useQuotes(symbols) {
 }
 
 // --- Traffic helper ----------------------------------------------------------
-// Live drive time with current traffic, refreshed every few minutes.
+// To keep API usage (and cost) minimal, the Traffic module only polls during
+// commute windows, only while the dashboard tab is actually visible, and at a
+// relaxed cadence. Outside those windows it shows the last reading.
+const COMMUTE_WINDOWS = [
+  { start: 6 * 60, end: 8 * 60 }, //  6:00–8:00 am
+  { start: 16 * 60, end: 18 * 60 }, //  4:00–6:00 pm
+]
+const TRAFFIC_POLL_MS = 5 * 60 * 1000 // 5 minutes
+
+const inCommuteWindow = (d = new Date()) => {
+  const min = d.getHours() * 60 + d.getMinutes()
+  return COMMUTE_WINDOWS.some((w) => min >= w.start && min < w.end)
+}
+const tabVisible = () =>
+  typeof document === 'undefined' || document.visibilityState === 'visible'
+
 function useTravelTime(origin, destination) {
   const o = origin?.trim() || ''
   const d = destination?.trim() || ''
   const [data, setData] = useState(null)
   const [updatedAt, setUpdatedAt] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [active, setActive] = useState(() => inCommuteWindow())
+
   useEffect(() => {
     if (!o || !d) {
       setData(null)
       return
     }
     let cancelled = false
+
+    // Only spend an API call when we're in a commute window AND the dashboard is
+    // on-screen; otherwise the last reading stays put.
     const load = async () => {
+      if (!inCommuteWindow() || !tabVisible()) return
       setLoading(true)
       const r = await fetchTravelTime(o, d)
       if (!cancelled) {
@@ -244,14 +265,29 @@ function useTravelTime(origin, destination) {
         setLoading(false)
       }
     }
-    load()
-    const id = setInterval(load, 180_000) // every 3 minutes
+
+    const tick = () => {
+      if (cancelled) return
+      setActive(inCommuteWindow())
+      load()
+    }
+    // When the tab becomes visible again mid-commute, refresh straight away.
+    const onVisibility = () => {
+      setActive(inCommuteWindow())
+      if (tabVisible()) load()
+    }
+
+    tick() // immediate attempt (no-op outside a window / when hidden)
+    const id = setInterval(tick, TRAFFIC_POLL_MS)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       cancelled = true
       clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [o, d])
-  return { data, updatedAt, loading }
+
+  return { data, updatedAt, loading, active }
 }
 
 const fmtDuration = (sec) => {
@@ -638,7 +674,7 @@ function CalendarModule() {
 
 function TrafficModule({ settings }) {
   const { origin, destination } = settings
-  const { data, updatedAt, loading } = useTravelTime(origin, destination)
+  const { data, updatedAt, active } = useTravelTime(origin, destination)
 
   if (!origin?.trim() || !destination?.trim()) {
     return (
@@ -697,14 +733,21 @@ function TrafficModule({ settings }) {
           </div>
         </div>
       ) : (
-        <p className="text-sm text-gray-500">{loading ? 'Checking traffic…' : 'No route found.'}</p>
+        <p className="text-sm text-gray-500">
+          {active
+            ? 'Checking traffic…'
+            : 'Live drive time updates during your commute — 6–8am and 4–6pm.'}
+        </p>
       )}
 
       <div className="mt-3 text-right text-xs text-gray-600">
         {data?.mock && (hasGoogleMapsKey ? 'Traffic unavailable · ' : 'Demo data · ')}
+        {!active && 'Paused outside commute · '}
         {updatedAt
           ? `Updated ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-          : ''}
+          : active
+            ? 'Checking…'
+            : 'Checks 6–8am · 4–6pm'}
       </div>
     </div>
   )
@@ -877,7 +920,9 @@ function TrafficConfig({ settings, onChange }) {
         />
       </div>
       <p className="text-xs text-gray-600">
-        Shows the current driving time with live traffic from Google.{' '}
+        Shows the current driving time with live traffic from Google. To keep API
+        usage low it refreshes every 5 minutes during your commute (6–8am and 4–6pm)
+        while the dashboard is on-screen.{' '}
         {hasGoogleMapsKey
           ? ''
           : 'Add VITE_GOOGLE_MAPS_API_KEY for live data — showing demo estimates until then.'}

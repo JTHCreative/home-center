@@ -13,7 +13,9 @@ touch targets and no hover-only interactions.
   meals (breakfast/lunch/dinner), a chosen Goals list (interactive), today's
   calendar events, and **Traffic** routes showing live drive time with current
   traffic from Google (set a start + destination; add as many routes as you
-  like). Layout and per-module settings persist via Firestore like the rest of
+  like). To keep API usage minimal, Traffic only polls during commute windows
+  (6–8am and 4–6pm), every 5 minutes, and only while the dashboard tab is
+  visible. Layout and per-module settings persist via Firestore like the rest of
   the app.
 - **Smart Home** — light toggles with brightness sliders by room, TV/media
   controls (power, volume, input), and a smart-plug on/off card grid. Uses mock
