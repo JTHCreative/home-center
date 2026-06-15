@@ -379,41 +379,34 @@ export default function Meals() {
 
   // Week navigator, shared by the Schedule and Groceries subpages.
   const weekNav = (
-    <div className="mb-6 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setWeekStart((w) => addDays(w, -7))}
-          aria-label="Previous week"
-          className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
-        >
-          <ChevronLeft className="h-6 w-6" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setWeekStart(sundayOf(new Date()))}
-          className={[
-            'rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
-            isCurrentWeek ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
-          ].join(' ')}
-        >
-          This Week
-        </button>
-        <button
-          type="button"
-          onClick={() => setWeekStart((w) => addDays(w, 7))}
-          aria-label="Next week"
-          className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
-        >
-          <ChevronRight className="h-6 w-6" />
-        </button>
-      </div>
-      <div className="text-right">
+    <div className="mb-6 flex items-center justify-center gap-3">
+      <button
+        type="button"
+        onClick={() => setWeekStart((w) => addDays(w, -7))}
+        aria-label="Previous week"
+        className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+      >
+        <ChevronLeft className="h-6 w-6" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setWeekStart(sundayOf(new Date()))}
+        title="Jump to this week"
+        className="min-w-[12rem] rounded-xl px-4 py-2 text-center active:scale-95"
+      >
         <div className="text-xl font-bold text-white">{rangeLabel}</div>
         <div className={isCurrentWeek ? 'text-xs text-gray-500' : 'text-xs text-accent'}>
           {relLabel}
         </div>
-      </div>
+      </button>
+      <button
+        type="button"
+        onClick={() => setWeekStart((w) => addDays(w, 7))}
+        aria-label="Next week"
+        className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+      >
+        <ChevronRight className="h-6 w-6" />
+      </button>
     </div>
   )
 
