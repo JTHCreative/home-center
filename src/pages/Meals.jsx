@@ -415,24 +415,24 @@ export default function Meals() {
   )
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto flex h-full max-w-6xl flex-col">
       <PageHeader title="Meals">
         <Tabs tabs={SUBPAGES} active={subpage} onChange={setSubpage} />
       </PageHeader>
 
-      {/* ---- Schedule ---- */}
+      {/* ---- Schedule (fills the available height) ---- */}
       {subpage === 'schedule' && (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           {weekNav}
-          <Card className="overflow-x-auto p-0">
-        <table className="w-full border-collapse">
+          <Card className="min-h-0 flex-1 overflow-auto p-0">
+        <table className="h-full w-full border-collapse">
           <thead>
             <tr>
-              <th className="w-24 border-b border-r border-border p-3 text-left text-xs font-semibold text-gray-500" />
+              <th className="w-28 border-b border-r border-border p-3 text-left text-sm font-semibold text-gray-500" />
               {DAYS.map((d, i) => (
-                <th key={d} className="border-b border-r border-border p-3 text-xs font-semibold text-gray-400">
+                <th key={d} className="border-b border-r border-border p-3 text-base font-semibold text-gray-300">
                   <div>{d}</div>
-                  <div className="font-mono text-[10px] font-normal text-gray-600">
+                  <div className="font-mono text-xs font-normal text-gray-600">
                     {addDays(weekStart, i).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                   </div>
                 </th>
@@ -447,10 +447,10 @@ export default function Meals() {
               <tr key={slot} style={{ backgroundColor: `${theme.color}0D` }}>
                 <td
                   className="border-b border-r border-border p-3"
-                  style={{ borderLeft: `3px solid ${theme.color}` }}
+                  style={{ borderLeft: `4px solid ${theme.color}` }}
                 >
-                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: theme.color }}>
-                    <SlotIcon className="h-5 w-5" />
+                  <div className="flex items-center gap-2 text-lg font-semibold" style={{ color: theme.color }}>
+                    <SlotIcon className="h-7 w-7" />
                     <span>{slot}</span>
                   </div>
                 </td>
@@ -462,20 +462,20 @@ export default function Meals() {
                   const providers = slotProviders(val)
                   const guests = slotGuests(val)
                   return (
-                    <td key={day} className="border-b border-r border-border p-1.5 align-top">
+                    <td key={day} className="h-full border-b border-r border-border p-1.5 align-top">
                       <button
                         type="button"
                         onClick={() => openSlot(day, slot)}
                         className={[
-                          'flex min-h-[56px] w-full flex-col items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center text-xs active:scale-[0.98]',
-                          m ? 'font-medium shadow-glow' : 'bg-white/5 text-gray-600',
+                          'flex h-full min-h-[88px] w-full flex-col items-center justify-center gap-2 rounded-lg px-2 py-3 text-center text-base active:scale-[0.98]',
+                          m ? 'font-semibold shadow-glow' : 'bg-white/5 text-gray-600',
                         ].join(' ')}
                         style={m ? { backgroundColor: `${accent}26`, color: accent, border: `1.5px solid ${accent}` } : undefined}
                       >
                         {m ? (
                           <>
-                            <span className="line-clamp-2">{m.name}</span>
-                            <span className="text-[9px] uppercase opacity-70">
+                            <span className="line-clamp-2 leading-tight">{m.name}</span>
+                            <span className="text-[11px] uppercase opacity-70">
                               {takeout ? 'Takeout' : 'Homecooked'}
                             </span>
                             {(providers.length > 0 || guests.length > 0) && (
@@ -487,7 +487,7 @@ export default function Meals() {
                             )}
                           </>
                         ) : (
-                          <PlusIcon className="h-5 w-5" />
+                          <PlusIcon className="h-7 w-7" />
                         )}
                       </button>
                     </td>
@@ -499,12 +499,12 @@ export default function Meals() {
             </tbody>
           </table>
           </Card>
-        </>
+        </div>
       )}
 
       {/* ---- Household: one card per member, each with their own meals ---- */}
       {subpage === 'household' && (
-        <>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mb-6 flex items-center justify-between">
             <p className="text-sm text-gray-500">
               Assign the meals & takeout each person likes to make or order.
@@ -584,12 +584,12 @@ export default function Meals() {
               })}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* ---- Meals library: Recipe / Takeout tabs ---- */}
       {subpage === 'meals' && (
-        <div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold text-gray-300">Meals</h2>
@@ -676,7 +676,7 @@ export default function Meals() {
 
       {/* ---- Groceries (for the selected week) ---- */}
       {subpage === 'groceries' && (
-        <>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {weekNav}
           <h2 className="mb-3 text-lg font-semibold text-gray-300">
             Grocery List <span className="font-mono text-sm text-gray-500">({grocery.length})</span>
@@ -725,7 +725,7 @@ export default function Meals() {
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Slot editor: pick a meal, then assign providers & guests */}
@@ -970,9 +970,9 @@ function MemberBadge({ member, size = 18, ring = false }) {
 // Provider (filled) and guest (ringed) badges shown on a planner cell.
 function MemberRow({ providers, guests, memberById }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-1">
-      {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={16} />)}
-      {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={16} ring />)}
+    <div className="flex flex-wrap items-center justify-center gap-1.5">
+      {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={26} />)}
+      {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={26} ring />)}
     </div>
   )
 }
