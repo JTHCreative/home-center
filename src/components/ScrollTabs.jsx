@@ -1,17 +1,55 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, PlusIcon } from './Icons.jsx'
+import { ChevronLeft, ChevronRight, PlusIcon, StarIcon } from './Icons.jsx'
 
 // Fixed-width, swipeable tab bar. Shows `visible` tabs at a time; the rest
 // scroll. Drag with finger (native) or mouse (manual), or tap the large arrows.
 // Gradient masks at each edge fade tabs in/out toward the arrows. Empty slots
 // (when there are fewer than `visible` tabs) show a "+" that calls `onAdd`.
+// Press-and-hold a tab for `longPressMs` to fire `onLongPress(id)`; the tab
+// matching `defaultId` shows a star.
 const TAB_W = 150 // px per tab
 
-export default function ScrollTabs({ tabs, active, onChange, onAdd, visible = 7 }) {
+export default function ScrollTabs({
+  tabs,
+  active,
+  onChange,
+  onAdd,
+  visible = 7,
+  onLongPress,
+  defaultId,
+  longPressMs = 3000,
+}) {
   const viewportRef = useRef(null)
   const drag = useRef(null)
   const [atStart, setAtStart] = useState(true)
   const [atEnd, setAtEnd] = useState(true)
+
+  // Press-and-hold to set a default. A real scroll/drag cancels the timer.
+  const pressTimer = useRef(null)
+  const pressStart = useRef(null)
+  const longPressFired = useRef(false)
+  const [pressingId, setPressingId] = useState(null)
+
+  const cancelPress = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+    setPressingId(null)
+  }
+  const startPress = (id, e) => {
+    if (!onLongPress) return
+    longPressFired.current = false
+    pressStart.current = { x: e.clientX, y: e.clientY }
+    setPressingId(id)
+    pressTimer.current = setTimeout(() => {
+      pressTimer.current = null
+      longPressFired.current = true
+      setPressingId(null)
+      onLongPress(id)
+    }, longPressMs)
+  }
+  useEffect(() => cancelPress, [])
 
   const barWidth = visible * TAB_W // fixed width, always sized for `visible` tabs
 
@@ -57,12 +95,19 @@ export default function ScrollTabs({ tabs, active, onChange, onAdd, visible = 7 
     drag.current = { x: e.clientX, scroll: viewportRef.current.scrollLeft, moved: false }
   }
   const onPointerMove = (e) => {
+    // Any real movement (mouse or touch) cancels a pending long-press.
+    if (pressTimer.current && pressStart.current) {
+      const dx = e.clientX - pressStart.current.x
+      const dy = e.clientY - pressStart.current.y
+      if (Math.hypot(dx, dy) > 8) cancelPress()
+    }
     if (!drag.current) return
     const dx = e.clientX - drag.current.x
     if (Math.abs(dx) > 4) drag.current.moved = true
     viewportRef.current.scrollLeft = drag.current.scroll - dx
   }
   const endDrag = () => {
+    cancelPress()
     // If a real drag happened, defer clearing so the trailing click is ignored.
     if (drag.current?.moved) setTimeout(() => (drag.current = null), 0)
     else drag.current = null
@@ -96,25 +141,43 @@ export default function ScrollTabs({ tabs, active, onChange, onAdd, visible = 7 
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
           onPointerLeave={endDrag}
+          onPointerCancel={endDrag}
           className="no-scrollbar flex cursor-grab overflow-x-auto active:cursor-grabbing"
         >
           {tabs.map((t) => {
             const isActive = t.id === active
+            const isDefault = t.id === defaultId
             return (
               <div key={t.id} className="flex-none p-0.5" style={{ width: TAB_W }}>
                 <button
                   type="button"
                   data-active={isActive}
+                  onPointerDown={(e) => startPress(t.id, e)}
+                  onPointerUp={cancelPress}
+                  onPointerLeave={cancelPress}
                   onClick={() => {
                     if (drag.current?.moved) return // ignore click that ends a drag
+                    if (longPressFired.current) {
+                      longPressFired.current = false // long-press handled it
+                      return
+                    }
                     onChange(t.id)
                   }}
                   className={[
-                    'w-full truncate rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors active:scale-[0.97]',
+                    'relative flex w-full items-center justify-center gap-1 overflow-hidden rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors active:scale-[0.97]',
                     isActive ? 'bg-accent/15 text-accent shadow-glow' : 'text-gray-400',
                   ].join(' ')}
                 >
-                  {t.label}
+                  {isDefault && <StarIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#D29922' }} />}
+                  <span className="truncate">{t.label}</span>
+                  {/* Press-and-hold progress; fills over longPressMs, then sets default. */}
+                  <span
+                    className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-accent"
+                    style={{
+                      width: pressingId === t.id ? '100%' : '0%',
+                      transition: pressingId === t.id ? `width ${longPressMs}ms linear` : 'none',
+                    }}
+                  />
                 </button>
               </div>
             )
