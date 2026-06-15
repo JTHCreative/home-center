@@ -3,7 +3,7 @@ import Card, { PageHeader } from '../components/Card.jsx'
 import ScrollTabs from '../components/ScrollTabs.jsx'
 import Sparkline from '../components/Sparkline.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
-import { fetchMetrics, fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
+import { fetchMetrics, fetchQuotes, hasFinnhubKey, subscribeFinnhubStatus } from '../lib/finnhub.js'
 import { useLocalState } from '../lib/storage.js'
 import { useDragScroll } from '../lib/useDragScroll.js'
 import { BellIcon, ChevronDown, ChevronUp, PlusIcon, TrashIcon } from '../components/Icons.jsx'
@@ -141,6 +141,9 @@ export default function Stocks() {
   const [quotes, setQuotes] = useState({})
   const [loading, setLoading] = useState(true)
   const [updatedAt, setUpdatedAt] = useState(null)
+  const [connected, setConnected] = useState(true) // live Finnhub reachability
+
+  useEffect(() => subscribeFinnhubStatus(setConnected), [])
 
   const [listDraft, setListDraft] = useState(null) // { id?, name }
   const [symbolDraft, setSymbolDraft] = useState(null) // { symbol, name, qty, original? }
@@ -533,9 +536,17 @@ export default function Stocks() {
         </Card>
       )}
 
-      <div className="mt-3 text-right text-xs text-gray-600">
-        {!hasFinnhubKey && 'Demo data · '}
-        {loading ? 'Updating…' : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : ''}
+      <div className="mt-3 flex items-center justify-end gap-2 text-xs text-gray-600">
+        {hasFinnhubKey && (
+          <span
+            className={`h-2 w-2 flex-shrink-0 rounded-full ${connected ? 'bg-gain' : 'bg-loss'}`}
+            title={connected ? 'Connected to Finnhub' : 'Finnhub unavailable or rate-limited'}
+          />
+        )}
+        <span>
+          {!hasFinnhubKey && 'Demo data · '}
+          {loading ? 'Updating…' : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : ''}
+        </span>
       </div>
 
       {/* New / rename watchlist */}

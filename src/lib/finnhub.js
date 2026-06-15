@@ -7,32 +7,89 @@ const API_KEY = import.meta.env.VITE_FINNHUB_API_KEY || ''
 
 export const hasFinnhubKey = Boolean(API_KEY)
 
-async function get(path, params = {}) {
+// --- Connection status -------------------------------------------------------
+// Tracks whether the most recent tracked (quote) request reached Finnhub. The
+// Stocks page subscribes to drive a green/red indicator.
+let statusOk = true
+const statusSubs = new Set()
+export function subscribeFinnhubStatus(fn) {
+  statusSubs.add(fn)
+  fn(statusOk)
+  return () => statusSubs.delete(fn)
+}
+function reportStatus(ok) {
+  statusOk = ok
+  for (const fn of statusSubs) fn(ok)
+}
+
+// --- Rate limiter ------------------------------------------------------------
+// Finnhub's free tier allows ~60 calls/minute (and 30/second). With dozens of
+// symbols, firing every quote + metric at once trips the limit and most return
+// 429, so only some tickers load. We gate every request through a shared queue
+// that (a) stays under the per-minute budget and (b) spaces calls out so we
+// never burst past the per-second cap. Quotes get priority over metrics so the
+// visible price data fills in first.
+const MAX_PER_MIN = 55 // leave headroom under the 60/min free-tier cap
+const MIN_GAP_MS = 70 // ~14 req/s ceiling, well under the 30/s cap
+
+const hits = [] // timestamps of granted requests in the last minute
+const waiters = [] // { priority, seq, resolve }
+let seq = 0
+let lastGrant = 0
+let pumpTimer = null
+
+function pump() {
+  pumpTimer = null
+  const now = Date.now()
+  while (hits.length && now - hits[0] >= 60_000) hits.shift()
+
+  if (!waiters.length) return
+  const sinceLast = now - lastGrant
+  if (hits.length < MAX_PER_MIN && sinceLast >= MIN_GAP_MS) {
+    // Serve the highest priority (lowest number), oldest-first.
+    waiters.sort((a, b) => a.priority - b.priority || a.seq - b.seq)
+    const w = waiters.shift()
+    hits.push(now)
+    lastGrant = now
+    w.resolve()
+  }
+
+  if (waiters.length) {
+    const waitForGap = Math.max(0, MIN_GAP_MS - (Date.now() - lastGrant))
+    const waitForWindow = hits.length >= MAX_PER_MIN ? 60_000 - (Date.now() - hits[0]) + 20 : 0
+    const delay = Math.max(20, waitForGap, waitForWindow)
+    pumpTimer = setTimeout(pump, delay)
+  }
+}
+
+function acquire(priority) {
+  return new Promise((resolve) => {
+    waiters.push({ priority, seq: seq++, resolve })
+    if (!pumpTimer) pump()
+  })
+}
+
+async function get(path, params = {}, { priority = 1, track = false } = {}) {
   if (!API_KEY) throw new Error('Missing VITE_FINNHUB_API_KEY')
+  await acquire(priority)
   const url = new URL(BASE + path)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
   url.searchParams.set('token', API_KEY)
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Finnhub ${res.status}`)
+  let res
+  try {
+    res = await fetch(url)
+  } catch (err) {
+    if (track) reportStatus(false) // network/DNS failure — no connection
+    throw err
+  }
+  if (!res.ok) {
+    // 429 = rate limited, 5xx = Finnhub down — both mean "not connected".
+    if (track && (res.status === 429 || res.status >= 500)) reportStatus(false)
+    throw new Error(`Finnhub ${res.status}`)
+  }
+  if (track) reportStatus(true)
   return res.json()
 }
-
-// Run async work over items with limited concurrency, so we don't fire dozens of
-// requests at once and trip Finnhub's rate limit (free tier ~60/min).
-async function mapLimit(items, limit, fn) {
-  const results = new Array(items.length)
-  let i = 0
-  const worker = async () => {
-    while (i < items.length) {
-      const idx = i++
-      results[idx] = await fn(items[idx], idx)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
-}
-
-const CONCURRENCY = 5
 
 /**
  * Quote for a single symbol.
@@ -41,7 +98,7 @@ const CONCURRENCY = 5
  * For crypto, pass a Finnhub crypto symbol like "BINANCE:BTCUSDT".
  */
 export async function fetchQuote(symbol) {
-  const q = await get('/quote', { symbol })
+  const q = await get('/quote', { symbol }, { priority: 0, track: true })
   // Finnhub returns 0/null for unknown symbols; treat that as no data.
   if (!q || !q.c) return null
   return {
@@ -54,22 +111,25 @@ export async function fetchQuote(symbol) {
 
 /** Fetch quotes for many symbols (rate-limited). Returns a map keyed by symbol. */
 export async function fetchQuotes(symbols) {
-  const entries = await mapLimit(symbols, CONCURRENCY, async (symbol) => {
-    try {
-      return [symbol, await fetchQuote(symbol)]
-    } catch {
-      return [symbol, null]
-    }
-  })
+  const entries = await Promise.all(
+    symbols.map(async (symbol) => {
+      try {
+        return [symbol, await fetchQuote(symbol)]
+      } catch {
+        return [symbol, null]
+      }
+    }),
+  )
   return Object.fromEntries(entries)
 }
 
 /**
- * Basic financials for a symbol — used for 52-week high and P/E.
- * Finnhub /stock/metric returns a `metric` object with many keys.
+ * Basic financials for a symbol — used for 52-week high and P/E. These are
+ * lower priority than quotes and run best-effort (the basic-financials endpoint
+ * is restricted on some free keys); failures never flip the connection status.
  */
 export async function fetchMetric(symbol) {
-  const data = await get('/stock/metric', { symbol, metric: 'all' })
+  const data = await get('/stock/metric', { symbol, metric: 'all' }, { priority: 1, track: false })
   const m = data.metric || {}
   return {
     week52High: m['52WeekHigh'] ?? null,
@@ -79,12 +139,14 @@ export async function fetchMetric(symbol) {
 
 /** Fetch metrics for many symbols (rate-limited). Returns a map keyed by symbol. */
 export async function fetchMetrics(symbols) {
-  const entries = await mapLimit(symbols, CONCURRENCY, async (symbol) => {
-    try {
-      return [symbol, await fetchMetric(symbol)]
-    } catch {
-      return [symbol, null]
-    }
-  })
+  const entries = await Promise.all(
+    symbols.map(async (symbol) => {
+      try {
+        return [symbol, await fetchMetric(symbol)]
+      } catch {
+        return [symbol, null]
+      }
+    }),
+  )
   return Object.fromEntries(entries)
 }
