@@ -13,9 +13,9 @@ import {
 const TEXT_TYPES = ['text', 'search', 'email', 'url', 'tel', 'password']
 
 // When true, the keyboard only appears for touch/pen input (so a mouse +
-// physical keyboard isn't interrupted). Temporarily false to allow testing the
+// physical keyboard isn't interrupted). Set false to test the on-screen
 // keyboard with a mouse on a non-touch machine.
-const TOUCH_ONLY = false
+const TOUCH_ONLY = true
 
 // Which keyboard (if any) a focused element should get.
 function classify(el) {
