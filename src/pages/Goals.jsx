@@ -25,6 +25,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from '../components/Icons.jsx'
+import { GOALS_SEED as SEED } from '../lib/seeds.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
 const COLORS = ['#39D353', '#58A6FF', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
@@ -56,12 +57,6 @@ const sundayOf = (d) => {
   c.setDate(c.getDate() - c.getDay()) // week starts Sunday
   return c
 }
-
-const SEED = [
-  { id: crypto.randomUUID(), title: "Justin's Goals", color: '#39D353', items: [] },
-  { id: crypto.randomUUID(), title: "Kitty's Goals", color: '#F0883E', items: [] },
-  { id: crypto.randomUUID(), title: 'Weekly Goals', color: '#58A6FF', items: [] },
-]
 
 const EMPTY_WEEK = { items: {}, children: {} }
 

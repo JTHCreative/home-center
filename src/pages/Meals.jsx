@@ -33,6 +33,7 @@ import {
   SunriseIcon,
   TrashIcon,
 } from '../components/Icons.jsx'
+import { SEED_MEALS } from '../lib/seeds.js'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
@@ -107,24 +108,6 @@ function migratePlan(stored) {
   }
   return stored
 }
-
-// A meal is either a custom 'recipe' (with ingredients) or 'takeout' (purchased).
-const SEED_MEALS = [
-  {
-    id: 'r-oats',
-    type: 'recipe',
-    name: 'Overnight Oats',
-    ingredients: ['Rolled oats', 'Milk', 'Chia seeds', 'Honey', 'Blueberries'],
-    instructions: 'Combine oats, milk, and chia. Refrigerate overnight. Top with honey and blueberries.',
-  },
-  {
-    id: 'r-tacos',
-    type: 'recipe',
-    name: 'Chicken Tacos',
-    ingredients: ['Chicken breast', 'Tortillas', 'Lime', 'Onion', 'Cilantro', 'Avocado'],
-    instructions: 'Season and grill chicken. Warm tortillas. Assemble with onion, cilantro, lime, and avocado.',
-  },
-]
 
 const mealType = (m) => m.type || 'recipe' // older saved data has no type
 

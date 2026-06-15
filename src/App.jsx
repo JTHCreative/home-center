@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Sidebar from './components/Sidebar.jsx'
 import VirtualKeyboard from './components/VirtualKeyboard.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import Dashboard from './pages/Dashboard.jsx'
 import SmartHome from './pages/SmartHome.jsx'
 import Stocks from './pages/Stocks.jsx'
 import Calendar from './pages/Calendar.jsx'
@@ -24,14 +25,15 @@ export default function App() {
             keying by path clears it when the user navigates elsewhere. */}
         <ErrorBoundary resetKey={location.pathname}>
           <Routes>
-            <Route path="/" element={<Navigate to="/smart-home" replace />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/smart-home" element={<SmartHome />} />
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/meals" element={<Meals />} />
             <Route path="/goals" element={<Goals />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate to="/smart-home" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </ErrorBoundary>
       </main>

@@ -3,37 +3,11 @@ import Card, { PageHeader } from '../components/Card.jsx'
 import Toggle from '../components/Toggle.jsx'
 import Slider from '../components/Slider.jsx'
 import { PowerIcon, VolumeIcon } from '../components/Icons.jsx'
+import { DEFAULT_SMART_HOME as DEFAULT_STATE } from '../lib/seeds.js'
 
-// --- Mock device model --------------------------------------------------------
-// Persisted in localStorage so toggle/brightness state survives reboots.
-// To wire up Home Assistant later, replace the body of the `commit*` helpers
-// below with REST/WebSocket calls (e.g. POST /api/services/light/turn_on) and
-// keep the optimistic local update for instant touch feedback.
-const DEFAULT_STATE = {
-  lights: {
-    'Living Room': [
-      { id: 'lr-ceiling', name: 'Ceiling', on: true, brightness: 80 },
-      { id: 'lr-lamp', name: 'Floor Lamp', on: false, brightness: 40 },
-    ],
-    Kitchen: [
-      { id: 'kt-main', name: 'Main', on: true, brightness: 100 },
-      { id: 'kt-under', name: 'Under Cabinet', on: false, brightness: 60 },
-    ],
-    Bedroom: [
-      { id: 'bd-ceiling', name: 'Ceiling', on: false, brightness: 50 },
-      { id: 'bd-night', name: 'Nightstand', on: true, brightness: 25 },
-    ],
-  },
-  media: { power: true, volume: 35, input: 'HDMI 1' },
-  plugs: [
-    { id: 'plug-coffee', name: 'Coffee Maker', on: false },
-    { id: 'plug-fan', name: 'Bedroom Fan', on: true },
-    { id: 'plug-3d', name: '3D Printer', on: false },
-    { id: 'plug-xmas', name: 'Porch Lights', on: true },
-    { id: 'plug-desk', name: 'Desk Setup', on: true },
-    { id: 'plug-charger', name: 'Charging Dock', on: false },
-  ],
-}
+// Device model is persisted (and shared) via useLocalState so toggle/brightness
+// state survives reboots. The seed lives in lib/seeds.js so the Home dashboard
+// can render the same controls from one source of truth.
 
 const INPUTS = ['HDMI 1', 'HDMI 2', 'TV', 'Apple TV', 'Cast']
 

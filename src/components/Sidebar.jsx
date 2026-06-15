@@ -5,11 +5,13 @@ import {
   ChartIcon,
   GearIcon,
   GoalIcon,
+  GridIcon,
   HomeIcon,
   MealIcon,
 } from './Icons.jsx'
 
 const LINKS = [
+  { to: '/dashboard', label: 'Home', Icon: GridIcon },
   { to: '/smart-home', label: 'Smart Home', Icon: HomeIcon },
   { to: '/stocks', label: 'Stocks & Crypto', Icon: ChartIcon },
   { to: '/calendar', label: 'Calendar', Icon: CalendarIcon },
