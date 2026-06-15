@@ -616,10 +616,20 @@ export default function Meals() {
                           'flex h-full min-h-[88px] w-full flex-col items-center gap-1.5 overflow-hidden rounded-lg px-2 py-2 text-center text-base transition-opacity active:scale-[0.98]',
                           // Filled cells anchor to the top so the meal name is never
                           // pushed out of view by the member badges; empty cells center the +.
-                          m ? 'justify-start font-semibold shadow-glow' : 'justify-center bg-white/5 text-gray-600',
+                          m ? 'justify-start font-semibold' : 'justify-center bg-white/5 text-gray-600',
                           faded ? 'opacity-25' : '',
                         ].join(' ')}
-                        style={m ? { backgroundColor: `${accent}26`, color: accent, border: `1.5px solid ${accent}` } : undefined}
+                        // Glow tracks the slot/takeout color instead of the fixed blue accent.
+                        style={
+                          m
+                            ? {
+                                backgroundColor: `${accent}26`,
+                                color: accent,
+                                border: `1.5px solid ${accent}`,
+                                boxShadow: `0 0 0 1px ${accent}66, 0 0 16px ${accent}40`,
+                              }
+                            : undefined
+                        }
                       >
                         {m ? (
                           <>
