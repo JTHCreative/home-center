@@ -225,8 +225,11 @@ export default function Stocks() {
         const next = { ...prev }
         for (const s of missing) {
           const m = metricsRef.current[s]
-          if (!m) continue
-          const base = prev[s] || {}
+          const base = prev[s]
+          // Only enrich an existing quote — never synthesize one from metrics
+          // alone, or we'd create a partial object (no price/changePercent)
+          // that crashes the table if it renders before the price load lands.
+          if (!m || !base) continue
           next[s] = {
             ...base,
             week52High: m.week52High ?? base.week52High ?? null,
@@ -282,10 +285,10 @@ export default function Stocks() {
   let hasPositions = false
   for (const it of items) {
     const q = quotes[it.symbol]
-    if (!q || !it.qty) continue
+    if (!q || q.price == null || !it.qty) continue
     hasPositions = true
     total += q.price * it.qty
-    dayPL += q.change * it.qty
+    dayPL += (q.change ?? 0) * it.qty
   }
   const dayPct = total - dayPL !== 0 ? (dayPL / (total - dayPL)) * 100 : 0
   const up = dayPL >= 0
@@ -440,7 +443,7 @@ export default function Stocks() {
             <tbody>
               {rows.map((it) => {
                 const q = quotes[it.symbol]
-                const hUp = q ? q.changePercent >= 0 : true
+                const hUp = q?.changePercent != null ? q.changePercent >= 0 : true
                 const chg = hUp ? 'text-gain' : 'text-loss'
                 return (
                   <tr key={it.symbol} className="border-t border-border">
@@ -457,14 +460,14 @@ export default function Stocks() {
                       </button>
                     </td>
                     <td className="px-3 py-1">
-                      {q && <Sparkline data={seriesFromQuote(it.symbol, q)} up={hUp} width={84} height={26} />}
+                      {q?.price != null && <Sparkline data={seriesFromQuote(it.symbol, q)} up={hUp} width={84} height={26} />}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-white">{q ? money(q.price) : '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono text-white">{q?.price != null ? money(q.price) : '—'}</td>
                     <td className={`px-3 py-2 text-right font-mono ${chg}`}>
-                      {q ? `${hUp ? '+' : '−'}${money(Math.abs(q.change))}` : '—'}
+                      {q?.change != null ? `${hUp ? '+' : '−'}${money(Math.abs(q.change))}` : '—'}
                     </td>
                     <td className={`px-3 py-2 text-right font-mono font-bold ${chg}`}>
-                      {q ? `${hUp ? '+' : ''}${q.changePercent.toFixed(2)}%` : '—'}
+                      {q?.changePercent != null ? `${hUp ? '+' : ''}${q.changePercent.toFixed(2)}%` : '—'}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-gray-300">
                       {q?.week52High != null ? money(q.week52High) : '—'}
