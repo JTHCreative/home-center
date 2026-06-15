@@ -1,4 +1,20 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCorners,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Tabs from '../components/Tabs.jsx'
@@ -9,6 +25,7 @@ import {
   ChevronRight,
   CloseIcon,
   FilterIcon,
+  GripIcon,
   MoonIcon,
   PencilIcon,
   PlusIcon,
@@ -178,6 +195,11 @@ export default function Meals() {
   const [plans, setPlans] = useLocalState('meals-plan', {}, migratePlan)
   const [checkedByWeek, setCheckedByWeek] = useLocalState('meals-grocery-checked', {})
   const [members, setMembers] = useLocalState('meals-members', SEED_MEMBERS)
+  // Grocery drag-and-drop state (global, keyed by lowercased ingredient name so
+  // it survives the weekly auto-rebuild): category overrides + custom order.
+  const [groceryCat, setGroceryCat] = useLocalState('meals-grocery-cat', {}) // { name: catId }
+  const [groceryOrder, setGroceryOrder] = useLocalState('meals-grocery-order', []) // [name, …]
+  const [grocerySort, setGrocerySort] = useLocalState('meals-grocery-sort', 'custom') // custom|az|za
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
 
   const [mealDraft, setMealDraft] = useState(null)
@@ -225,12 +247,53 @@ export default function Meals() {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [plan, mealById])
 
-  // Group the grocery list into category columns (meats, veggies, …).
-  const groceryByCat = useMemo(() => {
-    const groups = {}
-    for (const item of grocery) (groups[categorize(item.name)] ||= []).push(item)
-    return groups
-  }, [grocery])
+  // Group the grocery list into category columns, honoring user category
+  // overrides (drag between columns) and the chosen sort (custom / A–Z / Z–A).
+  const groceryBoard = useMemo(() => {
+    const cols = Object.fromEntries(GROCERY_CATEGORIES.map((c) => [c.id, []]))
+    for (const item of grocery) {
+      const key = item.name.toLowerCase()
+      const cat = groceryCat[key] || categorize(item.name)
+      ;(cols[cat] || cols.other).push({ ...item, key })
+    }
+    const orderIndex = new Map(groceryOrder.map((n, i) => [n, i]))
+    const byName = (a, b) => a.name.localeCompare(b.name)
+    for (const id of Object.keys(cols)) {
+      if (grocerySort === 'az') cols[id].sort(byName)
+      else if (grocerySort === 'za') cols[id].sort((a, b) => byName(b, a))
+      else
+        cols[id].sort((a, b) => {
+          const ia = orderIndex.has(a.key) ? orderIndex.get(a.key) : Infinity
+          const ib = orderIndex.has(b.key) ? orderIndex.get(b.key) : Infinity
+          return ia - ib || byName(a, b)
+        })
+    }
+    return cols
+  }, [grocery, groceryCat, groceryOrder, grocerySort])
+
+  // Persist the result of a drag: refresh category overrides for the moved
+  // items, and (only in custom mode) record the new ordering.
+  const commitGroceryBoard = (cols) => {
+    setGroceryCat((prev) => {
+      const next = { ...prev }
+      for (const cat of GROCERY_CATEGORIES) {
+        for (const name of cols[cat.id] || []) {
+          const key = name.toLowerCase()
+          if (categorize(name) === cat.id) delete next[key]
+          else next[key] = cat.id
+        }
+      }
+      return next
+    })
+    if (grocerySort === 'custom') {
+      setGroceryOrder((prev) => {
+        const order = []
+        for (const cat of GROCERY_CATEGORIES) for (const name of cols[cat.id] || []) order.push(name.toLowerCase())
+        const seen = new Set(order)
+        return [...order, ...prev.filter((n) => !seen.has(n))]
+      })
+    }
+  }
 
   // --- Slot assignment (meal + providers + guests) --------------------------
   const openSlot = (day, slot) => {
@@ -770,52 +833,35 @@ export default function Meals() {
       {subpage === 'groceries' && (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {weekNav}
-          <h2 className="mb-3 text-lg font-semibold text-gray-300">
-            Grocery List <span className="font-mono text-sm text-gray-500">({grocery.length})</span>
-          </h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-gray-300">
+              Grocery List <span className="font-mono text-sm text-gray-500">({grocery.length})</span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Sort</span>
+              <Tabs
+                tabs={[
+                  { id: 'custom', label: 'Custom' },
+                  { id: 'az', label: 'A–Z' },
+                  { id: 'za', label: 'Z–A' },
+                ]}
+                active={grocerySort}
+                onChange={setGrocerySort}
+              />
+            </div>
+          </div>
           {grocery.length === 0 ? (
             <Card>
               <p className="text-sm text-gray-500">Plan some recipe meals to build your list automatically.</p>
             </Card>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {GROCERY_CATEGORIES.filter((cat) => groceryByCat[cat.id]?.length).map((cat) => (
-                <Card key={cat.id} style={{ borderColor: `${cat.color}66` }}>
-                  <div className="mb-2 flex items-center gap-2 border-b border-border pb-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                    <h3 className="flex-1 font-bold" style={{ color: cat.color }}>{cat.label}</h3>
-                    <span className="font-mono text-xs text-gray-500">{groceryByCat[cat.id].length}</span>
-                  </div>
-                  <ul className="space-y-1">
-                    {groceryByCat[cat.id].map((item) => {
-                      const key = item.name.toLowerCase()
-                      const isChecked = !!checked[key]
-                      return (
-                        <li key={key}>
-                          <button
-                            type="button"
-                            onClick={() => toggleChecked(key)}
-                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left active:bg-white/5"
-                          >
-                            <span
-                              className={[
-                                'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2',
-                                isChecked ? 'border-gain bg-gain text-bg' : 'border-border',
-                              ].join(' ')}
-                            >
-                              {isChecked && <CheckIcon className="h-4 w-4" />}
-                            </span>
-                            <span className={isChecked ? 'text-gray-500 line-through' : 'text-gray-200'}>
-                              {item.label}
-                            </span>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </Card>
-              ))}
-            </div>
+            <GroceryBoard
+              categories={GROCERY_CATEGORIES}
+              board={groceryBoard}
+              checked={checked}
+              onToggleChecked={toggleChecked}
+              onCommit={commitGroceryBoard}
+            />
           )}
         </div>
       )}
@@ -1062,6 +1108,194 @@ function MemberMealsModal({ member, meals, onToggle, onClose }) {
         </div>
       )}
     </Modal>
+  )
+}
+
+// Drag-and-drop grocery board: items can be reordered within a category or
+// dragged into another one. A blue line shows where a dragged item will land.
+function GroceryBoard({ categories, board, checked, onToggleChecked, onCommit }) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const [cols, setCols] = useState(board)
+  const [activeId, setActiveId] = useState(null)
+  const [overId, setOverId] = useState(null)
+
+  // Re-sync from the derived board whenever it changes — but not mid-drag, so a
+  // live cross-column move isn't clobbered by a re-render.
+  useEffect(() => {
+    if (!activeId) setCols(board)
+  }, [board, activeId])
+
+  const itemByKey = useMemo(() => {
+    const map = {}
+    for (const list of Object.values(cols)) for (const it of list) map[it.key] = it
+    return map
+  }, [cols])
+
+  const findColumn = (id) => {
+    if (cols[id]) return id // a column id
+    return Object.keys(cols).find((c) => cols[c].some((it) => it.key === id))
+  }
+
+  const onDragStart = ({ active }) => {
+    setActiveId(active.id)
+    setOverId(active.id)
+  }
+
+  const onDragOver = ({ active, over }) => {
+    setOverId(over?.id ?? null)
+    if (!over) return
+    const from = findColumn(active.id)
+    const to = findColumn(over.id)
+    if (!from || !to || from === to) return
+    setCols((prev) => {
+      const item = prev[from].find((it) => it.key === active.id)
+      if (!item) return prev
+      const overItems = prev[to]
+      let idx = overItems.findIndex((it) => it.key === over.id)
+      if (idx === -1) idx = overItems.length
+      return {
+        ...prev,
+        [from]: prev[from].filter((it) => it.key !== active.id),
+        [to]: [...overItems.slice(0, idx), item, ...overItems.slice(idx)],
+      }
+    })
+  }
+
+  const onDragEnd = ({ active, over }) => {
+    let next = cols
+    const from = findColumn(active.id)
+    const to = over ? findColumn(over.id) : from
+    if (from && to && from === to) {
+      const list = cols[from]
+      const oldIdx = list.findIndex((it) => it.key === active.id)
+      const newIdx = list.findIndex((it) => it.key === over.id)
+      if (oldIdx !== -1 && newIdx !== -1 && oldIdx !== newIdx) {
+        next = { ...cols, [from]: arrayMove(list, oldIdx, newIdx) }
+      }
+    }
+    setCols(next)
+    setActiveId(null)
+    setOverId(null)
+    onCommit(Object.fromEntries(Object.entries(next).map(([c, list]) => [c, list.map((it) => it.name)])))
+  }
+
+  // While dragging, also show empty categories as drop targets.
+  const visibleCats = categories.filter((c) => cols[c.id]?.length || activeId)
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+    >
+      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {visibleCats.map((cat) => (
+          <GroceryColumn key={cat.id} cat={cat} items={cols[cat.id] || []} overId={overId}>
+            {(cols[cat.id] || []).map((item) => (
+              <GroceryItem
+                key={item.key}
+                item={item}
+                isChecked={!!checked[item.key]}
+                onToggle={() => onToggleChecked(item.key)}
+                showLine={overId === item.key && activeId !== item.key}
+              />
+            ))}
+          </GroceryColumn>
+        ))}
+      </div>
+      <DragOverlay>
+        {activeId && itemByKey[activeId] ? (
+          <ItemRow item={itemByKey[activeId]} isChecked={!!checked[activeId]} dragging />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  )
+}
+
+function GroceryColumn({ cat, items, overId, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id: cat.id })
+  const empty = items.length === 0
+  // Highlight when hovering the column itself or any item inside it.
+  const active = isOver || items.some((it) => it.key === overId)
+  return (
+    <Card style={{ borderColor: active ? cat.color : `${cat.color}66` }}>
+      <div className="mb-2 flex items-center gap-2 border-b border-border pb-2">
+        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+        <h3 className="flex-1 font-bold" style={{ color: cat.color }}>{cat.label}</h3>
+        <span className="font-mono text-xs text-gray-500">{items.length}</span>
+      </div>
+      <SortableContext items={items.map((it) => it.key)} strategy={verticalListSortingStrategy}>
+        <ul ref={setNodeRef} className="min-h-[2.5rem] space-y-1">
+          {empty ? (
+            <li
+              className={[
+                'rounded-lg border border-dashed py-3 text-center text-xs',
+                isOver ? 'border-accent text-accent' : 'border-border text-gray-600',
+              ].join(' ')}
+            >
+              Drop here
+            </li>
+          ) : (
+            children
+          )}
+        </ul>
+      </SortableContext>
+    </Card>
+  )
+}
+
+function GroceryItem({ item, isChecked, onToggle, showLine }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.key })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  }
+  return (
+    <li ref={setNodeRef} style={style}>
+      {/* Drop indicator line. */}
+      <div className={['h-0.5 rounded-full', showLine ? 'bg-accent' : 'bg-transparent'].join(' ')} />
+      <ItemRow item={item} isChecked={isChecked} onToggle={onToggle} dragHandleProps={{ ...attributes, ...listeners }} />
+    </li>
+  )
+}
+
+// Shared row markup, reused by the live list and the drag overlay.
+function ItemRow({ item, isChecked, onToggle, dragHandleProps, dragging }) {
+  return (
+    <div
+      className={[
+        'flex items-center gap-2 rounded-lg px-1 py-1',
+        dragging ? 'bg-surface shadow-glow' : '',
+      ].join(' ')}
+    >
+      <button
+        type="button"
+        {...dragHandleProps}
+        aria-label={`Reorder ${item.name}`}
+        style={{ touchAction: 'none' }}
+        className="flex-shrink-0 cursor-grab rounded-md p-1 text-gray-600 active:cursor-grabbing active:text-gray-300"
+      >
+        <GripIcon className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex flex-1 items-center gap-3 rounded-lg px-1 py-1 text-left active:bg-white/5"
+      >
+        <span
+          className={[
+            'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2',
+            isChecked ? 'border-gain bg-gain text-bg' : 'border-border',
+          ].join(' ')}
+        >
+          {isChecked && <CheckIcon className="h-4 w-4" />}
+        </span>
+        <span className={isChecked ? 'text-gray-500 line-through' : 'text-gray-200'}>{item.label}</span>
+      </button>
+    </div>
   )
 }
 
