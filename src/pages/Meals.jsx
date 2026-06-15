@@ -125,6 +125,41 @@ const emptyMeal = () => ({
 const ingName = (ing) => (typeof ing === 'string' ? ing : ing?.name || '')
 const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 
+// Grocery list sections, shown as separate columns. 'other' catches anything
+// that doesn't match (sauces, grains, seasonings, etc.) so nothing is dropped.
+const GROCERY_CATEGORIES = [
+  { id: 'produce', label: 'Fruits & Veggies', color: '#39D353' },
+  { id: 'meatdairy', label: 'Meats & Dairy', color: '#F85149' },
+  { id: 'other', label: 'Other', color: '#8B949E' },
+]
+
+// Keyword → category. Produce is checked first so "eggplant" / "butternut
+// squash" land in produce before "egg" / "butter" can claim them for meat & dairy.
+const CAT_KEYWORDS = {
+  produce: ['onion', 'garlic', 'tomato', 'lettuce', 'spinach', 'kale', 'carrot', 'potato',
+    'pepper', 'bell', 'broccoli', 'cucumber', 'celery', 'mushroom', 'zucchini', 'avocado',
+    'cilantro', 'parsley', 'basil', 'corn', 'beans', 'peas', 'cabbage', 'ginger', 'scallion',
+    'leek', 'squash', 'eggplant', 'asparagus', 'jalapeno', 'radish', 'beet', 'chard', 'herb',
+    'apple', 'banana', 'berry', 'berries', 'blueberry', 'strawberry', 'raspberry',
+    'blackberry', 'grape', 'orange', 'lemon', 'lime', 'mango', 'peach', 'pear', 'pineapple',
+    'melon', 'watermelon', 'cantaloupe', 'cherry', 'kiwi', 'plum', 'apricot', 'fig',
+    'pomegranate', 'coconut', 'fruit', 'veg'],
+  meatdairy: ['chicken', 'beef', 'pork', 'steak', 'bacon', 'sausage', 'turkey', 'ham', 'lamb',
+    'fish', 'salmon', 'tuna', 'shrimp', 'prawn', 'crab', 'mince', 'ground beef',
+    'ground turkey', 'ground pork', 'ribs', 'chorizo', 'meat', 'filet', 'thigh', 'breast',
+    'wing', 'brisket', 'cod', 'tilapia',
+    'milk', 'cheese', 'butter', 'yogurt', 'yoghurt', 'cream', 'egg', 'mozzarella', 'cheddar',
+    'parmesan', 'feta', 'ricotta', 'ghee', 'dairy'],
+}
+const CAT_ORDER = ['produce', 'meatdairy']
+function categorize(name) {
+  const n = name.toLowerCase()
+  for (const cat of CAT_ORDER) {
+    if (CAT_KEYWORDS[cat].some((k) => n.includes(k))) return cat
+  }
+  return 'other'
+}
+
 export default function Meals() {
   const [meals, setMeals] = useLocalState('meals-recipes', SEED_MEALS)
   const [plans, setPlans] = useLocalState('meals-plan', {}, migratePlan)
@@ -171,6 +206,13 @@ export default function Meals() {
       .map((e) => ({ name: e.name, label: e.qtys.length ? `${e.qtys.join(' + ')} ${e.name}` : e.name }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [plan, mealById])
+
+  // Group the grocery list into category columns (meats, veggies, …).
+  const groceryByCat = useMemo(() => {
+    const groups = {}
+    for (const item of grocery) (groups[categorize(item.name)] ||= []).push(item)
+    return groups
+  }, [grocery])
 
   // --- Slot assignment (meal + providers + guests) --------------------------
   const openSlot = (day, slot) => {
@@ -373,24 +415,24 @@ export default function Meals() {
   )
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto flex h-full max-w-6xl flex-col">
       <PageHeader title="Meals">
         <Tabs tabs={SUBPAGES} active={subpage} onChange={setSubpage} />
       </PageHeader>
 
-      {/* ---- Schedule ---- */}
+      {/* ---- Schedule (fills the available height) ---- */}
       {subpage === 'schedule' && (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           {weekNav}
-          <Card className="overflow-x-auto p-0">
-        <table className="w-full border-collapse">
+          <Card className="min-h-0 flex-1 overflow-auto p-0">
+        <table className="h-full w-full border-collapse">
           <thead>
             <tr>
-              <th className="w-24 border-b border-r border-border p-3 text-left text-xs font-semibold text-gray-500" />
+              <th className="w-28 border-b border-r border-border p-3 text-left text-sm font-semibold text-gray-500" />
               {DAYS.map((d, i) => (
-                <th key={d} className="border-b border-r border-border p-3 text-xs font-semibold text-gray-400">
+                <th key={d} className="border-b border-r border-border p-3 text-base font-semibold text-gray-300">
                   <div>{d}</div>
-                  <div className="font-mono text-[10px] font-normal text-gray-600">
+                  <div className="font-mono text-xs font-normal text-gray-600">
                     {addDays(weekStart, i).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                   </div>
                 </th>
@@ -405,10 +447,10 @@ export default function Meals() {
               <tr key={slot} style={{ backgroundColor: `${theme.color}0D` }}>
                 <td
                   className="border-b border-r border-border p-3"
-                  style={{ borderLeft: `3px solid ${theme.color}` }}
+                  style={{ borderLeft: `4px solid ${theme.color}` }}
                 >
-                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: theme.color }}>
-                    <SlotIcon className="h-5 w-5" />
+                  <div className="flex items-center gap-2 text-lg font-semibold" style={{ color: theme.color }}>
+                    <SlotIcon className="h-7 w-7" />
                     <span>{slot}</span>
                   </div>
                 </td>
@@ -420,20 +462,20 @@ export default function Meals() {
                   const providers = slotProviders(val)
                   const guests = slotGuests(val)
                   return (
-                    <td key={day} className="border-b border-r border-border p-1.5 align-top">
+                    <td key={day} className="h-full border-b border-r border-border p-1.5 align-top">
                       <button
                         type="button"
                         onClick={() => openSlot(day, slot)}
                         className={[
-                          'flex min-h-[56px] w-full flex-col items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center text-xs active:scale-[0.98]',
-                          m ? 'font-medium shadow-glow' : 'bg-white/5 text-gray-600',
+                          'flex h-full min-h-[88px] w-full flex-col items-center justify-center gap-2 rounded-lg px-2 py-3 text-center text-base active:scale-[0.98]',
+                          m ? 'font-semibold shadow-glow' : 'bg-white/5 text-gray-600',
                         ].join(' ')}
                         style={m ? { backgroundColor: `${accent}26`, color: accent, border: `1.5px solid ${accent}` } : undefined}
                       >
                         {m ? (
                           <>
-                            <span className="line-clamp-2">{m.name}</span>
-                            <span className="text-[9px] uppercase opacity-70">
+                            <span className="line-clamp-2 leading-tight">{m.name}</span>
+                            <span className="text-[11px] uppercase opacity-70">
                               {takeout ? 'Takeout' : 'Homecooked'}
                             </span>
                             {(providers.length > 0 || guests.length > 0) && (
@@ -445,7 +487,7 @@ export default function Meals() {
                             )}
                           </>
                         ) : (
-                          <PlusIcon className="h-5 w-5" />
+                          <PlusIcon className="h-7 w-7" />
                         )}
                       </button>
                     </td>
@@ -457,12 +499,12 @@ export default function Meals() {
             </tbody>
           </table>
           </Card>
-        </>
+        </div>
       )}
 
       {/* ---- Household: one card per member, each with their own meals ---- */}
       {subpage === 'household' && (
-        <>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mb-6 flex items-center justify-between">
             <p className="text-sm text-gray-500">
               Assign the meals & takeout each person likes to make or order.
@@ -542,12 +584,12 @@ export default function Meals() {
               })}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* ---- Meals library: Recipe / Takeout tabs ---- */}
       {subpage === 'meals' && (
-        <div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold text-gray-300">Meals</h2>
@@ -634,45 +676,56 @@ export default function Meals() {
 
       {/* ---- Groceries (for the selected week) ---- */}
       {subpage === 'groceries' && (
-        <>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {weekNav}
           <h2 className="mb-3 text-lg font-semibold text-gray-300">
             Grocery List <span className="font-mono text-sm text-gray-500">({grocery.length})</span>
           </h2>
-          <Card>
-            {grocery.length === 0 ? (
+          {grocery.length === 0 ? (
+            <Card>
               <p className="text-sm text-gray-500">Plan some recipe meals to build your list automatically.</p>
-            ) : (
-              <ul className="space-y-1">
-                {grocery.map((item) => {
-                  const key = item.name.toLowerCase()
-                  const isChecked = !!checked[key]
-                  return (
-                    <li key={key}>
-                      <button
-                        type="button"
-                        onClick={() => toggleChecked(key)}
-                        className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left active:bg-white/5"
-                      >
-                        <span
-                          className={[
-                            'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2',
-                            isChecked ? 'border-gain bg-gain text-bg' : 'border-border',
-                          ].join(' ')}
-                        >
-                          {isChecked && <CheckIcon className="h-4 w-4" />}
-                        </span>
-                        <span className={isChecked ? 'text-gray-500 line-through' : 'text-gray-200'}>
-                          {item.label}
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </Card>
-        </>
+            </Card>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {GROCERY_CATEGORIES.filter((cat) => groceryByCat[cat.id]?.length).map((cat) => (
+                <Card key={cat.id} style={{ borderColor: `${cat.color}66` }}>
+                  <div className="mb-2 flex items-center gap-2 border-b border-border pb-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                    <h3 className="flex-1 font-bold" style={{ color: cat.color }}>{cat.label}</h3>
+                    <span className="font-mono text-xs text-gray-500">{groceryByCat[cat.id].length}</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {groceryByCat[cat.id].map((item) => {
+                      const key = item.name.toLowerCase()
+                      const isChecked = !!checked[key]
+                      return (
+                        <li key={key}>
+                          <button
+                            type="button"
+                            onClick={() => toggleChecked(key)}
+                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left active:bg-white/5"
+                          >
+                            <span
+                              className={[
+                                'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2',
+                                isChecked ? 'border-gain bg-gain text-bg' : 'border-border',
+                              ].join(' ')}
+                            >
+                              {isChecked && <CheckIcon className="h-4 w-4" />}
+                            </span>
+                            <span className={isChecked ? 'text-gray-500 line-through' : 'text-gray-200'}>
+                              {item.label}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Slot editor: pick a meal, then assign providers & guests */}
@@ -917,9 +970,9 @@ function MemberBadge({ member, size = 18, ring = false }) {
 // Provider (filled) and guest (ringed) badges shown on a planner cell.
 function MemberRow({ providers, guests, memberById }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-1">
-      {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={16} />)}
-      {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={16} ring />)}
+    <div className="flex flex-wrap items-center justify-center gap-1.5">
+      {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={26} />)}
+      {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={26} ring />)}
     </div>
   )
 }
