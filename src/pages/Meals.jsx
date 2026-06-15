@@ -520,8 +520,11 @@ export default function Meals() {
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="relative">
             {weekNav}
-            {/* Filter sits top-right, where the old "This Week" button was. */}
-            <div className="absolute right-0 top-1/2 -translate-y-1/2">
+            {/* Filter sits top-right, where the old "This Week" button was.
+                Centered via flex (not a transform) so the popover's fixed
+                backdrop actually covers the viewport and isn't trapped in a
+                transformed stacking context behind the schedule grid. */}
+            <div className="absolute inset-y-0 right-0 flex items-center">
               <button
                 type="button"
                 onClick={() => setFilterOpen((o) => !o)}
@@ -559,7 +562,7 @@ export default function Meals() {
         <div
           className="grid h-full min-w-[720px]"
           style={{
-            gridTemplateColumns: '7rem repeat(7, minmax(0, 1fr))',
+            gridTemplateColumns: 'max-content repeat(7, minmax(0, 1fr))',
             gridTemplateRows: `auto repeat(${SLOTS.length}, minmax(0, 1fr))`,
           }}
         >
@@ -606,8 +609,10 @@ export default function Meals() {
                         type="button"
                         onClick={() => openSlot(day, slot)}
                         className={[
-                          'flex h-full min-h-[88px] w-full flex-col items-center justify-center gap-2 rounded-lg px-2 py-3 text-center text-base transition-opacity active:scale-[0.98]',
-                          m ? 'font-semibold shadow-glow' : 'bg-white/5 text-gray-600',
+                          'flex h-full min-h-[88px] w-full flex-col items-center gap-1.5 overflow-hidden rounded-lg px-2 py-2 text-center text-base transition-opacity active:scale-[0.98]',
+                          // Filled cells anchor to the top so the meal name is never
+                          // pushed out of view by the member badges; empty cells center the +.
+                          m ? 'justify-start font-semibold shadow-glow' : 'justify-center bg-white/5 text-gray-600',
                           faded ? 'opacity-25' : '',
                         ].join(' ')}
                         style={m ? { backgroundColor: `${accent}26`, color: accent, border: `1.5px solid ${accent}` } : undefined}
@@ -1309,9 +1314,9 @@ function ScheduleFilter({ members, filterProviders, filterType, onToggleProvider
         type="button"
         aria-label="Close filter"
         onClick={onClose}
-        className="fixed inset-0 z-10 cursor-default"
+        className="fixed inset-0 z-40 cursor-default"
       />
-      <div className="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border border-border bg-surface p-4 text-left shadow-glow">
+      <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-2xl border border-border bg-surface p-4 text-left shadow-glow">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-bold text-white">Filter schedule</h3>
           <button
@@ -1377,9 +1382,9 @@ function MemberBadge({ member, size = 18, ring = false }) {
 // Provider (filled) and guest (ringed) badges shown on a planner cell.
 function MemberRow({ providers, guests, memberById }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-1.5">
-      {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={26} />)}
-      {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={26} ring />)}
+    <div className="flex flex-wrap items-center justify-center gap-1">
+      {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={22} />)}
+      {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={22} ring />)}
     </div>
   )
 }

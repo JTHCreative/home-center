@@ -1,8 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   CloseIcon,
   KeyboardIcon,
@@ -446,16 +444,18 @@ function NumericPad({ onKey, onBackspace, onStep, onDone }) {
           <button
             type="button"
             onClick={() => onStep(-1)}
-            className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-accent/15 text-2xl font-bold text-accent active:scale-95"
+            aria-label="Decrease by one"
+            className="flex flex-1 items-center justify-center rounded-xl bg-accent/15 text-3xl font-bold text-accent active:scale-95"
           >
-            <ChevronLeft className="h-7 w-7" /> −1
+            −
           </button>
           <button
             type="button"
             onClick={() => onStep(1)}
-            className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-accent/15 text-2xl font-bold text-accent active:scale-95"
+            aria-label="Increase by one"
+            className="flex flex-1 items-center justify-center rounded-xl bg-accent/15 text-3xl font-bold text-accent active:scale-95"
           >
-            +1 <ChevronRight className="h-7 w-7" />
+            +
           </button>
         </div>
         <button

@@ -3,10 +3,10 @@ import Card, { PageHeader } from '../components/Card.jsx'
 import ScrollTabs from '../components/ScrollTabs.jsx'
 import Sparkline from '../components/Sparkline.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
-import { fetchMetrics, fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
+import { fetchMetrics, fetchQuotes, hasFinnhubKey, subscribeFinnhubStatus } from '../lib/finnhub.js'
 import { useLocalState } from '../lib/storage.js'
 import { useDragScroll } from '../lib/useDragScroll.js'
-import { ChevronDown, ChevronUp, PlusIcon, TrashIcon } from '../components/Icons.jsx'
+import { BellIcon, ChevronDown, ChevronUp, PlusIcon, TrashIcon } from '../components/Icons.jsx'
 
 // Watchlists: named lists of symbols. `symbol` is the Finnhub symbol; crypto
 // uses exchange-prefixed symbols (e.g. BINANCE:BTCUSDT). `qty` is optional —
@@ -128,6 +128,11 @@ const money = (n) =>
 
 const display = (symbol) => symbol.split(':').pop().replace('USDT', '').replace('USD', '')
 
+// A price alert fires when the live price crosses the target in the chosen
+// direction ('above' → price >= target, 'below' → price <= target).
+const alertTriggered = (alert, price) =>
+  !!alert && price != null && (alert.dir === 'above' ? price >= alert.price : price <= alert.price)
+
 export default function Stocks() {
   // Key is versioned (-v2) so the imported Robinhood lists replace the earlier
   // demo Stocks/Crypto defaults on devices that already seeded them.
@@ -136,6 +141,9 @@ export default function Stocks() {
   const [quotes, setQuotes] = useState({})
   const [loading, setLoading] = useState(true)
   const [updatedAt, setUpdatedAt] = useState(null)
+  const [connected, setConnected] = useState(true) // live Finnhub reachability
+
+  useEffect(() => subscribeFinnhubStatus(setConnected), [])
 
   const [listDraft, setListDraft] = useState(null) // { id?, name }
   const [symbolDraft, setSymbolDraft] = useState(null) // { symbol, name, qty, original? }
@@ -270,6 +278,10 @@ export default function Stocks() {
     const symbol = symbolDraft.symbol.trim().toUpperCase()
     if (!symbol) return
     const item = { symbol, name: symbolDraft.name.trim(), qty: Number(symbolDraft.qty) || 0 }
+    const alertPrice = Number(symbolDraft.alertPrice)
+    if (symbolDraft.alertPrice !== '' && Number.isFinite(alertPrice)) {
+      item.alert = { price: alertPrice, dir: symbolDraft.alertDir === 'below' ? 'below' : 'above' }
+    }
     patchItems((list) => {
       const idx = list.findIndex((i) => i.symbol === (symbolDraft.original || symbol))
       if (idx >= 0) return list.map((i, k) => (k === idx ? item : i))
@@ -365,7 +377,7 @@ export default function Stocks() {
             ? `${rows.length} of ${items.length} symbols`
             : `${items.length} symbol${items.length === 1 ? '' : 's'}`}
         </span>
-        <Button variant="ghost" className="px-4 py-2" onClick={() => setSymbolDraft({ symbol: '', name: '', qty: '' })}>
+        <Button variant="ghost" className="px-4 py-2" onClick={() => setSymbolDraft({ symbol: '', name: '', qty: '', alertPrice: '', alertDir: 'above' })}>
           <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> Add Symbol</span>
         </Button>
         <Button
@@ -445,17 +457,44 @@ export default function Stocks() {
                 const q = quotes[it.symbol]
                 const hUp = q?.changePercent != null ? q.changePercent >= 0 : true
                 const chg = hUp ? 'text-gain' : 'text-loss'
+                const fired = alertTriggered(it.alert, q?.price)
                 return (
                   <tr key={it.symbol} className="border-t border-border">
                     <td className="px-3 py-2">
                       <button
                         type="button"
                         onClick={() =>
-                          setSymbolDraft({ symbol: it.symbol, name: it.name || '', qty: it.qty || '', original: it.symbol })
+                          setSymbolDraft({
+                            symbol: it.symbol,
+                            name: it.name || '',
+                            qty: it.qty || '',
+                            alertPrice: it.alert?.price ?? '',
+                            alertDir: it.alert?.dir || 'above',
+                            original: it.symbol,
+                          })
                         }
                         className="text-left active:opacity-70"
                       >
-                        <div className="font-semibold text-white">{display(it.symbol)}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-white">{display(it.symbol)}</span>
+                          {it.alert && (
+                            <span
+                              className={[
+                                'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold',
+                                fired ? 'animate-pulse' : '',
+                              ].join(' ')}
+                              style={
+                                fired
+                                  ? { backgroundColor: '#D2992226', color: '#D29922' }
+                                  : { color: '#6E7681' }
+                              }
+                              title={`Alert ${it.alert.dir === 'above' ? '≥' : '≤'} ${money(it.alert.price)}`}
+                            >
+                              <BellIcon className="h-3 w-3" />
+                              {fired ? `Hit ${money(it.alert.price)}` : `${it.alert.dir === 'above' ? '≥' : '≤'} ${money(it.alert.price)}`}
+                            </span>
+                          )}
+                        </div>
                         {it.name && <div className="text-xs text-gray-400">{it.name}</div>}
                       </button>
                     </td>
@@ -497,9 +536,17 @@ export default function Stocks() {
         </Card>
       )}
 
-      <div className="mt-3 text-right text-xs text-gray-600">
-        {!hasFinnhubKey && 'Demo data · '}
-        {loading ? 'Updating…' : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : ''}
+      <div className="mt-3 flex items-center justify-end gap-2 text-xs text-gray-600">
+        {hasFinnhubKey && (
+          <span
+            className={`h-2 w-2 flex-shrink-0 rounded-full ${connected ? 'bg-gain' : 'bg-loss'}`}
+            title={connected ? 'Connected to Finnhub' : 'Finnhub unavailable or rate-limited'}
+          />
+        )}
+        <span>
+          {!hasFinnhubKey && 'Demo data · '}
+          {loading ? 'Updating…' : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : ''}
+        </span>
       </div>
 
       {/* New / rename watchlist */}
@@ -571,6 +618,41 @@ export default function Stocks() {
                 value={symbolDraft.qty}
                 onChange={(e) => setSymbolDraft({ ...symbolDraft, qty: e.target.value })}
               />
+            </div>
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-xs text-gray-500">Price alert (optional)</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-xl border border-border bg-bg p-1">
+                  {['above', 'below'].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setSymbolDraft({ ...symbolDraft, alertDir: d })}
+                      className={[
+                        'rounded-lg px-4 py-2 text-sm font-semibold capitalize active:scale-95',
+                        symbolDraft.alertDir === d ? 'bg-accent/15 text-accent shadow-glow' : 'text-gray-400',
+                      ].join(' ')}
+                    >
+                      {d === 'above' ? 'At or above' : 'At or below'}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  className={`${fieldClass} flex-1`}
+                  placeholder="Target price"
+                  value={symbolDraft.alertPrice}
+                  onChange={(e) => setSymbolDraft({ ...symbolDraft, alertPrice: e.target.value })}
+                />
+                {symbolDraft.alertPrice !== '' && (
+                  <Button variant="ghost" className="px-4 py-2" onClick={() => setSymbolDraft({ ...symbolDraft, alertPrice: '' })}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-600">Shows a 🔔 alert on the symbol when its price crosses this target.</p>
             </div>
           </div>
         )}
