@@ -148,12 +148,15 @@ const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 // Grocery list sections, shown as separate columns. 'other' catches anything
 // that doesn't match (grains, baking staples, etc.) so nothing is dropped.
 const GROCERY_CATEGORIES = [
-  { id: 'produce', label: 'Fruits & Veggies', color: '#39D353' },
   { id: 'meatdairy', label: 'Meats & Dairy', color: '#F85149' },
-  { id: 'sauces', label: 'Sauces', color: '#D29922' },
-  { id: 'seasonings', label: 'Seasonings', color: '#A371F7' },
+  { id: 'produce', label: 'Fruits & Veggies', color: '#39D353' },
+  { id: 'saucesseasonings', label: 'Sauces & Seasonings', color: '#D29922' },
   { id: 'other', label: 'Other', color: '#8B949E' },
 ]
+
+// Older saves used separate 'sauces'/'seasonings' columns — fold any saved
+// category overrides into the combined column.
+const LEGACY_CAT = { sauces: 'saucesseasonings', seasonings: 'saucesseasonings' }
 
 // Keyword → category. Produce is checked first so "eggplant" / "butternut
 // squash" land in produce before "egg" / "butter" can claim them for meat & dairy.
@@ -172,16 +175,16 @@ const CAT_KEYWORDS = {
     'wing', 'brisket', 'cod', 'tilapia',
     'milk', 'cheese', 'butter', 'yogurt', 'yoghurt', 'cream', 'egg', 'mozzarella', 'cheddar',
     'parmesan', 'feta', 'ricotta', 'ghee', 'dairy'],
-  sauces: ['sauce', 'ketchup', 'mustard', 'mayo', 'mayonnaise', 'sriracha', 'salsa', 'pesto',
-    'marinara', 'gravy', 'dressing', 'vinegar', 'honey', 'syrup', 'jam', 'jelly', 'broth',
-    'stock', 'hoisin', 'teriyaki', 'worcestershire', 'tahini', 'hummus', 'guacamole', 'chutney',
-    'relish', 'aioli', 'vinaigrette', 'paste'],
-  seasonings: ['salt', 'cumin', 'paprika', 'oregano', 'thyme', 'rosemary', 'cinnamon', 'nutmeg',
+  saucesseasonings: ['sauce', 'ketchup', 'mustard', 'mayo', 'mayonnaise', 'sriracha', 'salsa',
+    'pesto', 'marinara', 'gravy', 'dressing', 'vinegar', 'honey', 'syrup', 'jam', 'jelly',
+    'broth', 'stock', 'hoisin', 'teriyaki', 'worcestershire', 'tahini', 'hummus', 'guacamole',
+    'chutney', 'relish', 'aioli', 'vinaigrette', 'paste',
+    'salt', 'cumin', 'paprika', 'oregano', 'thyme', 'rosemary', 'cinnamon', 'nutmeg',
     'turmeric', 'curry', 'cayenne', 'coriander', 'seasoning', 'spice', 'bay leaf', 'cardamom',
     'clove', 'sage', 'dill', 'fennel', 'allspice', 'vanilla', 'peppercorn', 'masala', 'chili',
     'chilli', 'garam'],
 }
-const CAT_ORDER = ['produce', 'meatdairy', 'sauces', 'seasonings']
+const CAT_ORDER = ['produce', 'meatdairy', 'saucesseasonings']
 function categorize(name) {
   const n = name.toLowerCase()
   for (const cat of CAT_ORDER) {
@@ -253,7 +256,8 @@ export default function Meals() {
     const cols = Object.fromEntries(GROCERY_CATEGORIES.map((c) => [c.id, []]))
     for (const item of grocery) {
       const key = item.name.toLowerCase()
-      const cat = groceryCat[key] || categorize(item.name)
+      const saved = groceryCat[key]
+      const cat = (saved && (LEGACY_CAT[saved] || saved)) || categorize(item.name)
       ;(cols[cat] || cols.other).push({ ...item, key })
     }
     const orderIndex = new Map(groceryOrder.map((n, i) => [n, i]))
@@ -1195,7 +1199,7 @@ function GroceryBoard({ categories, board, checked, onToggleChecked, onCommit })
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
     >
-      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {visibleCats.map((cat) => (
           <GroceryColumn key={cat.id} cat={cat} items={cols[cat.id] || []} overId={overId}>
             {(cols[cat.id] || []).map((item) => (
