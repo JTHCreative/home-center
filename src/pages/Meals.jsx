@@ -520,8 +520,11 @@ export default function Meals() {
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="relative">
             {weekNav}
-            {/* Filter sits top-right, where the old "This Week" button was. */}
-            <div className="absolute right-0 top-1/2 -translate-y-1/2">
+            {/* Filter sits top-right, where the old "This Week" button was.
+                Centered via flex (not a transform) so the popover's fixed
+                backdrop actually covers the viewport and isn't trapped in a
+                transformed stacking context behind the schedule grid. */}
+            <div className="absolute inset-y-0 right-0 flex items-center">
               <button
                 type="button"
                 onClick={() => setFilterOpen((o) => !o)}
@@ -1311,9 +1314,9 @@ function ScheduleFilter({ members, filterProviders, filterType, onToggleProvider
         type="button"
         aria-label="Close filter"
         onClick={onClose}
-        className="fixed inset-0 z-10 cursor-default"
+        className="fixed inset-0 z-40 cursor-default"
       />
-      <div className="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border border-border bg-surface p-4 text-left shadow-glow">
+      <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-2xl border border-border bg-surface p-4 text-left shadow-glow">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-bold text-white">Filter schedule</h3>
           <button
