@@ -125,6 +125,45 @@ const emptyMeal = () => ({
 const ingName = (ing) => (typeof ing === 'string' ? ing : ing?.name || '')
 const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 
+// Grocery list sections, shown as separate columns. 'other' catches anything
+// that doesn't match (dairy, grains, fruit, etc.) so nothing is dropped.
+const GROCERY_CATEGORIES = [
+  { id: 'meats', label: 'Meats', color: '#F85149' },
+  { id: 'veggies', label: 'Veggies', color: '#39D353' },
+  { id: 'sauces', label: 'Sauces', color: '#F0883E' },
+  { id: 'seasonings', label: 'Seasonings', color: '#D29922' },
+  { id: 'other', label: 'Other', color: '#8B949E' },
+]
+
+// Keyword → category. Checked in CAT_ORDER, first match wins, so more specific
+// forms (e.g. "black pepper", "garlic powder") land in seasonings before the
+// produce keywords claim them.
+const CAT_KEYWORDS = {
+  meats: ['chicken', 'beef', 'pork', 'steak', 'bacon', 'sausage', 'turkey', 'ham', 'lamb',
+    'fish', 'salmon', 'tuna', 'shrimp', 'prawn', 'crab', 'mince', 'ground beef',
+    'ground turkey', 'ground pork', 'ribs', 'chorizo', 'meat', 'filet', 'thigh',
+    'breast', 'wing', 'brisket', 'cod', 'tilapia'],
+  sauces: ['sauce', 'ketchup', 'mayo', 'mayonnaise', 'mustard', 'salsa', 'dressing',
+    'vinegar', 'soy', 'sriracha', 'hoisin', 'teriyaki', 'bbq', 'marinara', 'pesto',
+    'broth', 'stock', 'oil', 'paste'],
+  seasonings: ['salt', 'black pepper', 'peppercorn', 'powder', 'spice', 'seasoning',
+    'cumin', 'paprika', 'oregano', 'thyme', 'rosemary', 'cinnamon', 'chili', 'chilli',
+    'flake', 'bay leaf', 'nutmeg', 'turmeric', 'curry'],
+  veggies: ['onion', 'garlic', 'tomato', 'lettuce', 'spinach', 'kale', 'carrot', 'potato',
+    'pepper', 'bell', 'broccoli', 'cucumber', 'celery', 'mushroom', 'zucchini', 'avocado',
+    'cilantro', 'parsley', 'basil', 'lime', 'lemon', 'corn', 'beans', 'peas', 'cabbage',
+    'ginger', 'scallion', 'leek', 'squash', 'eggplant', 'asparagus', 'jalapeno', 'radish',
+    'beet', 'chard', 'herb'],
+}
+const CAT_ORDER = ['meats', 'sauces', 'seasonings', 'veggies']
+function categorize(name) {
+  const n = name.toLowerCase()
+  for (const cat of CAT_ORDER) {
+    if (CAT_KEYWORDS[cat].some((k) => n.includes(k))) return cat
+  }
+  return 'other'
+}
+
 export default function Meals() {
   const [meals, setMeals] = useLocalState('meals-recipes', SEED_MEALS)
   const [plans, setPlans] = useLocalState('meals-plan', {}, migratePlan)
@@ -171,6 +210,13 @@ export default function Meals() {
       .map((e) => ({ name: e.name, label: e.qtys.length ? `${e.qtys.join(' + ')} ${e.name}` : e.name }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [plan, mealById])
+
+  // Group the grocery list into category columns (meats, veggies, …).
+  const groceryByCat = useMemo(() => {
+    const groups = {}
+    for (const item of grocery) (groups[categorize(item.name)] ||= []).push(item)
+    return groups
+  }, [grocery])
 
   // --- Slot assignment (meal + providers + guests) --------------------------
   const openSlot = (day, slot) => {
@@ -639,39 +685,50 @@ export default function Meals() {
           <h2 className="mb-3 text-lg font-semibold text-gray-300">
             Grocery List <span className="font-mono text-sm text-gray-500">({grocery.length})</span>
           </h2>
-          <Card>
-            {grocery.length === 0 ? (
+          {grocery.length === 0 ? (
+            <Card>
               <p className="text-sm text-gray-500">Plan some recipe meals to build your list automatically.</p>
-            ) : (
-              <ul className="space-y-1">
-                {grocery.map((item) => {
-                  const key = item.name.toLowerCase()
-                  const isChecked = !!checked[key]
-                  return (
-                    <li key={key}>
-                      <button
-                        type="button"
-                        onClick={() => toggleChecked(key)}
-                        className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left active:bg-white/5"
-                      >
-                        <span
-                          className={[
-                            'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2',
-                            isChecked ? 'border-gain bg-gain text-bg' : 'border-border',
-                          ].join(' ')}
-                        >
-                          {isChecked && <CheckIcon className="h-4 w-4" />}
-                        </span>
-                        <span className={isChecked ? 'text-gray-500 line-through' : 'text-gray-200'}>
-                          {item.label}
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </Card>
+            </Card>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {GROCERY_CATEGORIES.filter((cat) => groceryByCat[cat.id]?.length).map((cat) => (
+                <Card key={cat.id} style={{ borderColor: `${cat.color}66` }}>
+                  <div className="mb-2 flex items-center gap-2 border-b border-border pb-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                    <h3 className="flex-1 font-bold" style={{ color: cat.color }}>{cat.label}</h3>
+                    <span className="font-mono text-xs text-gray-500">{groceryByCat[cat.id].length}</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {groceryByCat[cat.id].map((item) => {
+                      const key = item.name.toLowerCase()
+                      const isChecked = !!checked[key]
+                      return (
+                        <li key={key}>
+                          <button
+                            type="button"
+                            onClick={() => toggleChecked(key)}
+                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left active:bg-white/5"
+                          >
+                            <span
+                              className={[
+                                'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2',
+                                isChecked ? 'border-gain bg-gain text-bg' : 'border-border',
+                              ].join(' ')}
+                            >
+                              {isChecked && <CheckIcon className="h-4 w-4" />}
+                            </span>
+                            <span className={isChecked ? 'text-gray-500 line-through' : 'text-gray-200'}>
+                              {item.label}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </Card>
+              ))}
+            </div>
+          )}
         </>
       )}
 
