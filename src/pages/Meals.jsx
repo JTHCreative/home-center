@@ -49,9 +49,9 @@ const TAKEOUT_COLOR = '#F0883E'
 // Top-level subpages — cycle the page instead of scrolling (touch-friendly).
 const SUBPAGES = [
   { id: 'schedule', label: 'Schedule' },
-  { id: 'household', label: 'Household' },
   { id: 'meals', label: 'Meals' },
   { id: 'groceries', label: 'Groceries' },
+  { id: 'household', label: 'Household' },
 ]
 
 // Household member accent palette (tap to pick when adding/editing a member).
@@ -206,6 +206,8 @@ export default function Meals() {
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
 
   const [mealDraft, setMealDraft] = useState(null)
+  // When a meal is created from the slot editor, auto-select it back into the slot on save.
+  const [pendingSlotSelect, setPendingSlotSelect] = useState(false)
   const [slotDraft, setSlotDraft] = useState(null) // { day, slot, mealId, providers, guests }
   const [memberDraft, setMemberDraft] = useState(null) // { id, name, color }
   const [memberMealsFor, setMemberMealsFor] = useState(null) // member id whose meal list is being edited
@@ -410,7 +412,26 @@ export default function Meals() {
       const exists = list.some((m) => m.id === meal.id)
       return exists ? list.map((m) => (m.id === meal.id ? meal : m)) : [...list, meal]
     })
+    // If we opened the meal editor from the slot, drop the new meal into that slot.
+    if (pendingSlotSelect) {
+      setSlotDraft((d) =>
+        d
+          ? { ...d, mealId: meal.id, providers: members.filter((mem) => (mem.meals || []).includes(meal.id)).map((mem) => mem.id) }
+          : d,
+      )
+    }
     setMealDraft(null)
+    setPendingSlotSelect(false)
+  }
+
+  // Open the meal editor from the slot picker, prefilled to the chosen type.
+  const createMealForSlot = (type) => {
+    setPendingSlotSelect(true)
+    setMealDraft({ ...emptyMeal(), type })
+  }
+  const closeMealDraft = () => {
+    setMealDraft(null)
+    setPendingSlotSelect(false)
   }
 
   const editMeal = (m) =>
@@ -893,16 +914,17 @@ export default function Meals() {
         onSave={saveSlot}
         meals={meals}
         members={members}
+        onCreateMeal={createMealForSlot}
       />
 
       {/* Add / edit meal */}
       <Modal
         open={!!mealDraft}
-        onClose={() => setMealDraft(null)}
+        onClose={closeMealDraft}
         title={isEditing ? 'Edit Meal' : 'New Meal'}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setMealDraft(null)}>Cancel</Button>
+            <Button variant="ghost" onClick={closeMealDraft}>Cancel</Button>
             <Button onClick={saveMeal}>Save</Button>
           </>
         }
@@ -1434,8 +1456,10 @@ function MemberPicker({ members, selected, onToggle }) {
   )
 }
 
-function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
+function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateMeal }) {
+  const [tab, setTab] = useState('recipe') // 'recipe' | 'takeout'
   if (!draft) return null
+  const tabMeals = meals.filter((m) => mealType(m) === tab)
   const toggleIn = (key, id) =>
     setDraft((d) => ({
       ...d,
@@ -1467,7 +1491,17 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
       <div className="space-y-5">
         {/* Meal selection */}
         <div>
-          <label className="mb-2 block text-xs text-gray-500">Meal</label>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <label className="block text-xs text-gray-500">Meal</label>
+            <Tabs
+              tabs={[
+                { id: 'recipe', label: 'Homecooked' },
+                { id: 'takeout', label: 'Takeout' },
+              ]}
+              active={tab}
+              onChange={setTab}
+            />
+          </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"
@@ -1480,7 +1514,7 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
               <div className="font-medium">None</div>
               <div className="font-mono text-[10px] uppercase opacity-70">Empty slot</div>
             </button>
-            {meals.map((m) => {
+            {tabMeals.map((m) => {
               const takeout = mealType(m) === 'takeout'
               const on = draft.mealId === m.id
               return (
@@ -1504,6 +1538,14 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
                 </button>
               )
             })}
+            {/* Create a new meal of the current type without leaving the planner. */}
+            <button
+              type="button"
+              onClick={() => onCreateMeal(tab)}
+              className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border px-4 py-3 text-sm font-semibold text-gray-400 active:scale-[0.98]"
+            >
+              <PlusIcon className="h-5 w-5" /> New {tab === 'takeout' ? 'takeout' : 'homecooked'}
+            </button>
           </div>
         </div>
 
