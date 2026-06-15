@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Tabs from '../components/Tabs.jsx'
@@ -425,35 +425,41 @@ export default function Meals() {
         <div className="flex min-h-0 flex-1 flex-col">
           {weekNav}
           <Card className="min-h-0 flex-1 overflow-auto p-0">
-        <table className="h-full w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="w-28 border-b border-r border-border p-3 text-left text-sm font-semibold text-gray-500" />
-              {DAYS.map((d, i) => (
-                <th key={d} className="border-b border-r border-border p-3 text-base font-semibold text-gray-300">
-                  <div>{d}</div>
-                  <div className="font-mono text-xs font-normal text-gray-600">
-                    {addDays(weekStart, i).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {SLOTS.map((slot) => {
-              const theme = SLOT_THEME[slot]
-              const SlotIcon = theme.Icon
-              return (
-              <tr key={slot} style={{ height: `${100 / SLOTS.length}%`, backgroundColor: `${theme.color}0D` }}>
-                <td
-                  className="border-b border-r border-border p-3"
-                  style={{ borderLeft: `4px solid ${theme.color}` }}
+        {/* CSS grid (not a <table>) so the meal rows are guaranteed equal
+            height — tables dump leftover vertical space into the first row,
+            which made Breakfast taller than Lunch/Dinner. */}
+        <div
+          className="grid h-full min-w-[720px]"
+          style={{
+            gridTemplateColumns: '7rem repeat(7, minmax(0, 1fr))',
+            gridTemplateRows: `auto repeat(${SLOTS.length}, minmax(0, 1fr))`,
+          }}
+        >
+          {/* Header row: empty corner + day labels */}
+          <div className="border-b border-r border-border p-3" />
+          {DAYS.map((d, i) => (
+            <div key={d} className="border-b border-r border-border p-3 text-center text-base font-semibold text-gray-300">
+              <div>{d}</div>
+              <div className="font-mono text-xs font-normal text-gray-600">
+                {addDays(weekStart, i).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+              </div>
+            </div>
+          ))}
+          {/* One equal-height row per slot */}
+          {SLOTS.map((slot) => {
+            const theme = SLOT_THEME[slot]
+            const SlotIcon = theme.Icon
+            return (
+              <Fragment key={slot}>
+                <div
+                  className="flex items-center border-b border-r border-border p-3"
+                  style={{ borderLeft: `4px solid ${theme.color}`, backgroundColor: `${theme.color}0D` }}
                 >
                   <div className="flex items-center gap-2 text-lg font-semibold" style={{ color: theme.color }}>
                     <SlotIcon className="h-7 w-7" />
                     <span>{slot}</span>
                   </div>
-                </td>
+                </div>
                 {DAYS.map((day) => {
                   const val = plan[day]?.[slot]
                   const m = mealById[slotMealId(val)]
@@ -462,7 +468,11 @@ export default function Meals() {
                   const providers = slotProviders(val)
                   const guests = slotGuests(val)
                   return (
-                    <td key={day} className="h-full border-b border-r border-border p-1.5 align-top">
+                    <div
+                      key={day}
+                      className="min-h-0 border-b border-r border-border p-1.5"
+                      style={{ backgroundColor: `${theme.color}0D` }}
+                    >
                       <button
                         type="button"
                         onClick={() => openSlot(day, slot)}
@@ -490,14 +500,13 @@ export default function Meals() {
                           <PlusIcon className="h-7 w-7" />
                         )}
                       </button>
-                    </td>
+                    </div>
                   )
                 })}
-              </tr>
-              )
-            })}
-            </tbody>
-          </table>
+              </Fragment>
+            )
+          })}
+        </div>
           </Card>
         </div>
       )}
