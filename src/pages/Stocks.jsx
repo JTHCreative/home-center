@@ -139,7 +139,11 @@ export default function Stocks() {
   // Key is versioned (-v2) so the imported Robinhood lists replace the earlier
   // demo Stocks/Crypto defaults on devices that already seeded them.
   const [watchlists, setWatchlists] = useLocalState('watchlists-v2', DEFAULT_WATCHLISTS)
-  const [activeId, setActiveId] = useState(watchlists[0]?.id)
+  // The default watchlist opens first when you land on the page (press & hold a tab to set it).
+  const [defaultListId, setDefaultListId] = useLocalState('watchlists-default', null)
+  const [activeId, setActiveId] = useState(() =>
+    defaultListId && watchlists.some((w) => w.id === defaultListId) ? defaultListId : watchlists[0]?.id,
+  )
   const [quotes, setQuotes] = useState({})
   const [loading, setLoading] = useState(true)
   const [updatedAt, setUpdatedAt] = useState(null)
@@ -273,6 +277,7 @@ export default function Stocks() {
     if (watchlists.length <= 1) return
     setWatchlists((ws) => ws.filter((w) => w.id !== active.id))
     setActiveId(watchlists.find((w) => w.id !== active.id)?.id)
+    if (defaultListId === active.id) setDefaultListId(null) // default was removed
   }
 
   const patchItems = (fn) =>
@@ -371,6 +376,8 @@ export default function Stocks() {
           onChange={setActiveId}
           onAdd={() => setListDraft({ name: '' })}
           visible={7}
+          defaultId={defaultListId}
+          onLongPress={setDefaultListId}
         />
       </div>
 
