@@ -129,10 +129,12 @@ const ingName = (ing) => (typeof ing === 'string' ? ing : ing?.name || '')
 const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 
 // Grocery list sections, shown as separate columns. 'other' catches anything
-// that doesn't match (sauces, grains, seasonings, etc.) so nothing is dropped.
+// that doesn't match (grains, baking staples, etc.) so nothing is dropped.
 const GROCERY_CATEGORIES = [
   { id: 'produce', label: 'Fruits & Veggies', color: '#39D353' },
   { id: 'meatdairy', label: 'Meats & Dairy', color: '#F85149' },
+  { id: 'sauces', label: 'Sauces', color: '#D29922' },
+  { id: 'seasonings', label: 'Seasonings', color: '#A371F7' },
   { id: 'other', label: 'Other', color: '#8B949E' },
 ]
 
@@ -153,8 +155,16 @@ const CAT_KEYWORDS = {
     'wing', 'brisket', 'cod', 'tilapia',
     'milk', 'cheese', 'butter', 'yogurt', 'yoghurt', 'cream', 'egg', 'mozzarella', 'cheddar',
     'parmesan', 'feta', 'ricotta', 'ghee', 'dairy'],
+  sauces: ['sauce', 'ketchup', 'mustard', 'mayo', 'mayonnaise', 'sriracha', 'salsa', 'pesto',
+    'marinara', 'gravy', 'dressing', 'vinegar', 'honey', 'syrup', 'jam', 'jelly', 'broth',
+    'stock', 'hoisin', 'teriyaki', 'worcestershire', 'tahini', 'hummus', 'guacamole', 'chutney',
+    'relish', 'aioli', 'vinaigrette', 'paste'],
+  seasonings: ['salt', 'cumin', 'paprika', 'oregano', 'thyme', 'rosemary', 'cinnamon', 'nutmeg',
+    'turmeric', 'curry', 'cayenne', 'coriander', 'seasoning', 'spice', 'bay leaf', 'cardamom',
+    'clove', 'sage', 'dill', 'fennel', 'allspice', 'vanilla', 'peppercorn', 'masala', 'chili',
+    'chilli', 'garam'],
 }
-const CAT_ORDER = ['produce', 'meatdairy']
+const CAT_ORDER = ['produce', 'meatdairy', 'sauces', 'seasonings']
 function categorize(name) {
   const n = name.toLowerCase()
   for (const cat of CAT_ORDER) {
