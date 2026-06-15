@@ -1014,6 +1014,17 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
       ...d,
       [key]: d[key].includes(id) ? d[key].filter((x) => x !== id) : [...d[key], id],
     }))
+  // Picking a meal auto-fills providers with the members who have that meal
+  // assigned to them (who makes / orders it). Re-clicking the same meal is a
+  // no-op so re-opening a saved slot never clobbers manual edits.
+  const selectMeal = (mealId) =>
+    setDraft((d) => {
+      if (d.mealId === mealId) return d
+      const assigned = mealId
+        ? members.filter((mem) => (mem.meals || []).includes(mealId)).map((mem) => mem.id)
+        : []
+      return { ...d, mealId, providers: assigned }
+    })
   return (
     <Modal
       open={!!draft}
@@ -1033,7 +1044,7 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => setDraft((d) => ({ ...d, mealId: null }))}
+              onClick={() => selectMeal(null)}
               className={[
                 'rounded-xl px-4 py-3 text-left active:scale-[0.98]',
                 draft.mealId == null ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-400',
@@ -1049,7 +1060,7 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members }) {
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setDraft((d) => ({ ...d, mealId: m.id }))}
+                  onClick={() => selectMeal(m.id)}
                   className={[
                     'rounded-xl px-4 py-3 text-left active:scale-[0.98]',
                     on ? 'shadow-glow' : 'bg-white/5',
