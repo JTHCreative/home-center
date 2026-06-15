@@ -1189,7 +1189,8 @@ function GroceryBoard({ categories, board, checked, onToggleChecked, onCommit })
   }
 
   // While dragging, also show empty categories as drop targets.
-  const visibleCats = categories.filter((c) => cols[c.id]?.length || activeId)
+  // Always show every category (even empty ones) so the columns stay put.
+  const visibleCats = categories
 
   return (
     <DndContext
@@ -1244,7 +1245,7 @@ function GroceryColumn({ cat, items, overId, children }) {
                 isOver ? 'border-accent text-accent' : 'border-border text-gray-600',
               ].join(' ')}
             >
-              Drop here
+              {isOver ? 'Drop here' : 'Empty'}
             </li>
           ) : (
             children
