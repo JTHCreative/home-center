@@ -27,17 +27,21 @@ const SEED_MEALS = [
 
 const mealType = (m) => m.type || 'recipe' // older saved data has no type
 
-// Draft ingredients are {id, text} rows so each gets its own touch-friendly field.
+// Draft ingredients are {id, qty, text} rows so each gets its own touch-friendly fields.
 const emptyMeal = () => ({
   id: crypto.randomUUID(),
   type: 'recipe',
   name: '',
-  ingredients: [{ id: crypto.randomUUID(), text: '' }],
+  ingredients: [{ id: crypto.randomUUID(), qty: '', text: '' }],
   instructions: '',
   place: '',
   details: '',
   cost: '',
 })
+
+// Normalize a stored ingredient (string from older data, or {name, qty}).
+const ingName = (ing) => (typeof ing === 'string' ? ing : ing?.name || '')
+const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 
 export default function Meals() {
   const [meals, setMeals] = useLocalState('meals-recipes', SEED_MEALS)
@@ -49,21 +53,28 @@ export default function Meals() {
 
   const mealById = useMemo(() => Object.fromEntries(meals.map((m) => [m.id, m])), [meals])
 
-  // Auto-generated grocery list: unique ingredients across all planned recipes
-  // (takeout has nothing to buy).
+  // Auto-generated grocery list: ingredients across all planned recipes (takeout
+  // has nothing to buy), grouped by name with their quantities collected.
   const grocery = useMemo(() => {
-    const set = new Map() // lower → display
+    const map = new Map() // lower name -> { name, qtys: [] }
     for (const day of DAYS) {
       for (const slot of SLOTS) {
         const m = mealById[plan[day]?.[slot]]
         if (!m || mealType(m) !== 'recipe') continue
         for (const ing of m.ingredients || []) {
-          const k = ing.trim().toLowerCase()
-          if (k) set.set(k, ing.trim())
+          const name = ingName(ing).trim()
+          if (!name) continue
+          const key = name.toLowerCase()
+          const entry = map.get(key) || { name, qtys: [] }
+          const qty = ingQty(ing).trim()
+          if (qty) entry.qtys.push(qty)
+          map.set(key, entry)
         }
       }
     }
-    return [...set.values()].sort((a, b) => a.localeCompare(b))
+    return [...map.values()]
+      .map((e) => ({ name: e.name, label: e.qtys.length ? `${e.qtys.join(' + ')} ${e.name}` : e.name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   }, [plan, mealById])
 
   const assign = (day, slot, mealId) => {
@@ -84,7 +95,9 @@ export default function Meals() {
           }
         : {
             ...base,
-            ingredients: mealDraft.ingredients.map((i) => i.text.trim()).filter(Boolean),
+            ingredients: mealDraft.ingredients
+              .map((i) => ({ name: i.text.trim(), qty: i.qty.trim() }))
+              .filter((i) => i.name),
             instructions: mealDraft.instructions.trim(),
           }
     setMeals((list) => {
@@ -99,9 +112,10 @@ export default function Meals() {
       id: m.id,
       type: mealType(m),
       name: m.name,
-      ingredients: ((m.ingredients?.length ? m.ingredients : ['']) || ['']).map((t) => ({
+      ingredients: (m.ingredients?.length ? m.ingredients : [{ name: '', qty: '' }]).map((ing) => ({
         id: crypto.randomUUID(),
-        text: t,
+        qty: ingQty(ing),
+        text: ingName(ing),
       })),
       instructions: m.instructions || '',
       place: m.place || '',
@@ -111,9 +125,12 @@ export default function Meals() {
 
   // Ingredient-row editing within the recipe draft.
   const addIngredient = () =>
-    setMealDraft((d) => ({ ...d, ingredients: [...d.ingredients, { id: crypto.randomUUID(), text: '' }] }))
-  const setIngredient = (id, text) =>
-    setMealDraft((d) => ({ ...d, ingredients: d.ingredients.map((i) => (i.id === id ? { ...i, text } : i)) }))
+    setMealDraft((d) => ({
+      ...d,
+      ingredients: [...d.ingredients, { id: crypto.randomUUID(), qty: '', text: '' }],
+    }))
+  const setIngredient = (id, patch) =>
+    setMealDraft((d) => ({ ...d, ingredients: d.ingredients.map((i) => (i.id === id ? { ...i, ...patch } : i)) }))
   const removeIngredient = (id) =>
     setMealDraft((d) => ({ ...d, ingredients: d.ingredients.filter((i) => i.id !== id) }))
 
@@ -274,12 +291,13 @@ export default function Meals() {
             ) : (
               <ul className="space-y-1">
                 {grocery.map((item) => {
-                  const isChecked = !!checked[item.toLowerCase()]
+                  const key = item.name.toLowerCase()
+                  const isChecked = !!checked[key]
                   return (
-                    <li key={item}>
+                    <li key={key}>
                       <button
                         type="button"
-                        onClick={() => setChecked((c) => ({ ...c, [item.toLowerCase()]: !isChecked }))}
+                        onClick={() => setChecked((c) => ({ ...c, [key]: !isChecked }))}
                         className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left active:bg-white/5"
                       >
                         <span
@@ -290,7 +308,9 @@ export default function Meals() {
                         >
                           {isChecked && <CheckIcon className="h-4 w-4" />}
                         </span>
-                        <span className={isChecked ? 'text-gray-500 line-through' : 'text-gray-200'}>{item}</span>
+                        <span className={isChecked ? 'text-gray-500 line-through' : 'text-gray-200'}>
+                          {item.label}
+                        </span>
                       </button>
                     </li>
                   )
@@ -425,10 +445,16 @@ export default function Meals() {
                     {mealDraft.ingredients.map((ing) => (
                       <div key={ing.id} className="flex items-center gap-2">
                         <input
+                          className={`${fieldClass} w-24 flex-shrink-0`}
+                          placeholder="Qty"
+                          value={ing.qty}
+                          onChange={(e) => setIngredient(ing.id, { qty: e.target.value })}
+                        />
+                        <input
                           className={fieldClass}
-                          placeholder="e.g. 2 eggs"
+                          placeholder="Ingredient (e.g. eggs)"
                           value={ing.text}
-                          onChange={(e) => setIngredient(ing.id, e.target.value)}
+                          onChange={(e) => setIngredient(ing.id, { text: e.target.value })}
                         />
                         <button
                           type="button"
