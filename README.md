@@ -104,6 +104,9 @@ npm run preview -- --host
 
 - `VITE_FINNHUB_API_KEY` — Finnhub API key for live stock/crypto quotes. Without
   it, the Stocks page renders deterministic demo data.
+- `VITE_GOOGLE_MAPS_API_KEY` — Google Maps Platform key for the dashboard Traffic
+  module's live drive times (enable the **Routes API** on the key). Without it,
+  the Traffic module shows demo estimates.
 - Edit holdings in `DEFAULT_PORTFOLIO` (`src/pages/Stocks.jsx`) or override via
   the `home-center:portfolio` localStorage key.
 
@@ -114,9 +117,12 @@ and deploys it to GitHub Pages on every push to `main`.
 
 1. In the repo, go to **Settings → Pages** and set **Source** to
    **GitHub Actions**.
-2. (Optional) Add a `VITE_FINNHUB_API_KEY` repository secret for live quotes.
-   Note: client builds inline this value into the public bundle, so only use a
-   key you're comfortable exposing.
+2. (Optional) Add `VITE_FINNHUB_API_KEY` and/or `VITE_GOOGLE_MAPS_API_KEY`
+   repository secrets (**Settings → Secrets and variables → Actions**) for live
+   quotes and live traffic. The workflow passes both into the build.
+   Note: client builds inline these values into the public bundle, so only use
+   keys you're comfortable exposing — restrict them (HTTP referrer / API
+   restrictions) in their respective consoles.
 3. Push to `main` (or run the workflow manually from the **Actions** tab).
 
 The site publishes to `https://<owner>.github.io/home-center/`. Production

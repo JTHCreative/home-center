@@ -30,10 +30,12 @@ jobs:
 
       - run: npm ci
 
-      # Pass the Finnhub key from repo secrets if configured (optional).
+      # Pass API keys from repo secrets if configured (both optional — the app
+      # falls back to demo data for any key that isn't set).
       - run: npm run build
         env:
           VITE_FINNHUB_API_KEY: ${{ secrets.VITE_FINNHUB_API_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
 
       - uses: actions/configure-pages@v5
 
