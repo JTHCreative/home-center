@@ -6,13 +6,24 @@ import {
   CheckIcon,
   ChevronLeft,
   ChevronRight,
+  MoonIcon,
   PlusIcon,
+  SunIcon,
+  SunriseIcon,
   TrashIcon,
 } from '../components/Icons.jsx'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
 const DAY_SET = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+
+// Each meal slot gets a time-of-day theme: color + icon for its row.
+const SLOT_THEME = {
+  Breakfast: { color: '#D29922', Icon: SunriseIcon }, // yellow / morning
+  Lunch: { color: '#39D353', Icon: SunIcon }, // green / midday
+  Dinner: { color: '#58A6FF', Icon: MoonIcon }, // blue / night
+}
+const TAKEOUT_COLOR = '#F0883E'
 
 // --- Date helpers (local, no library; weeks start Sunday) --------------------
 const iso = (d) => {
@@ -279,14 +290,24 @@ export default function Meals() {
             </tr>
           </thead>
           <tbody>
-            {SLOTS.map((slot) => (
-              <tr key={slot}>
-                <td className="border-b border-r border-border p-3 text-sm font-semibold text-gray-300">
-                  {slot}
+            {SLOTS.map((slot) => {
+              const theme = SLOT_THEME[slot]
+              const SlotIcon = theme.Icon
+              return (
+              <tr key={slot} style={{ backgroundColor: `${theme.color}0D` }}>
+                <td
+                  className="border-b border-r border-border p-3"
+                  style={{ borderLeft: `3px solid ${theme.color}` }}
+                >
+                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: theme.color }}>
+                    <SlotIcon className="h-5 w-5" />
+                    <span>{slot}</span>
+                  </div>
                 </td>
                 {DAYS.map((day) => {
                   const m = mealById[plan[day]?.[slot]]
                   const takeout = m && mealType(m) === 'takeout'
+                  const accent = takeout ? TAKEOUT_COLOR : theme.color
                   return (
                     <td key={day} className="border-b border-r border-border p-1.5 align-top">
                       <button
@@ -295,8 +316,8 @@ export default function Meals() {
                         className={[
                           'flex min-h-[56px] w-full flex-col items-center justify-center rounded-lg px-2 py-2 text-center text-xs active:scale-[0.98]',
                           m ? 'font-medium shadow-glow' : 'bg-white/5 text-gray-600',
-                          m && (takeout ? 'bg-[#F0883E]/15 text-[#F0883E]' : 'bg-accent/10 text-accent'),
                         ].join(' ')}
+                        style={m ? { backgroundColor: `${accent}26`, color: accent } : undefined}
                       >
                         {m ? (
                           <>
@@ -311,7 +332,8 @@ export default function Meals() {
                   )
                 })}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </Card>
