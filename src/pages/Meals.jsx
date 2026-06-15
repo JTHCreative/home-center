@@ -395,7 +395,7 @@ export default function Meals() {
                           'flex min-h-[56px] w-full flex-col items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center text-xs active:scale-[0.98]',
                           m ? 'font-medium shadow-glow' : 'bg-white/5 text-gray-600',
                         ].join(' ')}
-                        style={m ? { backgroundColor: `${accent}26`, color: accent } : undefined}
+                        style={m ? { backgroundColor: `${accent}26`, color: accent, border: `1.5px solid ${accent}` } : undefined}
                       >
                         {m ? (
                           <>
