@@ -16,6 +16,7 @@ import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Tabs from '../components/Tabs.jsx'
+import DatePicker from '../components/DatePicker.jsx'
 import Toggle from '../components/Toggle.jsx'
 import Slider from '../components/Slider.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
@@ -927,12 +928,11 @@ function ShoppingModule() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-gray-500">Buy by (optional)</label>
-              <input
-                type="date"
-                className={fieldClass}
+              <label className="mb-2 block text-xs text-gray-500">Buy by (optional)</label>
+              <DatePicker
                 value={draft.date}
-                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+                onChange={(date) => setDraft({ ...draft, date })}
+                onClear={() => setDraft({ ...draft, date: '' })}
               />
             </div>
           </div>
