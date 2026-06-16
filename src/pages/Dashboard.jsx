@@ -16,6 +16,7 @@ import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Tabs from '../components/Tabs.jsx'
+import DatePicker from '../components/DatePicker.jsx'
 import Toggle from '../components/Toggle.jsx'
 import Slider from '../components/Slider.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
@@ -57,7 +58,8 @@ import {
 // (Traffic) can be added any number of times from the customize screen.
 const MODULE_TYPES = {
   meals: { title: "Today's Meals", configurable: false, multi: false },
-  weather: { title: 'Weather', configurable: true, multi: false },
+  shopping: { title: 'Shopping', configurable: false, multi: false },
+  weather: { title: 'Weather', configurable: true, multi: true },
   smarthome: { title: 'Smart Home', configurable: true, multi: false },
   stocks: { title: 'Stocks & Crypto', configurable: true, multi: false },
   goals: { title: 'Goals', configurable: true, multi: false },
@@ -65,7 +67,7 @@ const MODULE_TYPES = {
   traffic: { title: 'Traffic', configurable: true, multi: true },
 }
 // Order in which singleton instances seed a fresh dashboard / get backfilled.
-const SINGLETONS = ['meals', 'weather', 'smarthome', 'stocks', 'goals', 'calendar']
+const SINGLETONS = ['meals', 'shopping', 'smarthome', 'stocks', 'goals', 'calendar']
 
 function defaultSettings(type) {
   switch (type) {
@@ -133,8 +135,11 @@ function migrateDashboard(stored) {
   return { modules }
 }
 
-const moduleTitle = (m) =>
-  m.type === 'traffic' ? m.settings.label?.trim() || 'Traffic' : MODULE_TYPES[m.type].title
+const moduleTitle = (m) => {
+  if (m.type === 'traffic') return m.settings.label?.trim() || 'Traffic'
+  if (m.type === 'weather') return m.settings.location?.trim() || 'Weather'
+  return MODULE_TYPES[m.type].title
+}
 
 // --- Shared date helpers (local, weeks start Sunday) -------------------------
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -796,6 +801,147 @@ function TrafficModule({ settings }) {
   )
 }
 
+// --- Shopping ----------------------------------------------------------------
+// A simple shopping list with an optional "buy by" date per item. Items live in
+// their own shared state key so the list syncs across devices like everything else.
+const fmtShopDate = (date) => {
+  if (!date) return ''
+  const d = new Date(`${date}T00:00`)
+  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+function ShoppingModule() {
+  const [items, setItems] = useLocalState('shopping-list', [])
+  const [draft, setDraft] = useState(null) // { id?, text, date }
+  const today = iso(new Date())
+
+  const sorted = useMemo(() => {
+    return [...items].sort((a, b) => {
+      if (!!a.done !== !!b.done) return a.done ? 1 : -1 // unchecked first
+      const ad = a.date || '9999-12-31'
+      const bd = b.date || '9999-12-31'
+      if (ad !== bd) return ad < bd ? -1 : 1
+      return (a.text || '').localeCompare(b.text || '')
+    })
+  }, [items])
+
+  const save = () => {
+    const text = draft.text.trim()
+    if (!text) return
+    const item = { id: draft.id || crypto.randomUUID(), text, date: draft.date || '', done: draft.done || false }
+    setItems((list) => {
+      const exists = list.some((i) => i.id === item.id)
+      return exists ? list.map((i) => (i.id === item.id ? item : i)) : [...list, item]
+    })
+    setDraft(null)
+  }
+  const toggle = (id) => setItems((list) => list.map((i) => (i.id === id ? { ...i, done: !i.done } : i)))
+  const remove = (id) => setItems((list) => list.filter((i) => i.id !== id))
+
+  // Date urgency color: overdue/today = red, within 3 days = amber, else gray.
+  const dateClass = (date, done) => {
+    if (done) return 'text-gray-500'
+    if (date < today) return 'text-loss'
+    if (date === today) return 'text-loss'
+    const diff = (new Date(`${date}T00:00`) - new Date(`${today}T00:00`)) / 86_400_000
+    return diff <= 3 ? 'text-[#D29922]' : 'text-gray-400'
+  }
+
+  return (
+    <div>
+      {sorted.length === 0 ? (
+        <p className="text-sm text-gray-500">Nothing to buy yet. Add an item below.</p>
+      ) : (
+        <ul className="scroll-area max-h-72 space-y-1 overflow-y-auto pr-1">
+          {sorted.map((it) => (
+            <li key={it.id} className="flex items-center gap-3 rounded-lg px-1 py-1">
+              <button
+                type="button"
+                onClick={() => toggle(it.id)}
+                aria-label={`Toggle ${it.text}`}
+                className={[
+                  'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
+                  it.done ? 'border-gain bg-gain text-bg' : 'border-border',
+                ].join(' ')}
+              >
+                {it.done && <CheckIcon className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraft({ id: it.id, text: it.text, date: it.date || '', done: it.done })}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left active:opacity-70"
+              >
+                <span className={it.done ? 'truncate text-gray-500 line-through' : 'truncate text-gray-100'}>
+                  {it.text}
+                </span>
+                {it.date && (
+                  <span className={`flex-shrink-0 font-mono text-xs ${dateClass(it.date, it.done)}`}>
+                    {it.date === today && !it.done ? 'Today' : fmtShopDate(it.date)}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => remove(it.id)}
+                aria-label={`Remove ${it.text}`}
+                className="flex-shrink-0 rounded p-1.5 text-gray-600 active:scale-95 active:text-loss"
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setDraft({ text: '', date: '' })}
+        className="mt-3 flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
+      >
+        <PlusIcon className="h-4 w-4" /> Add item
+      </button>
+
+      <Modal
+        open={!!draft}
+        onClose={() => setDraft(null)}
+        title={draft?.id ? 'Edit item' : 'Add item'}
+        size="narrow"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDraft(null)}>
+              Cancel
+            </Button>
+            <Button onClick={save}>Save</Button>
+          </>
+        }
+      >
+        {draft && (
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">Item</label>
+              <input
+                autoFocus
+                className={fieldClass}
+                placeholder="e.g. Milk"
+                value={draft.text}
+                onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs text-gray-500">Buy by (optional)</label>
+              <DatePicker
+                value={draft.date}
+                onChange={(date) => setDraft({ ...draft, date })}
+                onClear={() => setDraft({ ...draft, date: '' })}
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
 // --- Weather ----------------------------------------------------------------
 const WX_ICON = {
   clear: SunIcon,
@@ -950,6 +1096,8 @@ function ModuleBody({ module }) {
   switch (type) {
     case 'meals':
       return <MealsModule />
+    case 'shopping':
+      return <ShoppingModule />
     case 'weather':
       return <WeatherModule settings={settings} />
     case 'smarthome':
@@ -1287,25 +1435,34 @@ function SortableModule({ id, children }) {
   )
 }
 
-// Picker for adding modules: re-show any hidden singletons, or add a new
-// Traffic route (which can have several instances).
-function AddModuleModal({ open, onClose, modules, onShow, onAddTraffic }) {
+// Module types that can be added multiple times from the Add Module screen.
+const ADDABLE = [
+  { type: 'traffic', Icon: CarIcon, label: 'Traffic route', desc: 'Live drive time with current traffic' },
+  { type: 'weather', Icon: CloudIcon, label: 'Weather', desc: 'Current conditions for a location' },
+]
+
+// Picker for adding modules: add a new instance of a multi-type module (Traffic,
+// Weather), or re-show any hidden singletons.
+function AddModuleModal({ open, onClose, modules, onShow, onAdd }) {
   const hidden = modules.filter((m) => MODULE_TYPES[m.type] && !MODULE_TYPES[m.type].multi && !m.enabled)
   return (
     <Modal open={open} onClose={onClose} title="Add a module" footer={<Button onClick={onClose}>Done</Button>}>
       <div className="space-y-2">
-        <button
-          type="button"
-          onClick={onAddTraffic}
-          className="flex w-full items-center gap-3 rounded-xl bg-white/5 px-4 py-3 text-left text-gray-200 active:scale-[0.98]"
-        >
-          <CarIcon className="h-5 w-5 flex-shrink-0 text-accent" />
-          <span className="flex-1">
-            <span className="block font-semibold text-white">Traffic route</span>
-            <span className="text-xs text-gray-500">Live drive time with current traffic</span>
-          </span>
-          <PlusIcon className="h-5 w-5 text-accent" />
-        </button>
+        {ADDABLE.filter((a) => MODULE_TYPES[a.type]?.multi).map((a) => (
+          <button
+            key={a.type}
+            type="button"
+            onClick={() => onAdd(a.type)}
+            className="flex w-full items-center gap-3 rounded-xl bg-white/5 px-4 py-3 text-left text-gray-200 active:scale-[0.98]"
+          >
+            <a.Icon className="h-5 w-5 flex-shrink-0 text-accent" />
+            <span className="flex-1">
+              <span className="block font-semibold text-white">{a.label}</span>
+              <span className="text-xs text-gray-500">{a.desc}</span>
+            </span>
+            <PlusIcon className="h-5 w-5 text-accent" />
+          </button>
+        ))}
 
         {hidden.length > 0 && (
           <>
@@ -1350,11 +1507,11 @@ export default function Dashboard() {
     setModules((ms) => ms.map((m) => (m.id === id ? { ...m, settings: { ...m.settings, ...patch } } : m)))
   const removeModule = (id) => setModules((ms) => ms.filter((m) => m.id !== id))
 
-  const addTraffic = () => {
-    const inst = newInstance('traffic')
+  const addInstance = (type) => {
+    const inst = newInstance(type)
     setModules((ms) => [...ms, inst])
     setAdding(false)
-    setConfigFor(inst.id) // jump straight into setting the route
+    if (MODULE_TYPES[type].configurable) setConfigFor(inst.id) // jump straight into setup
   }
   const showModule = (id) => {
     setEnabled(id, true)
@@ -1469,7 +1626,7 @@ export default function Dashboard() {
         onClose={() => setAdding(false)}
         modules={modules}
         onShow={showModule}
-        onAddTraffic={addTraffic}
+        onAdd={addInstance}
       />
     </div>
   )
