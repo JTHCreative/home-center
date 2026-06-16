@@ -266,31 +266,57 @@ function useQuotes(symbols) {
 }
 
 // --- Traffic helper ----------------------------------------------------------
-// To keep API usage (and cost) minimal, the Traffic module only polls during
-// commute windows, only while the dashboard tab is actually visible, and at a
-// relaxed cadence. Outside those windows it shows the last reading.
+// To keep API usage (and cost) minimal, the Traffic module only polls during the
+// configured time-of-day windows, only while the dashboard tab is actually
+// visible, and at a relaxed cadence. Outside those windows it shows the last
+// reading.
 const COMMUTE_WINDOWS = [
   { start: 6 * 60, end: 8 * 60 }, //  6:00–8:00 am
   { start: 16 * 60, end: 18 * 60 }, //  4:00–6:00 pm
 ]
 const TRAFFIC_POLL_MS = 5 * 60 * 1000 // 5 minutes
 
-const inCommuteWindow = (d = new Date()) => {
-  const min = d.getHours() * 60 + d.getMinutes()
-  return COMMUTE_WINDOWS.some((w) => min >= w.start && min < w.end)
+// Windows are stored on the module as { start, end } minutes-from-midnight. Fall
+// back to the default commute windows when a module has none configured yet.
+const normalizeWindows = (w) => {
+  const list = Array.isArray(w)
+    ? w.filter((x) => x && Number.isFinite(x.start) && Number.isFinite(x.end) && x.end > x.start)
+    : []
+  return list.length ? list : COMMUTE_WINDOWS
 }
+const inWindows = (windows, d = new Date()) => {
+  const min = d.getHours() * 60 + d.getMinutes()
+  return windows.some((w) => min >= w.start && min < w.end)
+}
+// Minutes-from-midnight <-> 12-hour parts, for the config time pickers.
+const minToParts = (min) => {
+  let h = Math.floor(min / 60)
+  const m = min % 60
+  const ap = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  return { h, m, ap }
+}
+const partsToMin = (h, m, ap) => ((h % 12) + (ap === 'PM' ? 12 : 0)) * 60 + m
+const fmtClock = (min) => {
+  const { h, m, ap } = minToParts(min)
+  return `${h}${m ? `:${String(m).padStart(2, '0')}` : ''}${ap.toLowerCase()}`
+}
+const fmtWindows = (windows) => windows.map((w) => `${fmtClock(w.start)}–${fmtClock(w.end)}`).join(' · ')
+
 const tabVisible = () =>
   typeof document === 'undefined' || document.visibilityState === 'visible'
 
-function useTravelTime(origin, destination, via) {
+function useTravelTime(origin, destination, via, windows = COMMUTE_WINDOWS) {
   const o = origin?.trim() || ''
   const d = destination?.trim() || ''
   // Stable key so the effect only re-runs when the via stops actually change.
   const viaKey = (via || []).map((v) => v?.trim() || '').filter(Boolean).join('|')
+  // Stable key so the effect re-subscribes only when the windows actually change.
+  const winKey = windows.map((w) => `${w.start}-${w.end}`).join('|')
   const [data, setData] = useState(null)
   const [updatedAt, setUpdatedAt] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [active, setActive] = useState(() => inCommuteWindow())
+  const [active, setActive] = useState(() => inWindows(windows))
 
   useEffect(() => {
     if (!o || !d) {
@@ -299,11 +325,15 @@ function useTravelTime(origin, destination, via) {
     }
     let cancelled = false
     const stops = viaKey ? viaKey.split('|') : []
+    const wins = winKey.split('|').map((s) => {
+      const [start, end] = s.split('-').map(Number)
+      return { start, end }
+    })
 
-    // Only spend an API call when we're in a commute window AND the dashboard is
+    // Only spend an API call when we're in a polling window AND the dashboard is
     // on-screen; otherwise the last reading stays put.
     const load = async () => {
-      if (!inCommuteWindow() || !tabVisible()) return
+      if (!inWindows(wins) || !tabVisible()) return
       setLoading(true)
       const r = await fetchTravelTime(o, d, stops)
       if (!cancelled) {
@@ -315,12 +345,12 @@ function useTravelTime(origin, destination, via) {
 
     const tick = () => {
       if (cancelled) return
-      setActive(inCommuteWindow())
+      setActive(inWindows(wins))
       load()
     }
-    // When the tab becomes visible again mid-commute, refresh straight away.
+    // When the tab becomes visible again mid-window, refresh straight away.
     const onVisibility = () => {
-      setActive(inCommuteWindow())
+      setActive(inWindows(wins))
       if (tabVisible()) load()
     }
 
@@ -332,7 +362,7 @@ function useTravelTime(origin, destination, via) {
       clearInterval(id)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [o, d, viaKey])
+  }, [o, d, viaKey, winKey])
 
   return { data, updatedAt, loading, active }
 }
@@ -745,7 +775,8 @@ function CalendarModule() {
 function TrafficModule({ settings }) {
   const { origin, destination, via } = settings
   const stops = (via || []).map((v) => v?.trim()).filter(Boolean)
-  const { data, updatedAt, active } = useTravelTime(origin, destination, via)
+  const windows = normalizeWindows(settings.windows)
+  const { data, updatedAt, active } = useTravelTime(origin, destination, via, windows)
 
   if (!origin?.trim() || !destination?.trim()) {
     return (
@@ -811,15 +842,17 @@ function TrafficModule({ settings }) {
         </div>
       ) : (
         <p className="text-sm text-gray-500">
-          {active
-            ? 'Checking traffic…'
-            : 'Live drive time updates during your commute — 6–8am and 4–6pm.'}
+          {active ? 'Checking traffic…' : `Live drive time updates during ${fmtWindows(windows)}.`}
         </p>
       )}
 
       {mapUrl ? (
         <div className="mt-3 overflow-hidden rounded-lg border border-white/10">
+          {/* Remount (reload) the embed whenever the Routes poll succeeds, so the
+              map refreshes its traffic-aware route on the same commute-window
+              cadence as the drive-time number. Maps Embed loads are free. */}
           <iframe
+            key={updatedAt ? updatedAt.getTime() : 'map'}
             title="Commute map"
             src={mapUrl}
             className="block h-48 w-full"
@@ -840,12 +873,12 @@ function TrafficModule({ settings }) {
 
       <div className="mt-3 text-right text-xs text-gray-600">
         {data?.mock && (hasGoogleMapsKey ? 'Traffic unavailable · ' : 'Demo data · ')}
-        {!active && 'Paused outside commute · '}
+        {!active && 'Paused outside set hours · '}
         {updatedAt
           ? `Updated ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
           : active
             ? 'Checking…'
-            : 'Checks 6–8am · 4–6pm'}
+            : `Checks ${fmtWindows(windows)}`}
       </div>
     </div>
   )
@@ -1623,9 +1656,47 @@ function WeatherConfig({ settings, onChange }) {
   )
 }
 
+// Touch-friendly 12-hour time picker (hour : minute + AM/PM), editing a value in
+// minutes-from-midnight.
+const timeSelectClass =
+  'rounded-lg border border-border bg-bg px-2 py-2 text-sm text-white outline-none focus:border-accent'
+function TimeField({ value, onChange }) {
+  const { h, m, ap } = minToParts(value)
+  const set = (nh, nm, nap) => onChange(partsToMin(nh, nm, nap))
+  return (
+    <div className="flex items-center gap-1">
+      <select className={timeSelectClass} value={h} onChange={(e) => set(Number(e.target.value), m, ap)}>
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+      <span className="text-gray-500">:</span>
+      <select className={timeSelectClass} value={m} onChange={(e) => set(h, Number(e.target.value), ap)}>
+        {Array.from({ length: 12 }, (_, i) => i * 5).map((n) => (
+          <option key={n} value={n}>
+            {String(n).padStart(2, '0')}
+          </option>
+        ))}
+      </select>
+      <select className={timeSelectClass} value={ap} onChange={(e) => set(h, m, e.target.value)}>
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+    </div>
+  )
+}
+
 function TrafficConfig({ settings, onChange }) {
   const via = settings.via || []
   const setVia = (next) => onChange({ via: next })
+  // Use the raw saved windows while editing (so a half-finished window doesn't
+  // vanish); fall back to the defaults when none are set yet.
+  const windows =
+    Array.isArray(settings.windows) && settings.windows.length ? settings.windows : COMMUTE_WINDOWS
+  const setWindows = (next) => onChange({ windows: next })
+  const invalid = windows.some((w) => w.end <= w.start)
   return (
     <div className="space-y-4">
       <div>
@@ -1688,10 +1759,51 @@ function TrafficConfig({ settings, onChange }) {
           </button>
         </div>
       </div>
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Polling windows</label>
+        <p className="mb-2 text-xs text-gray-600">
+          Live traffic only refreshes (every 5 minutes, while the dashboard is on-screen) during these
+          times of day — set each window’s start and end below.
+        </p>
+        <div className="space-y-2">
+          {windows.map((w, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <TimeField
+                value={w.start}
+                onChange={(v) => setWindows(windows.map((x, k) => (k === i ? { ...x, start: v } : x)))}
+              />
+              <span className="text-xs text-gray-500">to</span>
+              <TimeField
+                value={w.end}
+                onChange={(v) => setWindows(windows.map((x, k) => (k === i ? { ...x, end: v } : x)))}
+              />
+              <button
+                type="button"
+                onClick={() => setWindows(windows.filter((_, k) => k !== i))}
+                aria-label="Remove window"
+                className="ml-auto rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
+              >
+                <TrashIcon className="h-5 w-5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setWindows([...windows, { start: 9 * 60, end: 10 * 60 }])}
+            className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
+          >
+            <PlusIcon className="h-4 w-4" /> Add window
+          </button>
+        </div>
+        {invalid && (
+          <p className="mt-1 text-xs text-loss">Each window’s end time must be after its start.</p>
+        )}
+        {windows.length === 0 && (
+          <p className="mt-1 text-xs text-gray-600">No windows set — defaults to 6–8am and 4–6pm.</p>
+        )}
+      </div>
       <p className="text-xs text-gray-600">
-        Shows the current driving time with live traffic from Google. To keep API
-        usage low it refreshes every 5 minutes during your commute (6–8am and 4–6pm)
-        while the dashboard is on-screen.{' '}
+        Shows the current driving time with live traffic from Google.{' '}
         {hasGoogleMapsKey
           ? ''
           : 'Add VITE_GOOGLE_MAPS_API_KEY for live data — showing demo estimates until then.'}

@@ -17,8 +17,16 @@ const LINKS = [
   { to: '/calendar', label: 'Calendar', Icon: CalendarIcon },
   { to: '/meals', label: 'Meals', Icon: MealIcon },
   { to: '/goals', label: 'Goals', Icon: GoalIcon },
-  { to: '/settings', label: 'Settings', Icon: GearIcon },
 ]
+// Pinned to the bottom of the sidebar, below the main navigation.
+const SETTINGS_LINK = { to: '/settings', label: 'Settings', Icon: GearIcon }
+
+const navLinkClass = ({ isActive }) =>
+  [
+    'flex items-center gap-4 rounded-xl px-4 py-4 text-base font-medium transition-colors',
+    'active:scale-[0.98]',
+    isActive ? 'bg-accent/15 text-accent shadow-glow' : 'text-gray-300 hover:bg-white/5',
+  ].join(' ')
 
 function useClock() {
   const [now, setNow] = useState(() => new Date())
@@ -55,23 +63,17 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex flex-1 flex-col gap-1 p-3">
         {LINKS.map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-4 rounded-xl px-4 py-4 text-base font-medium transition-colors',
-                'active:scale-[0.98]',
-                isActive
-                  ? 'bg-accent/15 text-accent shadow-glow'
-                  : 'text-gray-300 hover:bg-white/5',
-              ].join(' ')
-            }
-          >
+          <NavLink key={to} to={to} className={navLinkClass}>
             <Icon className="h-6 w-6 flex-shrink-0" />
             <span>{label}</span>
           </NavLink>
         ))}
+
+        {/* Settings pinned to the bottom of the nav */}
+        <NavLink to={SETTINGS_LINK.to} className={(s) => `mt-auto ${navLinkClass(s)}`}>
+          <SETTINGS_LINK.Icon className="h-6 w-6 flex-shrink-0" />
+          <span>{SETTINGS_LINK.label}</span>
+        </NavLink>
       </nav>
 
       <div className="px-6 py-4 text-xs text-gray-600">Home Center</div>
