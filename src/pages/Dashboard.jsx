@@ -85,7 +85,7 @@ const MODULE_TYPES = {
   shopping: { title: 'Shopping', configurable: false, multi: false },
   weather: { title: 'Weather', configurable: true, multi: true },
   smarthome: { title: 'Smart Home', configurable: true, multi: false },
-  stocks: { title: 'Stocks & Crypto', configurable: true, multi: false },
+  stocks: { title: 'Investments', configurable: true, multi: false },
   goals: { title: 'Goals', configurable: true, multi: false },
   calendar: { title: "Today's Events", configurable: false, multi: false },
   traffic: { title: 'Traffic', configurable: true, multi: true },

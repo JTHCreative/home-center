@@ -14,7 +14,7 @@ import {
 export const PAGE_CATALOG = [
   { id: 'dashboard', to: '/dashboard', label: 'Home', Icon: GridIcon },
   { id: 'smart-home', to: '/smart-home', label: 'Smart Home', Icon: HomeIcon },
-  { id: 'stocks', to: '/stocks', label: 'Stocks & Crypto', Icon: ChartIcon },
+  { id: 'stocks', to: '/stocks', label: 'Investments', Icon: ChartIcon },
   { id: 'calendar', to: '/calendar', label: 'Calendar', Icon: CalendarIcon },
   { id: 'meals', to: '/meals', label: 'Meals', Icon: MealIcon },
   { id: 'goals', to: '/goals', label: 'Goals', Icon: GoalIcon },
