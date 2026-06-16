@@ -86,6 +86,39 @@ export function SpotifyIcon(props) {
   )
 }
 
+export function PlayIcon(props) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <path d="M7 5v14l11-7z" />
+    </svg>
+  )
+}
+
+export function PauseIcon(props) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  )
+}
+
+export function SkipBackIcon(props) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <path d="M7 5h2v14H7zM20 5v14l-10-7z" />
+    </svg>
+  )
+}
+
+export function SkipForwardIcon(props) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <path d="M15 5h2v14h-2zM4 5v14l10-7z" />
+    </svg>
+  )
+}
+
 export function ChartIcon(props) {
   return (
     <svg {...base} {...props}>
