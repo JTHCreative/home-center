@@ -1,24 +1,10 @@
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import {
-  CalendarIcon,
-  ChartIcon,
-  GearIcon,
-  GoalIcon,
-  GridIcon,
-  HomeIcon,
-  MealIcon,
-} from './Icons.jsx'
+import { GearIcon } from './Icons.jsx'
+import { useLocalState } from '../lib/storage.js'
+import { pageById, reconcileMenu } from '../lib/menu.js'
 
-const LINKS = [
-  { to: '/dashboard', label: 'Home', Icon: GridIcon },
-  { to: '/smart-home', label: 'Smart Home', Icon: HomeIcon },
-  { to: '/stocks', label: 'Stocks & Crypto', Icon: ChartIcon },
-  { to: '/calendar', label: 'Calendar', Icon: CalendarIcon },
-  { to: '/meals', label: 'Meals', Icon: MealIcon },
-  { to: '/goals', label: 'Goals', Icon: GoalIcon },
-]
-// Pinned to the bottom of the sidebar, below the main navigation.
+// Pinned to the bottom of the sidebar, below the configurable navigation.
 const SETTINGS_LINK = { to: '/settings', label: 'Settings', Icon: GearIcon }
 
 const navLinkClass = ({ isActive }) =>
@@ -39,6 +25,9 @@ function useClock() {
 
 export default function Sidebar() {
   const now = useClock()
+  // Menu order/contents are configured on the Settings page (shared via storage).
+  const [menuConfig] = useLocalState('menu-config', null, reconcileMenu)
+  const links = menuConfig.menu.map((id) => pageById[id]).filter(Boolean)
   const time = now.toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -62,7 +51,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex flex-1 flex-col gap-1 p-3">
-        {LINKS.map(({ to, label, Icon }) => (
+        {links.map(({ to, label, Icon }) => (
           <NavLink key={to} to={to} className={navLinkClass}>
             <Icon className="h-6 w-6 flex-shrink-0" />
             <span>{label}</span>
