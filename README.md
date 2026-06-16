@@ -12,7 +12,9 @@ touch targets and no hover-only interactions.
   controls, a chosen Stocks/Crypto watchlist with live quotes, today's planned
   meals (breakfast/lunch/dinner, with who's providing each), a **Shopping** list
   with optional "buy by" dates, current **Weather** for any number of locations
-  (via Open-Meteo — free, no API key), a chosen Goals list (interactive), today's
+  (via Open-Meteo — free, no API key), a **Spotify** player (paste a
+  playlist/album/track link — embed previews by default, or full-track playback
+  with a Premium login), a chosen Goals list (interactive), today's
   calendar events, and **Traffic** routes showing live drive time with current
   traffic from Google (set a start + destination, optionally forcing a specific
   route through "via" waypoints; add as many routes as you like). To keep API usage minimal, Traffic only polls during commute windows
@@ -113,6 +115,16 @@ npm run preview -- --host
   the Traffic module shows demo estimates. Requests use the *Compute Routes
   Essentials* SKU (first 10k calls/month free, then $5/1k); with commute-window
   polling, a handful of routes stay within the free tier.
+- `VITE_SPOTIFY_CLIENT_ID` — Spotify app Client ID enabling full-track playback in
+  the Spotify module (OAuth in a popup + the Web Playback SDK; **Premium**
+  required to stream). Create an app at
+  [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard),
+  using the *Web Playback SDK*, and add your app URL(s) as **Redirect URIs**
+  (e.g. `http://127.0.0.1:5173/` for local dev and
+  `https://<owner>.github.io/home-center/` for Pages — they must match exactly).
+  No client secret is needed (PKCE). Without it, the Spotify module shows the
+  embed player (30-second previews unless the kiosk browser is signed in to
+  Spotify). Tokens are stored only on the device, never synced.
 - Edit holdings in `DEFAULT_PORTFOLIO` (`src/pages/Stocks.jsx`) or override via
   the `home-center:portfolio` localStorage key.
 
@@ -123,12 +135,14 @@ and deploys it to GitHub Pages on every push to `main`.
 
 1. In the repo, go to **Settings → Pages** and set **Source** to
    **GitHub Actions**.
-2. (Optional) Add `VITE_FINNHUB_API_KEY` and/or `VITE_GOOGLE_MAPS_API_KEY`
-   repository secrets (**Settings → Secrets and variables → Actions**) for live
-   quotes and live traffic. The workflow passes both into the build.
+2. (Optional) Add `VITE_FINNHUB_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, and/or
+   `VITE_SPOTIFY_CLIENT_ID` repository secrets (**Settings → Secrets and
+   variables → Actions**) for live quotes, live traffic, and full Spotify
+   playback. The workflow passes them into the build.
    Note: client builds inline these values into the public bundle, so only use
-   keys you're comfortable exposing — restrict them (HTTP referrer / API
-   restrictions) in their respective consoles.
+   keys you're comfortable exposing — restrict them (HTTP referrer / API / app
+   redirect-URI restrictions) in their respective consoles. (The Spotify Client
+   ID is public by design; PKCE means there's no secret to leak.)
 3. Push to `main` (or run the workflow manually from the **Actions** tab).
 
 The site publishes to `https://<owner>.github.io/home-center/`. Production

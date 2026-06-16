@@ -25,6 +25,21 @@ import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
 import { directionsUrl, fetchTravelTime, hasGoogleMapsKey } from '../lib/googleMaps.js'
 import { describeWeather, fetchWeather, geocode } from '../lib/weather.js'
 import {
+  hasSpotifyClientId,
+  initPlayer,
+  isAuthed as spotifyAuthed,
+  login as spotifyLogin,
+  logout as spotifyLogout,
+  nextTrack,
+  parseSpotify,
+  play as spotifyPlay,
+  previousTrack,
+  spotifyEmbedUrl,
+  subscribeAuth as subscribeSpotifyAuth,
+  subscribePlayer,
+  togglePlay,
+} from '../lib/spotify.js'
+import {
   CarIcon,
   CheckIcon,
   CloudIcon,
@@ -34,8 +49,13 @@ import {
   GearIcon,
   GripIcon,
   MoonIcon,
+  PauseIcon,
+  PlayIcon,
   PlusIcon,
   PowerIcon,
+  SkipBackIcon,
+  SkipForwardIcon,
+  SpotifyIcon,
   SunIcon,
   SunriseIcon,
   TrashIcon,
@@ -65,6 +85,7 @@ const MODULE_TYPES = {
   goals: { title: 'Goals', configurable: true, multi: false },
   calendar: { title: "Today's Events", configurable: false, multi: false },
   traffic: { title: 'Traffic', configurable: true, multi: true },
+  spotify: { title: 'Spotify', configurable: true, multi: true },
 }
 // Order in which singleton instances seed a fresh dashboard / get backfilled.
 const SINGLETONS = ['meals', 'shopping', 'smarthome', 'stocks', 'goals', 'calendar']
@@ -81,6 +102,8 @@ function defaultSettings(type) {
       return { label: '', origin: '', destination: '', via: [] }
     case 'weather':
       return { location: '', units: 'fahrenheit' }
+    case 'spotify':
+      return { label: '', url: '' }
     default:
       return {}
   }
@@ -138,6 +161,7 @@ function migrateDashboard(stored) {
 const moduleTitle = (m) => {
   if (m.type === 'traffic') return m.settings.label?.trim() || 'Traffic'
   if (m.type === 'weather') return m.settings.location?.trim() || 'Weather'
+  if (m.type === 'spotify') return m.settings.label?.trim() || 'Spotify'
   return MODULE_TYPES[m.type].title
 }
 
@@ -1091,6 +1115,128 @@ function WeatherModule({ settings }) {
   )
 }
 
+function SpotifyEmbed({ parsed }) {
+  // Single tracks/episodes look best compact; playlists/albums get the tall card.
+  const height = parsed.type === 'track' || parsed.type === 'episode' ? 152 : 352
+  return (
+    <iframe
+      title="Spotify player"
+      src={spotifyEmbedUrl(parsed)}
+      width="100%"
+      height={height}
+      loading="lazy"
+      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+      style={{ border: 0, borderRadius: 12 }}
+    />
+  )
+}
+
+// Full-playback player (Premium) via the Web Playback SDK.
+function SpotifyPlayer({ parsed, label }) {
+  const [state, setState] = useState(null)
+  useEffect(() => {
+    initPlayer()
+    return subscribePlayer(setState)
+  }, [])
+
+  if (state?.error) {
+    // e.g. non-Premium account — fall back to the preview embed.
+    return (
+      <div>
+        <p className="mb-3 text-sm text-loss">{state.error}</p>
+        <SpotifyEmbed parsed={parsed} />
+      </div>
+    )
+  }
+
+  const playback = state?.playback
+  const track = playback?.track_window?.current_track
+  const paused = playback?.paused ?? true
+  const art = track?.album?.images?.[0]?.url
+
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        {art ? (
+          <img src={art} alt="" className="h-16 w-16 flex-shrink-0 rounded-lg" />
+        ) : (
+          <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-white/5">
+            <SpotifyIcon className="h-8 w-8 text-[#1DB954]" />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-white">{track?.name || 'Nothing playing'}</div>
+          <div className="truncate text-sm text-gray-400">
+            {track?.artists?.map((a) => a.name).join(', ') || (label || 'Spotify')}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-6">
+        <button type="button" onClick={previousTrack} aria-label="Previous" className="text-gray-300 active:scale-90">
+          <SkipBackIcon className="h-7 w-7" />
+        </button>
+        <button
+          type="button"
+          onClick={togglePlay}
+          aria-label={paused ? 'Play' : 'Pause'}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-bg shadow-glow active:scale-95"
+        >
+          {paused ? <PlayIcon className="h-7 w-7" /> : <PauseIcon className="h-7 w-7" />}
+        </button>
+        <button type="button" onClick={nextTrack} aria-label="Next" className="text-gray-300 active:scale-90">
+          <SkipForwardIcon className="h-7 w-7" />
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => spotifyPlay(parsed)}
+        disabled={!state?.ready}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-200 active:scale-95 disabled:opacity-40"
+      >
+        <PlayIcon className="h-4 w-4" /> Play {label?.trim() || `this ${parsed.type}`}
+      </button>
+      {!state?.ready && <p className="mt-2 text-center text-xs text-gray-500">Connecting to Spotify…</p>}
+    </div>
+  )
+}
+
+function SpotifyModule({ settings }) {
+  const parsed = parseSpotify(settings.url)
+  const [authed, setAuthed] = useState(spotifyAuthed())
+  useEffect(() => subscribeSpotifyAuth(setAuthed), [])
+
+  if (!settings.url?.trim()) {
+    return (
+      <p className="text-sm text-gray-500">
+        Add a Spotify link with the <GearIcon className="inline h-4 w-4" /> in customize mode (Share → Copy
+        link to a playlist, album, track, or show).
+      </p>
+    )
+  }
+  if (!parsed) {
+    return <p className="text-sm text-gray-500">That doesn’t look like a Spotify link.</p>
+  }
+
+  // Full playback when a Spotify app is configured and the kiosk is logged in;
+  // otherwise the embed (30-second previews unless signed in to Spotify).
+  if (hasSpotifyClientId && authed) {
+    return <SpotifyPlayer parsed={parsed} label={settings.label} />
+  }
+  return (
+    <div>
+      <SpotifyEmbed parsed={parsed} />
+      {hasSpotifyClientId && (
+        <p className="mt-2 text-xs text-gray-600">
+          Log in with Spotify Premium in the <GearIcon className="inline h-3.5 w-3.5" /> settings to play full
+          tracks.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function ModuleBody({ module }) {
   const { type, settings } = module
   switch (type) {
@@ -1110,6 +1256,8 @@ function ModuleBody({ module }) {
       return <CalendarModule />
     case 'traffic':
       return <TrafficModule settings={settings} />
+    case 'spotify':
+      return <SpotifyModule settings={settings} />
     default:
       return null
   }
@@ -1231,6 +1379,92 @@ function GoalsConfig({ value, onChange }) {
   )
 }
 
+function SpotifyConfig({ settings, onChange }) {
+  const parsed = parseSpotify(settings.url)
+  const url = settings.url?.trim()
+  const [authed, setAuthed] = useState(spotifyAuthed())
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => subscribeSpotifyAuth(setAuthed), [])
+
+  const doLogin = async () => {
+    setErr('')
+    setBusy(true)
+    try {
+      await spotifyLogin()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Label (optional)</label>
+        <input
+          className={fieldClass}
+          placeholder="e.g. Morning Mix"
+          value={settings.label || ''}
+          onChange={(e) => onChange({ label: e.target.value })}
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Spotify link</label>
+        <input
+          className={fieldClass}
+          placeholder="https://open.spotify.com/playlist/…"
+          value={settings.url || ''}
+          onChange={(e) => onChange({ url: e.target.value })}
+        />
+        {url && (
+          <p className={`mt-1 text-xs ${parsed ? 'text-gain' : 'text-loss'}`}>
+            {parsed
+              ? `${parsed.type.charAt(0).toUpperCase()}${parsed.type.slice(1)} linked.`
+              : 'Couldn’t read that Spotify link.'}
+          </p>
+        )}
+        <p className="mt-1 text-xs text-gray-600">
+          In Spotify, use Share → Copy link for a playlist, album, track, or show, then paste it here.
+        </p>
+      </div>
+
+      <div className="border-t border-border pt-4">
+        <label className="mb-1 block text-xs text-gray-500">Full playback (Spotify Premium)</label>
+        {!hasSpotifyClientId ? (
+          <p className="text-xs text-gray-600">
+            Set <span className="font-mono">VITE_SPOTIFY_CLIENT_ID</span> to enable login and full-track
+            playback. Without it the player shows 30-second previews.
+          </p>
+        ) : authed ? (
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-2 text-sm text-gain">
+              <SpotifyIcon className="h-4 w-4" /> Logged in to Spotify
+            </span>
+            <Button variant="ghost" className="px-4 py-2" onClick={spotifyLogout}>
+              Log out
+            </Button>
+          </div>
+        ) : (
+          <>
+            <Button onClick={doLogin} disabled={busy}>
+              <span className="flex items-center gap-2">
+                <SpotifyIcon className="h-4 w-4" /> {busy ? 'Opening…' : 'Log in with Spotify'}
+              </span>
+            </Button>
+            <p className="mt-1 text-xs text-gray-600">
+              Opens a popup to sign in. Premium is required to stream full tracks; the login applies to all
+              Spotify modules on this device.
+            </p>
+          </>
+        )}
+        {err && <p className="mt-1 text-xs text-loss">{err}</p>}
+      </div>
+    </div>
+  )
+}
+
 function WeatherConfig({ settings, onChange }) {
   return (
     <div className="space-y-4">
@@ -1340,6 +1574,8 @@ function TrafficConfig({ settings, onChange }) {
 
 function ModuleConfig({ module, onPatch }) {
   switch (module.type) {
+    case 'spotify':
+      return <SpotifyConfig settings={module.settings} onChange={onPatch} />
     case 'weather':
       return <WeatherConfig settings={module.settings} onChange={onPatch} />
     case 'smarthome':
@@ -1439,6 +1675,7 @@ function SortableModule({ id, children }) {
 const ADDABLE = [
   { type: 'traffic', Icon: CarIcon, label: 'Traffic route', desc: 'Live drive time with current traffic' },
   { type: 'weather', Icon: CloudIcon, label: 'Weather', desc: 'Current conditions for a location' },
+  { type: 'spotify', Icon: SpotifyIcon, label: 'Spotify', desc: 'Embed a playlist, album, or track' },
 ]
 
 // Picker for adding modules: add a new instance of a multi-type module (Traffic,
