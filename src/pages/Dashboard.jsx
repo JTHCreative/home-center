@@ -819,7 +819,11 @@ function TrafficModule({ settings }) {
 
       {mapUrl ? (
         <div className="mt-3 overflow-hidden rounded-lg border border-white/10">
+          {/* Remount (reload) the embed whenever the Routes poll succeeds, so the
+              map refreshes its traffic-aware route on the same commute-window
+              cadence as the drive-time number. Maps Embed loads are free. */}
           <iframe
+            key={updatedAt ? updatedAt.getTime() : 'map'}
             title="Commute map"
             src={mapUrl}
             className="block h-48 w-full"
