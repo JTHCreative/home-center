@@ -68,7 +68,7 @@ function defaultSettings(type) {
     case 'goals':
       return { sectionId: null } // null → first list
     case 'traffic':
-      return { label: '', origin: '', destination: '' }
+      return { label: '', origin: '', destination: '', via: [] }
     default:
       return {}
   }
@@ -238,9 +238,11 @@ const inCommuteWindow = (d = new Date()) => {
 const tabVisible = () =>
   typeof document === 'undefined' || document.visibilityState === 'visible'
 
-function useTravelTime(origin, destination) {
+function useTravelTime(origin, destination, via) {
   const o = origin?.trim() || ''
   const d = destination?.trim() || ''
+  // Stable key so the effect only re-runs when the via stops actually change.
+  const viaKey = (via || []).map((v) => v?.trim() || '').filter(Boolean).join('|')
   const [data, setData] = useState(null)
   const [updatedAt, setUpdatedAt] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -252,13 +254,14 @@ function useTravelTime(origin, destination) {
       return
     }
     let cancelled = false
+    const stops = viaKey ? viaKey.split('|') : []
 
     // Only spend an API call when we're in a commute window AND the dashboard is
     // on-screen; otherwise the last reading stays put.
     const load = async () => {
       if (!inCommuteWindow() || !tabVisible()) return
       setLoading(true)
-      const r = await fetchTravelTime(o, d)
+      const r = await fetchTravelTime(o, d, stops)
       if (!cancelled) {
         setData(r)
         setUpdatedAt(new Date())
@@ -285,7 +288,7 @@ function useTravelTime(origin, destination) {
       clearInterval(id)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [o, d])
+  }, [o, d, viaKey])
 
   return { data, updatedAt, loading, active }
 }
@@ -673,8 +676,9 @@ function CalendarModule() {
 }
 
 function TrafficModule({ settings }) {
-  const { origin, destination } = settings
-  const { data, updatedAt, active } = useTravelTime(origin, destination)
+  const { origin, destination, via } = settings
+  const stops = (via || []).map((v) => v?.trim()).filter(Boolean)
+  const { data, updatedAt, active } = useTravelTime(origin, destination, via)
 
   if (!origin?.trim() || !destination?.trim()) {
     return (
@@ -705,12 +709,17 @@ function TrafficModule({ settings }) {
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2 text-sm text-gray-300">
+      <div className="mb-3 flex items-start gap-2 text-sm text-gray-300">
         <CarIcon className="h-5 w-5 flex-shrink-0 text-accent" />
-        <span className="truncate">
-          <span className="text-white">{origin}</span>
-          <span className="mx-1.5 text-gray-600">→</span>
-          <span className="text-white">{destination}</span>
+        <span className="min-w-0">
+          <span className="block truncate">
+            <span className="text-white">{origin}</span>
+            <span className="mx-1.5 text-gray-600">→</span>
+            <span className="text-white">{destination}</span>
+          </span>
+          {stops.length > 0 && (
+            <span className="block truncate text-xs text-gray-500">via {stops.join(', ')}</span>
+          )}
         </span>
       </div>
 
@@ -723,7 +732,7 @@ function TrafficModule({ settings }) {
           <div className="text-right">
             {miles && <div className="font-mono text-lg text-gray-300">{miles}</div>}
             <a
-              href={directionsUrl(origin, destination)}
+              href={directionsUrl(origin, destination, via)}
               target="_blank"
               rel="noreferrer"
               className="mt-1 inline-block text-xs font-semibold text-accent underline decoration-dotted underline-offset-2"
@@ -890,6 +899,8 @@ function GoalsConfig({ value, onChange }) {
 }
 
 function TrafficConfig({ settings, onChange }) {
+  const via = settings.via || []
+  const setVia = (next) => onChange({ via: next })
   return (
     <div className="space-y-4">
       <div>
@@ -918,6 +929,39 @@ function TrafficConfig({ settings, onChange }) {
           value={settings.destination || ''}
           onChange={(e) => onChange({ destination: e.target.value })}
         />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Via (optional)</label>
+        <p className="mb-2 text-xs text-gray-600">
+          Force a specific route through these stops in order — a highway, exit, or place (e.g. “I-280 N”).
+        </p>
+        <div className="space-y-2">
+          {via.map((stop, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                className={fieldClass}
+                placeholder="Road or place to route through"
+                value={stop}
+                onChange={(e) => setVia(via.map((v, k) => (k === i ? e.target.value : v)))}
+              />
+              <button
+                type="button"
+                onClick={() => setVia(via.filter((_, k) => k !== i))}
+                aria-label="Remove waypoint"
+                className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
+              >
+                <TrashIcon className="h-5 w-5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setVia([...via, ''])}
+            className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
+          >
+            <PlusIcon className="h-4 w-4" /> Add waypoint
+          </button>
+        </div>
       </div>
       <p className="text-xs text-gray-600">
         Shows the current driving time with live traffic from Google. To keep API
