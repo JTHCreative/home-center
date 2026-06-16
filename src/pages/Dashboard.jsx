@@ -25,9 +25,11 @@ import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
 import { directionsUrl, embedMapUrl, fetchTravelTime, hasGoogleMapsKey } from '../lib/googleMaps.js'
 import { describeWeather, fetchWeather, geocode } from '../lib/weather.js'
 import {
+  getDevices as spotifyGetDevices,
   hasSpotifyClientId,
   initPlayer,
   isAuthed as spotifyAuthed,
+  localDeviceId,
   login as spotifyLogin,
   logout as spotifyLogout,
   nextTrack,
@@ -38,9 +40,11 @@ import {
   subscribeAuth as subscribeSpotifyAuth,
   subscribePlayer,
   togglePlay,
+  transferPlayback as spotifyTransfer,
 } from '../lib/spotify.js'
 import {
   CarIcon,
+  CastIcon,
   CheckIcon,
   CloudIcon,
   CloudLightningIcon,
@@ -1127,6 +1131,29 @@ function WeatherModule({ settings }) {
           </div>
         </div>
       </div>
+      {data.days?.length > 1 && (
+        <div className="mt-4 grid grid-cols-5 gap-1 border-t border-white/10 pt-3">
+          {data.days.slice(0, 5).map((day, i) => {
+            const { kind } = describeWeather(day.code)
+            const DayIcon = WX_ICON[kind] || CloudIcon
+            return (
+              <div key={day.date} className="flex flex-col items-center gap-1">
+                <div className="text-[11px] font-medium text-gray-400">
+                  {i === 0
+                    ? 'Today'
+                    : new Date(`${day.date}T00:00`).toLocaleDateString([], { weekday: 'short' })}
+                </div>
+                <DayIcon className="h-5 w-5" style={{ color: WX_COLOR[kind] || '#8B949E' }} />
+                <div className="text-xs leading-tight">
+                  <span className="font-semibold text-white">{Math.round(day.hi)}°</span>
+                  <span className="ml-1 text-gray-500">{Math.round(day.lo)}°</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       <div className="mt-3 text-right text-xs text-gray-600">
         {error && 'Stale · '}
         {updatedAt
@@ -1156,10 +1183,33 @@ function SpotifyEmbed({ parsed }) {
 // Full-playback player (Premium) via the Web Playback SDK.
 function SpotifyPlayer({ parsed, label }) {
   const [state, setState] = useState(null)
+  const [castOpen, setCastOpen] = useState(false)
+  const [devices, setDevices] = useState([])
+  const [loadingDevices, setLoadingDevices] = useState(false)
+  // Chosen Spotify Connect device; null means the in-app "Home Center" device.
+  const [target, setTarget] = useState(null)
   useEffect(() => {
     initPlayer()
     return subscribePlayer(setState)
   }, [])
+
+  const refreshDevices = async () => {
+    setLoadingDevices(true)
+    setDevices(await spotifyGetDevices())
+    setLoadingDevices(false)
+  }
+  const toggleCast = () => {
+    const next = !castOpen
+    setCastOpen(next)
+    if (next) refreshDevices()
+  }
+  const castTo = async (d) => {
+    await spotifyTransfer(d.id)
+    setTarget(d.id === localDeviceId() ? null : d.id)
+    setCastOpen(false)
+    // Give Spotify a moment to switch, then reflect the new active device.
+    setTimeout(refreshDevices, 700)
+  }
 
   if (state?.error) {
     // e.g. non-Premium account — fall back to the preview embed.
@@ -1175,6 +1225,7 @@ function SpotifyPlayer({ parsed, label }) {
   const track = playback?.track_window?.current_track
   const paused = playback?.paused ?? true
   const art = track?.album?.images?.[0]?.url
+  const activeDevice = devices.find((d) => d.isActive)
 
   return (
     <div>
@@ -1192,7 +1243,54 @@ function SpotifyPlayer({ parsed, label }) {
             {track?.artists?.map((a) => a.name).join(', ') || (label || 'Spotify')}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={toggleCast}
+          aria-label="Cast to a device"
+          aria-expanded={castOpen}
+          className={`flex-shrink-0 active:scale-90 ${castOpen || target ? 'text-accent' : 'text-gray-400'}`}
+        >
+          <CastIcon className="h-6 w-6" />
+        </button>
       </div>
+
+      {castOpen && (
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-1.5">
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="text-xs font-semibold text-gray-400">Cast to</span>
+            <button
+              type="button"
+              onClick={refreshDevices}
+              className="text-xs font-semibold text-accent active:scale-95"
+            >
+              Refresh
+            </button>
+          </div>
+          {loadingDevices && devices.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-gray-500">Finding devices…</p>
+          ) : devices.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-gray-500">
+              No devices found. Open Spotify on a speaker, phone, or TV and refresh.
+            </p>
+          ) : (
+            devices.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => castTo(d)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-gray-200 active:scale-[0.98] hover:bg-white/5"
+              >
+                <CastIcon className={`h-4 w-4 flex-shrink-0 ${d.isActive ? 'text-accent' : 'text-gray-500'}`} />
+                <span className="min-w-0 flex-1 truncate">
+                  {d.name}
+                  <span className="ml-1.5 text-xs text-gray-500">{d.type}</span>
+                </span>
+                {d.isActive && <CheckIcon className="h-4 w-4 flex-shrink-0 text-accent" />}
+              </button>
+            ))
+          )}
+        </div>
+      )}
 
       <div className="mt-4 flex items-center justify-center gap-6">
         <button type="button" onClick={previousTrack} aria-label="Previous" className="text-gray-300 active:scale-90">
@@ -1213,13 +1311,21 @@ function SpotifyPlayer({ parsed, label }) {
 
       <button
         type="button"
-        onClick={() => spotifyPlay(parsed)}
-        disabled={!state?.ready}
+        onClick={() => spotifyPlay(parsed, target)}
+        disabled={!state?.ready && !target}
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-200 active:scale-95 disabled:opacity-40"
       >
         <PlayIcon className="h-4 w-4" /> Play {label?.trim() || `this ${parsed.type}`}
       </button>
-      {!state?.ready && <p className="mt-2 text-center text-xs text-gray-500">Connecting to Spotify…</p>}
+      <div className="mt-2 text-center text-xs text-gray-500">
+        {!state?.ready && !target
+          ? 'Connecting to Spotify…'
+          : activeDevice
+            ? `Playing on ${activeDevice.name}`
+            : target
+              ? 'Casting to selected device'
+              : 'Playing on this screen'}
+      </div>
     </div>
   )
 }

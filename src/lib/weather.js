@@ -22,23 +22,29 @@ export async function geocode(query) {
   }
 }
 
-/** Current weather + today's high/low for a coordinate. `units` is 'fahrenheit' | 'celsius'. */
+/** Current weather + a 5-day daily forecast for a coordinate. `units` is 'fahrenheit' | 'celsius'. */
 export async function fetchWeather(latitude, longitude, units = 'fahrenheit') {
   const params = new URLSearchParams({
     latitude,
     longitude,
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day',
-    daily: 'temperature_2m_max,temperature_2m_min',
+    daily: 'temperature_2m_max,temperature_2m_min,weather_code',
     temperature_unit: units,
     wind_speed_unit: units === 'celsius' ? 'kmh' : 'mph',
     timezone: 'auto',
-    forecast_days: '1',
+    forecast_days: '5',
   })
   const res = await fetch(`${FORECAST}?${params.toString()}`)
   if (!res.ok) throw new Error(`Weather ${res.status}`)
   const data = await res.json()
   const c = data.current || {}
   const d = data.daily || {}
+  const days = (d.time || []).map((date, i) => ({
+    date,
+    hi: d.temperature_2m_max?.[i],
+    lo: d.temperature_2m_min?.[i],
+    code: d.weather_code?.[i],
+  }))
   return {
     temp: c.temperature_2m,
     feels: c.apparent_temperature,
@@ -48,6 +54,7 @@ export async function fetchWeather(latitude, longitude, units = 'fahrenheit') {
     isDay: c.is_day !== 0,
     hi: d.temperature_2m_max?.[0],
     lo: d.temperature_2m_min?.[0],
+    days,
     units,
   }
 }

@@ -238,16 +238,57 @@ export const togglePlay = () => player?.togglePlay()
 export const nextTrack = () => player?.nextTrack()
 export const previousTrack = () => player?.previousTrack()
 
-/** Start playback of a parsed {type,id} on the in-app device. */
-export async function play(parsed) {
-  if (!parsed || !deviceId) return
+/** Start playback of a parsed {type,id}. Targets the in-app device by default,
+ *  or `targetDeviceId` (a Spotify Connect device) when casting elsewhere. */
+export async function play(parsed, targetDeviceId) {
+  const dev = targetDeviceId || deviceId
+  if (!parsed || !dev) return
   const token = await getToken()
   if (!token) return
   const uri = `spotify:${parsed.type}:${parsed.id}`
   const body = parsed.type === 'track' || parsed.type === 'episode' ? { uris: [uri] } : { context_uri: uri }
-  await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+  await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${dev}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  })
+}
+
+// --- Spotify Connect (cast to a device) --------------------------------------
+/** The in-app Web Playback device id, once it's connected (null otherwise). */
+export const localDeviceId = () => deviceId
+
+/** List the account's available Spotify Connect devices. Returns [] on failure. */
+export async function getDevices() {
+  const token = await getToken()
+  if (!token) return []
+  try {
+    const res = await fetch('https://api.spotify.com/v1/me/player/devices', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.devices || []).map((d) => ({
+      id: d.id,
+      name: d.name,
+      type: d.type,
+      isActive: d.is_active,
+      volume: d.volume_percent,
+    }))
+  } catch {
+    return []
+  }
+}
+
+/** Move playback to a Spotify Connect device (the "cast" action). `play` keeps
+ *  it playing on the new device; pass false to transfer without auto-playing. */
+export async function transferPlayback(targetDeviceId, play = true) {
+  if (!targetDeviceId) return
+  const token = await getToken()
+  if (!token) return
+  await fetch('https://api.spotify.com/v1/me/player', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_ids: [targetDeviceId], play }),
   })
 }
