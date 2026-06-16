@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../components/Card.jsx'
 import Tabs from '../components/Tabs.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
+import Toggle from '../components/Toggle.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { useDragScroll } from '../lib/useDragScroll.js'
 import {
@@ -120,6 +121,7 @@ function emptyEvent(date, time = '09:00', categoryId = DEFAULT_CATEGORIES[1].id)
   return {
     id: crypto.randomUUID(),
     title: '',
+    allDay: false,
     startDate: date,
     startTime: time,
     endDate: date,
@@ -142,6 +144,7 @@ function migrateEvents(list) {
       return {
         id: e.id || crypto.randomUUID(),
         title: e.title || '',
+        allDay: !!e.allDay,
         startDate: date,
         startTime: time,
         endDate: date,
@@ -152,7 +155,8 @@ function migrateEvents(list) {
     })
 }
 
-const eventStart = (e) => `${e.startDate} ${e.startTime}`
+// Sort key: all-day events sort before timed ones on the same day.
+const eventStart = (e) => `${e.startDate} ${e.allDay ? '00:00' : e.startTime}`
 // Does an event's span cover the given ISO day?
 const coversDay = (e, key) => e.startDate <= key && key <= (e.endDate || e.startDate)
 const isMultiDay = (e) => (e.endDate || e.startDate) !== e.startDate
@@ -162,6 +166,11 @@ function rangeText(e) {
   const sd = new Date(`${e.startDate}T00:00`)
   const ed = new Date(`${(e.endDate || e.startDate)}T00:00`)
   const dayFmt = { weekday: 'short', month: 'short', day: 'numeric' }
+  if (e.allDay) {
+    return isMultiDay(e)
+      ? `${sd.toLocaleDateString([], dayFmt)} → ${ed.toLocaleDateString([], dayFmt)} · All day`
+      : `${sd.toLocaleDateString([], dayFmt)} · All day`
+  }
   if (!isMultiDay(e)) {
     return `${sd.toLocaleDateString([], dayFmt)} · ${e.startTime} – ${e.endTime}`
   }
@@ -201,10 +210,17 @@ function layoutDay(items) {
   return out
 }
 
+// Timed events on a day that cover the given day (all-day events are shown
+// separately in the all-day band), each is later sorted into lanes.
+const allDayOn = (events, key) =>
+  events
+    .filter((e) => e.allDay && coversDay(e, key))
+    .sort((a, b) => eventStart(a).localeCompare(eventStart(b)))
+
 // Events overlapping a given day, with per-day clamped start/end minutes.
 function daySegments(events, key) {
   const segs = events
-    .filter((e) => coversDay(e, key))
+    .filter((e) => !e.allDay && coversDay(e, key))
     .map((e) => {
       const segStart = key === e.startDate ? minutesOf(e.startTime) : 0
       let segEnd = key === (e.endDate || e.startDate) ? minutesOf(e.endTime) : 24 * 60
@@ -246,7 +262,7 @@ export default function Calendar() {
     // Keep the timeframe coherent: end can't precede start.
     const next = { ...draft, title: draft.title.trim() }
     if ((next.endDate || next.startDate) < next.startDate) next.endDate = next.startDate
-    if (next.endDate === next.startDate && minutesOf(next.endTime) <= minutesOf(next.startTime)) {
+    if (!next.allDay && next.endDate === next.startDate && minutesOf(next.endTime) <= minutesOf(next.startTime)) {
       next.endTime = addMinutes(next.startTime, 60)
     }
     setEvents((list) => {
@@ -508,7 +524,7 @@ function EventChip({ event, category, onOpen }) {
       style={{ backgroundColor: `${category.color}33` }}
     >
       <CategoryIcon name={category.icon} className="h-3 w-3 flex-shrink-0" style={{ color: category.color }} />
-      <span className="font-mono text-[10px] text-gray-300">{event.startTime}</span>
+      <span className="font-mono text-[10px] text-gray-300">{event.allDay ? 'All day' : event.startTime}</span>
       <span className="truncate">{event.title}</span>
     </button>
   )
@@ -583,6 +599,8 @@ function TimeGrid({ days, today, events, categories, showHeader, onAdd, onOpen }
   }, [ref])
 
   const nowMinutes = today.getHours() * 60 + today.getMinutes()
+  // Only show the all-day band when at least one displayed day has an all-day event.
+  const hasAllDay = days.some((d) => allDayOn(events, iso(d)).length > 0)
 
   return (
     <div className="flex h-full flex-col">
@@ -600,6 +618,25 @@ function TimeGrid({ days, today, events, categories, showHeader, onAdd, onOpen }
                 <div className={['font-mono text-lg', isToday ? 'font-bold text-accent' : 'text-gray-200'].join(' ')}>
                   {d.getDate()}
                 </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Pinned all-day band above the scrolling hour grid */}
+      {hasAllDay && (
+        <div className="flex flex-shrink-0 border-b border-border bg-bg/40 pr-[10px]">
+          <div className="flex w-14 flex-none items-center justify-end pr-2 text-[10px] uppercase text-gray-500">
+            All day
+          </div>
+          {days.map((d) => {
+            const key = iso(d)
+            return (
+              <div key={key} className="min-w-0 flex-1 space-y-1 border-l border-border p-1">
+                {allDayOn(events, key).map((e) => (
+                  <EventChip key={e.id} event={e} category={catOf(categories, e.category)} onOpen={onOpen} />
+                ))}
               </div>
             )
           })}
@@ -784,6 +821,14 @@ function EventModal({ draft, setDraft, categories, onClose, onSave, onDelete, on
           />
           {/* Time frame: from (date + time) → to (date + time) */}
           <div className="space-y-3 rounded-xl border border-border bg-bg/40 p-3">
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-gray-300">All day</span>
+              <Toggle
+                checked={!!draft.allDay}
+                onChange={(v) => set({ allDay: v })}
+                label="All day event"
+              />
+            </label>
             <div>
               <label className="mb-1 block text-xs text-gray-500">From</label>
               <div className="flex gap-2">
@@ -793,12 +838,14 @@ function EventModal({ draft, setDraft, categories, onClose, onSave, onDelete, on
                   value={draft.startDate}
                   onChange={(e) => set({ startDate: e.target.value })}
                 />
-                <input
-                  type="time"
-                  className={fieldClass}
-                  value={draft.startTime}
-                  onChange={(e) => set({ startTime: e.target.value })}
-                />
+                {!draft.allDay && (
+                  <input
+                    type="time"
+                    className={fieldClass}
+                    value={draft.startTime}
+                    onChange={(e) => set({ startTime: e.target.value })}
+                  />
+                )}
               </div>
             </div>
             <div>
@@ -811,12 +858,14 @@ function EventModal({ draft, setDraft, categories, onClose, onSave, onDelete, on
                   min={draft.startDate}
                   onChange={(e) => set({ endDate: e.target.value })}
                 />
-                <input
-                  type="time"
-                  className={fieldClass}
-                  value={draft.endTime}
-                  onChange={(e) => set({ endTime: e.target.value })}
-                />
+                {!draft.allDay && (
+                  <input
+                    type="time"
+                    className={fieldClass}
+                    value={draft.endTime}
+                    onChange={(e) => set({ endTime: e.target.value })}
+                  />
+                )}
               </div>
             </div>
           </div>
