@@ -55,6 +55,7 @@ export default function Settings() {
 function HouseholdTab() {
   const [members, setMembers] = useLocalState('meals-members', SEED_MEMBERS)
   const [, setCalendarEvents] = useLocalState('calendar-events', [])
+  const [, setPlans] = useLocalState('meals-plan', {})
   const [draft, setDraft] = useState(null)
 
   const saveMember = () => {
@@ -79,6 +80,28 @@ function HouseholdTab() {
           )
         : list,
     )
+    // Drop the member from every meal-plan provider/guest list across all weeks.
+    setPlans((p) => {
+      if (!p || typeof p !== 'object') return p
+      const next = {}
+      for (const [wk, days] of Object.entries(p)) {
+        next[wk] = {}
+        for (const [day, slots] of Object.entries(days || {})) {
+          next[wk][day] = {}
+          for (const [slot, val] of Object.entries(slots || {})) {
+            next[wk][day][slot] =
+              val && typeof val === 'object'
+                ? {
+                    ...val,
+                    providers: (val.providers || []).filter((x) => x !== id),
+                    guests: (val.guests || []).filter((x) => x !== id),
+                  }
+                : val
+          }
+        }
+      }
+      return next
+    })
     setDraft(null)
   }
 
