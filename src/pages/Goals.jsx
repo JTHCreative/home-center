@@ -30,7 +30,8 @@ import { GOALS_SEED as SEED } from '../lib/seeds.js'
 // Section accent palette (tap to pick when creating/editing a section).
 const COLORS = ['#39D353', '#58A6FF', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
 
-// Calendar category colors (mirrors Calendar.jsx) for the Upcoming Events list.
+// Default calendar category colors (mirrors Calendar.jsx) for the Upcoming
+// Events list, used as a fallback when no stored categories match.
 const CAL_COLORS = {
   Work: '#58A6FF',
   Personal: '#39D353',
@@ -38,6 +39,11 @@ const CAL_COLORS = {
   Family: '#BC8CFF',
   Other: '#8B949E',
 }
+
+// Read an event's start date/time across both the legacy ({ date, time }) and
+// the timeframe ({ startDate, startTime }) shapes used by the Calendar.
+const evDate = (e) => e.startDate || e.date || ''
+const evTime = (e) => e.startTime || e.time || ''
 
 // --- Date helpers ------------------------------------------------------------
 const iso = (d) => {
@@ -94,6 +100,7 @@ export default function Goals() {
   const [sections, setSections] = useLocalState('goals-sections', SEED)
   const [progress, setProgress] = useLocalState('goals-progress', {}) // weekKey -> { items, children }
   const [calendarEvents] = useLocalState('calendar-events', []) // read-only, shared with Calendar
+  const [calendarCategories] = useLocalState('calendar-categories', []) // read-only, for colors
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
@@ -107,10 +114,20 @@ export default function Goals() {
     const today = iso(new Date())
     const stored = Array.isArray(calendarEvents) ? calendarEvents : []
     return stored
-      .filter((e) => e && typeof e.date === 'string' && e.date >= today)
-      .sort((a, b) => `${a.date}${a.time || ''}`.localeCompare(`${b.date}${b.time || ''}`))
+      .filter((e) => e && evDate(e) >= today)
+      .sort((a, b) => `${evDate(a)}${evTime(a)}`.localeCompare(`${evDate(b)}${evTime(b)}`))
       .slice(0, 8)
   }, [calendarEvents])
+
+  // Resolve an event's category color from the shared categories (by id or
+  // legacy name), falling back to the built-in palette.
+  const eventColor = (e) => {
+    const cats = Array.isArray(calendarCategories) ? calendarCategories : []
+    const match = cats.find(
+      (c) => c.id === e.category || c.name?.toLowerCase() === String(e.category || '').toLowerCase(),
+    )
+    return match?.color || CAL_COLORS[e.category] || '#8B949E'
+  }
 
   // --- Per-week progress mutations ------------------------------------------
   const editWeek = (fn) =>
@@ -278,11 +295,11 @@ export default function Goals() {
                 <li key={e.id} className="flex items-center gap-3">
                   <span
                     className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                    style={{ backgroundColor: CAL_COLORS[e.category] || '#8B949E' }}
+                    style={{ backgroundColor: eventColor(e) }}
                   />
                   <span className="flex-1 truncate text-gray-200">{e.title}</span>
                   <span className="font-mono text-xs text-gray-400">
-                    {new Date(`${e.date}T${e.time}`).toLocaleDateString([], {
+                    {new Date(`${evDate(e)}T${evTime(e) || '00:00'}`).toLocaleDateString([], {
                       month: 'short',
                       day: 'numeric',
                     })}
