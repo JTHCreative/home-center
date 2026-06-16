@@ -89,3 +89,9 @@ export const SEED_MEALS = [
     instructions: 'Season and grill chicken. Warm tortillas. Assemble with onion, cilantro, lime, and avocado.',
   },
 ]
+
+// Household members (providers/guests on planned meals reference these by id).
+export const SEED_MEMBERS = [
+  { id: crypto.randomUUID(), name: 'Justin', color: '#58A6FF' },
+  { id: crypto.randomUUID(), name: 'Kitty', color: '#F0883E' },
+]

@@ -15,15 +15,21 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
+import Tabs from '../components/Tabs.jsx'
 import Toggle from '../components/Toggle.jsx'
 import Slider from '../components/Slider.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
 import { directionsUrl, fetchTravelTime, hasGoogleMapsKey } from '../lib/googleMaps.js'
+import { describeWeather, fetchWeather, geocode } from '../lib/weather.js'
 import {
   CarIcon,
   CheckIcon,
+  CloudIcon,
+  CloudLightningIcon,
+  CloudRainIcon,
+  CloudSnowIcon,
   GearIcon,
   GripIcon,
   MoonIcon,
@@ -41,6 +47,7 @@ import {
   DEFAULT_WATCHLISTS,
   GOALS_SEED,
   SEED_MEALS,
+  SEED_MEMBERS,
 } from '../lib/seeds.js'
 
 // --- Module registry ---------------------------------------------------------
@@ -50,6 +57,7 @@ import {
 // (Traffic) can be added any number of times from the customize screen.
 const MODULE_TYPES = {
   meals: { title: "Today's Meals", configurable: false, multi: false },
+  weather: { title: 'Weather', configurable: true, multi: false },
   smarthome: { title: 'Smart Home', configurable: true, multi: false },
   stocks: { title: 'Stocks & Crypto', configurable: true, multi: false },
   goals: { title: 'Goals', configurable: true, multi: false },
@@ -57,7 +65,7 @@ const MODULE_TYPES = {
   traffic: { title: 'Traffic', configurable: true, multi: true },
 }
 // Order in which singleton instances seed a fresh dashboard / get backfilled.
-const SINGLETONS = ['meals', 'smarthome', 'stocks', 'goals', 'calendar']
+const SINGLETONS = ['meals', 'weather', 'smarthome', 'stocks', 'goals', 'calendar']
 
 function defaultSettings(type) {
   switch (type) {
@@ -69,6 +77,8 @@ function defaultSettings(type) {
       return { sectionId: null } // null → first list
     case 'traffic':
       return { label: '', origin: '', destination: '', via: [] }
+    case 'weather':
+      return { location: '', units: 'fahrenheit' }
     default:
       return {}
   }
@@ -166,6 +176,7 @@ function migratePlan(stored) {
   return stored
 }
 const slotMealId = (v) => (typeof v === 'string' ? v : v?.mealId || undefined)
+const slotProviders = (v) => (typeof v === 'string' ? [] : v?.providers || [])
 
 // --- Stocks helpers ----------------------------------------------------------
 const money = (n) =>
@@ -333,7 +344,9 @@ const ctrlKey = (c) => (c.kind === 'media' ? 'media' : `${c.kind}:${c.room || ''
 function MealsModule() {
   const [meals] = useLocalState('meals-recipes', SEED_MEALS)
   const [plans] = useLocalState('meals-plan', {}, migratePlan)
+  const [members] = useLocalState('meals-members', SEED_MEMBERS)
   const mealById = useMemo(() => Object.fromEntries(meals.map((m) => [m.id, m])), [meals])
+  const memberById = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members])
   const plan = plans[weekKeyNow()] || {}
   const day = dayNameNow()
 
@@ -342,8 +355,14 @@ function MealsModule() {
       {SLOTS.map((slot) => {
         const theme = SLOT_THEME[slot]
         const SlotIcon = theme.Icon
-        const meal = mealById[slotMealId(plan[day]?.[slot])]
+        const val = plan[day]?.[slot]
+        const meal = mealById[slotMealId(val)]
         const takeout = meal && (meal.type || 'recipe') === 'takeout'
+        const providers = meal
+          ? slotProviders(val)
+              .map((id) => memberById[id])
+              .filter(Boolean)
+          : []
         return (
           <div
             key={slot}
@@ -355,12 +374,27 @@ function MealsModule() {
               {slot}
             </span>
             {meal ? (
-              <span className="flex-1 truncate font-medium text-white">
-                {meal.name}
-                <span className="ml-2 font-mono text-[10px] uppercase text-gray-500">
-                  {takeout ? 'Takeout' : 'Homecooked'}
+              <>
+                <span className="min-w-0 flex-1 truncate font-medium text-white">
+                  {meal.name}
+                  <span className="ml-2 font-mono text-[10px] uppercase text-gray-500">
+                    {takeout ? 'Takeout' : 'Homecooked'}
+                  </span>
                 </span>
-              </span>
+                {providers.length > 0 && (
+                  <span className="flex-shrink-0 text-xs text-gray-400">
+                    Provided by{' '}
+                    {providers.map((m, i) => (
+                      <span key={m.id}>
+                        <span className="font-semibold" style={{ color: m.color }}>
+                          {m.name}
+                        </span>
+                        {i < providers.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </>
             ) : (
               <span className="flex-1 truncate text-sm text-gray-600">Nothing planned</span>
             )}
@@ -762,11 +796,162 @@ function TrafficModule({ settings }) {
   )
 }
 
+// --- Weather ----------------------------------------------------------------
+const WX_ICON = {
+  clear: SunIcon,
+  cloud: CloudIcon,
+  fog: CloudIcon,
+  rain: CloudRainIcon,
+  snow: CloudSnowIcon,
+  thunder: CloudLightningIcon,
+}
+const WX_COLOR = {
+  clear: '#F0A92B',
+  cloud: '#8B949E',
+  fog: '#8B949E',
+  rain: '#58A6FF',
+  snow: '#A5D8FF',
+  thunder: '#D29922',
+}
+
+// Geocode the location once, then refresh weather periodically while the tab is
+// visible. Open-Meteo is free/keyless, so the only gate is being on-screen.
+function useWeather(location, units) {
+  const q = location?.trim() || ''
+  const unit = units === 'celsius' ? 'celsius' : 'fahrenheit'
+  const [place, setPlace] = useState(null)
+  const [data, setData] = useState(null)
+  const [updatedAt, setUpdatedAt] = useState(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (!q) {
+      setPlace(null)
+      setData(null)
+      setError(false)
+      return
+    }
+    let cancelled = false
+    geocode(q)
+      .then((p) => {
+        if (cancelled) return
+        setPlace(p)
+        setError(!p) // not found
+      })
+      .catch(() => !cancelled && setError(true))
+    return () => {
+      cancelled = true
+    }
+  }, [q])
+
+  useEffect(() => {
+    if (!place) return
+    let cancelled = false
+    const load = async () => {
+      if (!tabVisible()) return
+      try {
+        const w = await fetchWeather(place.latitude, place.longitude, unit)
+        if (!cancelled) {
+          setData(w)
+          setUpdatedAt(new Date())
+          setError(false)
+        }
+      } catch {
+        if (!cancelled) setError(true)
+      }
+    }
+    load()
+    const id = setInterval(load, 900_000) // every 15 minutes
+    const onVisibility = () => tabVisible() && load()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [place, unit])
+
+  return { place, data, updatedAt, error }
+}
+
+function WeatherModule({ settings }) {
+  const { place, data, updatedAt, error } = useWeather(settings.location, settings.units)
+  const u = settings.units === 'celsius' ? '°C' : '°F'
+  const windUnit = settings.units === 'celsius' ? 'km/h' : 'mph'
+
+  if (!settings.location?.trim()) {
+    return (
+      <p className="text-sm text-gray-500">
+        Set a location with the <GearIcon className="inline h-4 w-4" /> in customize mode to see the
+        current weather.
+      </p>
+    )
+  }
+
+  if (!data) {
+    return (
+      <p className="text-sm text-gray-500">
+        {error
+          ? place
+            ? 'Weather unavailable right now.'
+            : 'Couldn’t find that location.'
+          : 'Loading weather…'}
+      </p>
+    )
+  }
+
+  const { label, kind } = describeWeather(data.code)
+  const night = kind === 'clear' && !data.isDay
+  const Icon = night ? MoonIcon : WX_ICON[kind] || CloudIcon
+  const color = night ? '#A78BFA' : WX_COLOR[kind] || '#8B949E'
+
+  return (
+    <div>
+      <div className="mb-1 truncate text-sm text-gray-400">{place?.name || settings.location}</div>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Icon className="h-12 w-12 flex-shrink-0" style={{ color }} />
+          <div>
+            <div className="font-mono text-4xl font-bold text-white">
+              {Math.round(data.temp)}
+              {u}
+            </div>
+            <div className="text-sm text-gray-300">{label}</div>
+          </div>
+        </div>
+        <div className="space-y-0.5 text-right text-sm text-gray-400">
+          <div>
+            Feels {Math.round(data.feels)}
+            {u}
+          </div>
+          <div>
+            H {Math.round(data.hi)}
+            {u} · L {Math.round(data.lo)}
+            {u}
+          </div>
+          <div>Humidity {data.humidity}%</div>
+          <div>
+            Wind {Math.round(data.wind)} {windUnit}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 text-right text-xs text-gray-600">
+        {error && 'Stale · '}
+        {updatedAt
+          ? `Updated ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+          : ''}
+      </div>
+    </div>
+  )
+}
+
 function ModuleBody({ module }) {
   const { type, settings } = module
   switch (type) {
     case 'meals':
       return <MealsModule />
+    case 'weather':
+      return <WeatherModule settings={settings} />
     case 'smarthome':
       return <SmartHomeModule controls={settings.controls} />
     case 'stocks':
@@ -898,6 +1083,36 @@ function GoalsConfig({ value, onChange }) {
   )
 }
 
+function WeatherConfig({ settings, onChange }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Location</label>
+        <input
+          className={fieldClass}
+          placeholder="City (e.g. Millbrae, CA or London)"
+          value={settings.location || ''}
+          onChange={(e) => onChange({ location: e.target.value })}
+        />
+        <p className="mt-1 text-xs text-gray-600">
+          Live conditions from Open-Meteo — free, no API key required.
+        </p>
+      </div>
+      <div>
+        <label className="mb-2 block text-xs text-gray-500">Units</label>
+        <Tabs
+          tabs={[
+            { id: 'fahrenheit', label: '°F' },
+            { id: 'celsius', label: '°C' },
+          ]}
+          active={settings.units || 'fahrenheit'}
+          onChange={(units) => onChange({ units })}
+        />
+      </div>
+    </div>
+  )
+}
+
 function TrafficConfig({ settings, onChange }) {
   const via = settings.via || []
   const setVia = (next) => onChange({ via: next })
@@ -977,6 +1192,8 @@ function TrafficConfig({ settings, onChange }) {
 
 function ModuleConfig({ module, onPatch }) {
   switch (module.type) {
+    case 'weather':
+      return <WeatherConfig settings={module.settings} onChange={onPatch} />
     case 'smarthome':
       return (
         <SmartHomeConfig value={module.settings.controls} onChange={(controls) => onPatch({ controls })} />

@@ -10,7 +10,9 @@ touch targets and no hover-only interactions.
   app. Pick which modules to show/hide, drag to reorder them, add more from the
   customize screen, and configure each one in place: favorite Smart Home
   controls, a chosen Stocks/Crypto watchlist with live quotes, today's planned
-  meals (breakfast/lunch/dinner), a chosen Goals list (interactive), today's
+  meals (breakfast/lunch/dinner, with who's providing each), current **Weather**
+  for a location you set (via Open-Meteo — free, no API key), a chosen Goals list
+  (interactive), today's
   calendar events, and **Traffic** routes showing live drive time with current
   traffic from Google (set a start + destination, optionally forcing a specific
   route through "via" waypoints; add as many routes as you like). To keep API usage minimal, Traffic only polls during commute windows

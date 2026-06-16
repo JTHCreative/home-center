@@ -33,7 +33,7 @@ import {
   SunriseIcon,
   TrashIcon,
 } from '../components/Icons.jsx'
-import { SEED_MEALS } from '../lib/seeds.js'
+import { SEED_MEALS, SEED_MEMBERS } from '../lib/seeds.js'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
@@ -57,11 +57,6 @@ const SUBPAGES = [
 
 // Household member accent palette (tap to pick when adding/editing a member).
 const MEMBER_COLORS = ['#58A6FF', '#39D353', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
-
-const SEED_MEMBERS = [
-  { id: crypto.randomUUID(), name: 'Justin', color: '#58A6FF' },
-  { id: crypto.randomUUID(), name: 'Kitty', color: '#F0883E' },
-]
 
 // A planned slot is { mealId, providers: [id], guests: [id] }. Older saves
 // stored just the mealId string, so read through these helpers to stay compatible.
