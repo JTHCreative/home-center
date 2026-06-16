@@ -60,7 +60,13 @@ export async function fetchTravelTime(origin, destination, via = []) {
         units: 'IMPERIAL',
       }),
     })
-    if (!res.ok) throw new Error(`Routes ${res.status}`)
+    if (!res.ok) {
+      // Surface Google's actual error (e.g. "Routes API has not been used in
+      // project … or it is disabled") instead of swallowing it — this is the
+      // usual reason the module shows "Traffic unavailable" despite a valid key.
+      const body = await res.text().catch(() => '')
+      throw new Error(`Routes ${res.status}: ${body.slice(0, 300)}`)
+    }
     const data = await res.json()
     const route = data.routes?.[0]
     const durationSec = parseDuration(route?.duration)
@@ -72,8 +78,10 @@ export async function fetchTravelTime(origin, destination, via = []) {
       distanceMeters: route?.distanceMeters ?? null,
       mock: false,
     }
-  } catch {
-    // Network/CORS/quota error — show a demo estimate rather than nothing.
+  } catch (err) {
+    // Network/CORS/quota/disabled-API error — log the reason so it's diagnosable,
+    // then show a demo estimate rather than nothing.
+    if (typeof console !== 'undefined') console.warn('[traffic] Routes API failed:', err)
     return { ...mockTravel(origin, destination, stops), error: true }
   }
 }
@@ -84,4 +92,21 @@ export function directionsUrl(origin, destination, via = []) {
   const p = new URLSearchParams({ api: '1', origin, destination, travelmode: 'driving' })
   if (stops.length) p.set('waypoints', stops.join('|'))
   return `https://www.google.com/maps/dir/?${p.toString()}`
+}
+
+// Build a Google Maps Embed API directions URL for an <iframe>. Shows the route
+// on a live map with traffic-aware routing. Requires the Maps Embed API to be
+// enabled on the same key; returns null without a key so callers can skip the
+// iframe (the Embed API won't render without one).
+export function embedMapUrl(origin, destination, via = []) {
+  if (!API_KEY || !origin?.trim() || !destination?.trim()) return null
+  const stops = (via || []).map((v) => v?.trim()).filter(Boolean)
+  const p = new URLSearchParams({
+    key: API_KEY,
+    origin: origin.trim(),
+    destination: destination.trim(),
+    mode: 'driving',
+  })
+  if (stops.length) p.set('waypoints', stops.join('|'))
+  return `https://www.google.com/maps/embed/v1/directions?${p.toString()}`
 }

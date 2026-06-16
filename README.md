@@ -111,10 +111,12 @@ npm run preview -- --host
 - `VITE_FINNHUB_API_KEY` — Finnhub API key for live stock/crypto quotes. Without
   it, the Stocks page renders deterministic demo data.
 - `VITE_GOOGLE_MAPS_API_KEY` — Google Maps Platform key for the dashboard Traffic
-  module's live drive times (enable the **Routes API** on the key). Without it,
-  the Traffic module shows demo estimates. Requests use the *Compute Routes
-  Essentials* SKU (first 10k calls/month free, then $5/1k); with commute-window
-  polling, a handful of routes stay within the free tier.
+  module's live drive times (enable the **Routes API** on the key) and its
+  embedded route map (also enable the **Maps Embed API** — its usage is free).
+  Without the key, the Traffic module shows demo estimates and hides the map.
+  Routes requests use the *Compute Routes Essentials* SKU (first 10k calls/month
+  free, then $5/1k); with commute-window polling, a handful of routes stay within
+  the free tier.
 - `VITE_SPOTIFY_CLIENT_ID` — Spotify app Client ID enabling full-track playback in
   the Spotify module (OAuth in a popup + the Web Playback SDK; **Premium**
   required to stream). Create an app at

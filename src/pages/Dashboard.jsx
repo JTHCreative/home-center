@@ -22,7 +22,7 @@ import Slider from '../components/Slider.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
-import { directionsUrl, fetchTravelTime, hasGoogleMapsKey } from '../lib/googleMaps.js'
+import { directionsUrl, embedMapUrl, fetchTravelTime, hasGoogleMapsKey } from '../lib/googleMaps.js'
 import { describeWeather, fetchWeather, geocode } from '../lib/weather.js'
 import {
   hasSpotifyClientId,
@@ -769,6 +769,7 @@ function TrafficModule({ settings }) {
     }
   }
   const miles = data ? fmtMiles(data.distanceMeters) : null
+  const mapUrl = embedMapUrl(origin, destination, via)
 
   return (
     <div>
@@ -810,6 +811,27 @@ function TrafficModule({ settings }) {
             ? 'Checking traffic…'
             : 'Live drive time updates during your commute — 6–8am and 4–6pm.'}
         </p>
+      )}
+
+      {mapUrl ? (
+        <div className="mt-3 overflow-hidden rounded-lg border border-white/10">
+          <iframe
+            title="Commute map"
+            src={mapUrl}
+            className="block h-48 w-full"
+            style={{ border: 0 }}
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            allowFullScreen
+          />
+        </div>
+      ) : (
+        !hasGoogleMapsKey && (
+          <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-gray-500">
+            Add <span className="font-mono">VITE_GOOGLE_MAPS_API_KEY</span> (with the Maps Embed API
+            enabled) to show a live route map here.
+          </p>
+        )
       )}
 
       <div className="mt-3 text-right text-xs text-gray-600">
