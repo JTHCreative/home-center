@@ -1127,6 +1127,29 @@ function WeatherModule({ settings }) {
           </div>
         </div>
       </div>
+      {data.days?.length > 1 && (
+        <div className="mt-4 grid grid-cols-7 gap-1 border-t border-white/10 pt-3">
+          {data.days.slice(0, 7).map((day, i) => {
+            const { kind } = describeWeather(day.code)
+            const DayIcon = WX_ICON[kind] || CloudIcon
+            return (
+              <div key={day.date} className="flex flex-col items-center gap-1">
+                <div className="text-[11px] font-medium text-gray-400">
+                  {i === 0
+                    ? 'Today'
+                    : new Date(`${day.date}T00:00`).toLocaleDateString([], { weekday: 'short' })}
+                </div>
+                <DayIcon className="h-5 w-5" style={{ color: WX_COLOR[kind] || '#8B949E' }} />
+                <div className="text-xs leading-tight">
+                  <span className="font-semibold text-white">{Math.round(day.hi)}°</span>
+                  <span className="ml-1 text-gray-500">{Math.round(day.lo)}°</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       <div className="mt-3 text-right text-xs text-gray-600">
         {error && 'Stale · '}
         {updatedAt
