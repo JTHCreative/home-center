@@ -43,6 +43,41 @@ export function CarIcon(props) {
   )
 }
 
+export function CloudIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+    </svg>
+  )
+}
+
+export function CloudRainIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25" />
+      <path d="M8 19v2M8 13v2M16 19v2M16 13v2M12 21v2M12 15v2" />
+    </svg>
+  )
+}
+
+export function CloudSnowIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25" />
+      <path d="M8 16h.01M8 20h.01M12 18h.01M12 22h.01M16 16h.01M16 20h.01" />
+    </svg>
+  )
+}
+
+export function CloudLightningIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9" />
+      <path d="M13 11l-4 6h6l-4 6" />
+    </svg>
+  )
+}
+
 export function ChartIcon(props) {
   return (
     <svg {...base} {...props}>
