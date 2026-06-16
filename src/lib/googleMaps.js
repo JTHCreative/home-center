@@ -20,12 +20,13 @@ function parseDuration(v) {
 }
 
 // Deterministic demo estimate so the module renders without a key. Seeded by the
-// origin/destination text so a given route always shows the same plausible time.
-function mockTravel(origin, destination) {
+// origin/destination (and any via stops) so a given route always shows the same
+// plausible time.
+function mockTravel(origin, destination, stops = []) {
   let seed = 0
-  for (const ch of `${origin}→${destination}`) seed = (seed * 31 + ch.charCodeAt(0)) % 100000
+  for (const ch of [origin, ...stops, destination].join('→')) seed = (seed * 31 + ch.charCodeAt(0)) % 100000
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
-  const distanceMeters = Math.round(3000 + rnd() * 40000)
+  const distanceMeters = Math.round(3000 + rnd() * 40000 + stops.length * 4000)
   const staticDurationSec = Math.round(distanceMeters / 11) // ~25 mph average
   const trafficFactor = 1 + rnd() * 0.55 // current traffic adds 0–55%
   const durationSec = Math.round(staticDurationSec * trafficFactor)
@@ -34,12 +35,14 @@ function mockTravel(origin, destination) {
 
 /**
  * Current driving time (with live traffic) between two address strings.
+ * `via` is an optional list of intermediate waypoints to force a specific route.
  * Returns { durationSec, staticDurationSec, distanceMeters, mock }.
  * Never throws — falls back to a demo estimate on any error so the kiosk keeps
  * showing something useful.
  */
-export async function fetchTravelTime(origin, destination) {
-  if (!API_KEY) return mockTravel(origin, destination)
+export async function fetchTravelTime(origin, destination, via = []) {
+  const stops = (via || []).map((v) => v?.trim()).filter(Boolean)
+  if (!API_KEY) return mockTravel(origin, destination, stops)
   try {
     const res = await fetch(ENDPOINT, {
       method: 'POST',
@@ -51,6 +54,7 @@ export async function fetchTravelTime(origin, destination) {
       body: JSON.stringify({
         origin: { address: origin },
         destination: { address: destination },
+        ...(stops.length ? { intermediates: stops.map((address) => ({ address })) } : {}),
         travelMode: 'DRIVE',
         routingPreference: 'TRAFFIC_AWARE',
         units: 'IMPERIAL',
@@ -70,17 +74,14 @@ export async function fetchTravelTime(origin, destination) {
     }
   } catch {
     // Network/CORS/quota error — show a demo estimate rather than nothing.
-    return { ...mockTravel(origin, destination), error: true }
+    return { ...mockTravel(origin, destination, stops), error: true }
   }
 }
 
 // Build a Google Maps directions deep link (works without an API key).
-export function directionsUrl(origin, destination) {
-  const p = new URLSearchParams({
-    api: '1',
-    origin,
-    destination,
-    travelmode: 'driving',
-  })
+export function directionsUrl(origin, destination, via = []) {
+  const stops = (via || []).map((v) => v?.trim()).filter(Boolean)
+  const p = new URLSearchParams({ api: '1', origin, destination, travelmode: 'driving' })
+  if (stops.length) p.set('waypoints', stops.join('|'))
   return `https://www.google.com/maps/dir/?${p.toString()}`
 }

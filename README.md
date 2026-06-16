@@ -12,8 +12,8 @@ touch targets and no hover-only interactions.
   controls, a chosen Stocks/Crypto watchlist with live quotes, today's planned
   meals (breakfast/lunch/dinner), a chosen Goals list (interactive), today's
   calendar events, and **Traffic** routes showing live drive time with current
-  traffic from Google (set a start + destination; add as many routes as you
-  like). To keep API usage minimal, Traffic only polls during commute windows
+  traffic from Google (set a start + destination, optionally forcing a specific
+  route through "via" waypoints; add as many routes as you like). To keep API usage minimal, Traffic only polls during commute windows
   (6–8am and 4–6pm), every 5 minutes, and only while the dashboard tab is
   visible. Layout and per-module settings persist via Firestore like the rest of
   the app.
