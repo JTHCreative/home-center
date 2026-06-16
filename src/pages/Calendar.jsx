@@ -1,9 +1,36 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../components/Card.jsx'
 import Tabs from '../components/Tabs.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import { useLocalState } from '../lib/storage.js'
-import { ChevronLeft, ChevronRight, TrashIcon } from '../components/Icons.jsx'
+import { useDragScroll } from '../lib/useDragScroll.js'
+import {
+  BellIcon,
+  BookIcon,
+  BriefcaseIcon,
+  CalendarIcon,
+  CarIcon,
+  ChevronLeft,
+  ChevronRight,
+  ClockIcon,
+  DumbbellIcon,
+  GiftIcon,
+  HeartIcon,
+  HomeIcon,
+  MealIcon,
+  MoonIcon,
+  MusicIcon,
+  NoteIcon,
+  PencilIcon,
+  PlaneIcon,
+  PlusIcon,
+  StarIcon,
+  SunIcon,
+  TagIcon,
+  TrashIcon,
+  UserIcon,
+  UsersIcon,
+} from '../components/Icons.jsx'
 
 const VIEWS = [
   { id: 'month', label: 'Month' },
@@ -11,19 +38,59 @@ const VIEWS = [
   { id: 'day', label: 'Day' },
 ]
 
-// Category → accent color (hex + tailwind-ish bg via inline style for flexibility).
-const CATEGORIES = {
-  Work: '#58A6FF',
-  Personal: '#39D353',
-  Health: '#F85149',
-  Family: '#BC8CFF',
-  Other: '#8B949E',
+// Pickable icons for categories. Keyed by a stable id stored on the category.
+const ICONS = {
+  briefcase: BriefcaseIcon,
+  user: UserIcon,
+  users: UsersIcon,
+  heart: HeartIcon,
+  home: HomeIcon,
+  star: StarIcon,
+  bell: BellIcon,
+  tag: TagIcon,
+  book: BookIcon,
+  gift: GiftIcon,
+  plane: PlaneIcon,
+  dumbbell: DumbbellIcon,
+  music: MusicIcon,
+  sun: SunIcon,
+  moon: MoonIcon,
+  car: CarIcon,
+  meal: MealIcon,
+  calendar: CalendarIcon,
 }
+const ICON_NAMES = Object.keys(ICONS)
+function CategoryIcon({ name, ...props }) {
+  const Cmp = ICONS[name] || TagIcon
+  return <Cmp {...props} />
+}
+
+// Color palette shared with Meals/Goals so categories feel consistent.
+const PALETTE = ['#58A6FF', '#39D353', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#2DD4BF', '#8B949E']
+
+const DEFAULT_CATEGORIES = [
+  { id: 'work', name: 'Work', color: '#58A6FF', icon: 'briefcase' },
+  { id: 'personal', name: 'Personal', color: '#39D353', icon: 'user' },
+  { id: 'health', name: 'Health', color: '#F85149', icon: 'heart' },
+  { id: 'family', name: 'Family', color: '#BC8CFF', icon: 'users' },
+  { id: 'other', name: 'Other', color: '#8B949E', icon: 'tag' },
+]
+
+// Resolve an event's stored category reference (id, or legacy name) to a
+// category object, falling back to the last category ("Other") so a deleted or
+// unknown category never crashes the view.
+const catOf = (categories, key) =>
+  categories.find((c) => c.id === key) ||
+  categories.find((c) => c.name.toLowerCase() === String(key || '').toLowerCase()) ||
+  categories[categories.length - 1] ||
+  DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1]
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
+const HOUR_HEIGHT = 52 // px per hour row in the week/day time grids
+const DAY_HEIGHT = HOUR_HEIGHT * 24
 
-// --- Date helpers (local, no library) ----------------------------------------
+// --- Date/time helpers (local, no library; weeks start Sunday) ---------------
 const iso = (d) => {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -37,46 +104,188 @@ const addDays = (d, n) => {
 }
 const startOfWeek = (d) => addDays(d, -d.getDay())
 const sameDay = (a, b) => iso(a) === iso(b)
+const minutesOf = (t) => {
+  const [h, m] = String(t || '').split(':').map(Number)
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0)
+}
+const fmtMinutes = (mins) => {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+// Add minutes to a HH:MM string, clamped to the same day (never past 23:59).
+const addMinutes = (t, delta) => fmtMinutes(Math.min(23 * 60 + 59, minutesOf(t) + delta))
 
-function emptyEvent(date, time = '09:00') {
-  return { id: crypto.randomUUID(), title: '', date, time, category: 'Personal' }
+function emptyEvent(date, time = '09:00', categoryId = DEFAULT_CATEGORIES[1].id) {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    startDate: date,
+    startTime: time,
+    endDate: date,
+    endTime: addMinutes(time, 60),
+    category: categoryId,
+    notes: '',
+  }
+}
+
+// Upgrade legacy events ({ date, time }) to the timeframe shape on read so old
+// saves keep working and gain a sensible 1-hour duration.
+function migrateEvents(list) {
+  if (!Array.isArray(list)) return []
+  return list
+    .filter((e) => e && typeof e === 'object')
+    .map((e) => {
+      if (typeof e.startDate === 'string') return e
+      const date = typeof e.date === 'string' ? e.date : ''
+      const time = typeof e.time === 'string' ? e.time : '09:00'
+      return {
+        id: e.id || crypto.randomUUID(),
+        title: e.title || '',
+        startDate: date,
+        startTime: time,
+        endDate: date,
+        endTime: addMinutes(time, 60),
+        category: e.category || 'other',
+        notes: e.notes || '',
+      }
+    })
+}
+
+const eventStart = (e) => `${e.startDate} ${e.startTime}`
+// Does an event's span cover the given ISO day?
+const coversDay = (e, key) => e.startDate <= key && key <= (e.endDate || e.startDate)
+const isMultiDay = (e) => (e.endDate || e.startDate) !== e.startDate
+
+// Human-readable range, e.g. "Mon, Jun 16 · 9:00 – 10:00" or a multi-day span.
+function rangeText(e) {
+  const sd = new Date(`${e.startDate}T00:00`)
+  const ed = new Date(`${(e.endDate || e.startDate)}T00:00`)
+  const dayFmt = { weekday: 'short', month: 'short', day: 'numeric' }
+  if (!isMultiDay(e)) {
+    return `${sd.toLocaleDateString([], dayFmt)} · ${e.startTime} – ${e.endTime}`
+  }
+  return `${sd.toLocaleDateString([], dayFmt)} ${e.startTime} → ${ed.toLocaleDateString([], dayFmt)} ${e.endTime}`
+}
+
+// Lay out a day's events into side-by-side lanes so overlapping blocks don't
+// stack on top of each other. Items carry { segStart, segEnd } in minutes.
+function layoutDay(items) {
+  const sorted = [...items].sort((a, b) => a.segStart - b.segStart || a.segEnd - b.segEnd)
+  const out = []
+  let cluster = []
+  let clusterEnd = -1
+  const flush = () => {
+    const laneEnds = []
+    for (const it of cluster) {
+      let lane = 0
+      for (; lane < laneEnds.length; lane++) if (laneEnds[lane] <= it.segStart) break
+      laneEnds[lane] = it.segEnd
+      it.lane = lane
+    }
+    for (const it of cluster) {
+      it.lanes = laneEnds.length
+      out.push(it)
+    }
+    cluster = []
+  }
+  for (const it of sorted) {
+    if (cluster.length && it.segStart >= clusterEnd) {
+      flush()
+      clusterEnd = -1
+    }
+    cluster.push(it)
+    clusterEnd = Math.max(clusterEnd, it.segEnd)
+  }
+  flush()
+  return out
+}
+
+// Events overlapping a given day, with per-day clamped start/end minutes.
+function daySegments(events, key) {
+  const segs = events
+    .filter((e) => coversDay(e, key))
+    .map((e) => {
+      const segStart = key === e.startDate ? minutesOf(e.startTime) : 0
+      let segEnd = key === (e.endDate || e.startDate) ? minutesOf(e.endTime) : 24 * 60
+      if (segEnd <= segStart) segEnd = Math.min(24 * 60, segStart + 30)
+      return { ...e, segStart, segEnd }
+    })
+  return layoutDay(segs)
 }
 
 export default function Calendar() {
   const [view, setView] = useState('month')
   const [cursor, setCursor] = useState(new Date())
-  const [events, setEvents] = useLocalState('calendar-events', [])
-  const [draft, setDraft] = useState(null)
+  const [events, setEvents] = useLocalState('calendar-events', [], migrateEvents)
+  const [categories, setCategories] = useLocalState('calendar-categories', DEFAULT_CATEGORIES)
+  const [draft, setDraft] = useState(null) // event being added/edited
+  const [selectedId, setSelectedId] = useState(null) // event whose info page is open
+  const [catManagerOpen, setCatManagerOpen] = useState(false)
+  const [catDraft, setCatDraft] = useState(null) // category being added/edited
+  // When a category is created from the event editor, re-select it on save.
+  const [pendingCatSelect, setPendingCatSelect] = useState(false)
 
   const today = new Date()
+  const selected = useMemo(
+    () => events.find((e) => e.id === selectedId) || null,
+    [events, selectedId],
+  )
 
-  // Guard against malformed stored events (missing/non-string date or time) so
-  // one bad entry can't crash the whole page.
-  const timeOf = (e) => (typeof e?.time === 'string' ? e.time : '')
-  const eventsByDate = useMemo(() => {
-    const map = {}
-    for (const e of events) {
-      if (!e || typeof e !== 'object' || typeof e.date !== 'string' || !e.date) continue
-      ;(map[e.date] ||= []).push(e)
-    }
-    for (const k in map) map[k].sort((a, b) => timeOf(a).localeCompare(timeOf(b)))
-    return map
-  }, [events])
-
-  const openNew = (date, time) => setDraft(emptyEvent(date, time))
-  const openEdit = (e) => setDraft({ ...e })
+  const openNew = (date, time) => {
+    const id = categories[0]?.id || DEFAULT_CATEGORIES[0].id
+    setDraft(emptyEvent(date, time, id))
+  }
+  const openEdit = (e) => {
+    setSelectedId(null)
+    setDraft({ ...e })
+  }
 
   const saveDraft = () => {
     if (!draft.title.trim()) return
+    // Keep the timeframe coherent: end can't precede start.
+    const next = { ...draft, title: draft.title.trim() }
+    if ((next.endDate || next.startDate) < next.startDate) next.endDate = next.startDate
+    if (next.endDate === next.startDate && minutesOf(next.endTime) <= minutesOf(next.startTime)) {
+      next.endTime = addMinutes(next.startTime, 60)
+    }
     setEvents((list) => {
-      const exists = list.some((e) => e.id === draft.id)
-      return exists ? list.map((e) => (e.id === draft.id ? draft : e)) : [...list, draft]
+      const exists = list.some((e) => e.id === next.id)
+      return exists ? list.map((e) => (e.id === next.id ? next : e)) : [...list, next]
     })
     setDraft(null)
   }
-  const deleteDraft = () => {
-    setEvents((list) => list.filter((e) => e.id !== draft.id))
+  const deleteEvent = (id) => {
+    setEvents((list) => list.filter((e) => e.id !== id))
     setDraft(null)
+    setSelectedId(null)
+  }
+
+  // --- Category ops ----------------------------------------------------------
+  const saveCategory = () => {
+    if (!catDraft.name.trim()) return
+    const c = { ...catDraft, name: catDraft.name.trim() }
+    setCategories((list) => {
+      const exists = list.some((x) => x.id === c.id)
+      return exists ? list.map((x) => (x.id === c.id ? c : x)) : [...list, c]
+    })
+    if (pendingCatSelect) setDraft((d) => (d ? { ...d, category: c.id } : d))
+    setCatDraft(null)
+    setPendingCatSelect(false)
+  }
+  const deleteCategory = (id) => {
+    setCategories((list) => (list.length > 1 ? list.filter((c) => c.id !== id) : list))
+    setCatDraft(null)
+  }
+  const newCategory = () => ({
+    id: crypto.randomUUID(),
+    name: '',
+    color: PALETTE[Math.floor(Math.random() * PALETTE.length)],
+    icon: ICON_NAMES[0],
+  })
+  const createCategoryForEvent = () => {
+    setPendingCatSelect(true)
+    setCatDraft(newCategory())
   }
 
   // Navigation steps depend on the active view.
@@ -90,12 +299,40 @@ export default function Calendar() {
     }
   }
 
-  const title =
-    view === 'month'
-      ? cursor.toLocaleDateString([], { month: 'long', year: 'numeric' })
-      : view === 'week'
-        ? `Week of ${startOfWeek(cursor).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
-        : cursor.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+  // Navigator labels (primary + relative subtitle), matching the Meals/Goals
+  // week navigator style across all three views.
+  const nav = useMemo(() => {
+    const now = new Date()
+    if (view === 'month') {
+      const delta =
+        (cursor.getFullYear() - now.getFullYear()) * 12 + (cursor.getMonth() - now.getMonth())
+      return {
+        primary: cursor.toLocaleDateString([], { month: 'long', year: 'numeric' }),
+        secondary: relLabel(delta, 'month'),
+        isNow: delta === 0,
+      }
+    }
+    if (view === 'week') {
+      const ws = startOfWeek(cursor)
+      const we = addDays(ws, 6)
+      const delta = Math.round((ws - startOfWeek(now)) / (7 * 864e5))
+      return {
+        primary: `${ws.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${we.toLocaleDateString([], { month: 'short', day: 'numeric' })}`,
+        secondary: relLabel(delta, 'week'),
+        isNow: delta === 0,
+      }
+    }
+    const a = new Date(cursor)
+    a.setHours(0, 0, 0, 0)
+    const b = new Date(now)
+    b.setHours(0, 0, 0, 0)
+    const delta = Math.round((a - b) / 864e5)
+    return {
+      primary: cursor.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }),
+      secondary: relLabel(delta, 'day'),
+      isNow: delta === 0,
+    }
+  }, [view, cursor])
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col">
@@ -105,79 +342,161 @@ export default function Calendar() {
         </div>
       </PageHeader>
 
-      {/* Sub-navigation */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* Sub-navigation: centered navigator with an action cluster pinned right. */}
+      <div className="relative mb-4">
+        <Navigator
+          primary={nav.primary}
+          secondary={nav.secondary}
+          secondaryAccent={!nav.isNow}
+          onPrev={() => step(-1)}
+          onNext={() => step(1)}
+          onToday={() => setCursor(new Date())}
+        />
+        <div className="absolute inset-y-0 right-0 flex items-center gap-2">
           <button
             type="button"
-            onClick={() => step(-1)}
-            className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
-            aria-label="Previous"
+            onClick={() => setCatManagerOpen(true)}
+            className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-3 text-sm font-semibold text-gray-300 active:scale-95"
           >
-            <ChevronLeft className="h-6 w-6" />
+            <TagIcon className="h-5 w-5" />
+            <span className="hidden sm:inline">Categories</span>
           </button>
           <button
             type="button"
-            onClick={() => setCursor(new Date())}
-            className="rounded-xl bg-white/5 px-4 py-3 text-sm font-semibold text-gray-300 active:scale-95"
+            onClick={() => openNew(iso(view === 'day' ? cursor : today))}
+            className="flex items-center gap-2 rounded-xl bg-accent/15 px-4 py-3 text-sm font-semibold text-accent shadow-glow active:scale-95"
           >
-            Today
-          </button>
-          <button
-            type="button"
-            onClick={() => step(1)}
-            className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
-            aria-label="Next"
-          >
-            <ChevronRight className="h-6 w-6" />
+            <PlusIcon className="h-5 w-5" />
+            <span className="hidden sm:inline">Event</span>
           </button>
         </div>
-        <h2 className="text-xl font-bold text-white">{title}</h2>
       </div>
 
-      <div className="scroll-area flex-1 rounded-2xl border border-border bg-surface">
+      <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-surface">
         {view === 'month' && (
           <MonthView
             cursor={cursor}
             today={today}
-            eventsByDate={eventsByDate}
+            events={events}
+            categories={categories}
             onAdd={openNew}
-            onOpen={openEdit}
+            onOpen={(e) => setSelectedId(e.id)}
           />
         )}
         {view === 'week' && (
-          <WeekView
-            cursor={cursor}
+          <TimeGrid
+            days={Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(cursor), i))}
             today={today}
-            eventsByDate={eventsByDate}
+            events={events}
+            categories={categories}
+            showHeader
             onAdd={openNew}
-            onOpen={openEdit}
+            onOpen={(e) => setSelectedId(e.id)}
           />
         )}
         {view === 'day' && (
-          <DayView
-            cursor={cursor}
+          <TimeGrid
+            days={[new Date(cursor)]}
             today={today}
-            eventsByDate={eventsByDate}
+            events={events}
+            categories={categories}
             onAdd={openNew}
-            onOpen={openEdit}
+            onOpen={(e) => setSelectedId(e.id)}
           />
         )}
       </div>
 
+      {/* Event info page */}
+      <EventDetail
+        event={selected}
+        categories={categories}
+        onClose={() => setSelectedId(null)}
+        onEdit={() => openEdit(selected)}
+      />
+
+      {/* Add / edit event */}
       <EventModal
         draft={draft}
         setDraft={setDraft}
+        categories={categories}
         onClose={() => setDraft(null)}
         onSave={saveDraft}
-        onDelete={deleteDraft}
+        onDelete={() => deleteEvent(draft.id)}
+        onNewCategory={createCategoryForEvent}
         isExisting={draft && events.some((e) => e.id === draft.id)}
+      />
+
+      {/* Category manager */}
+      <CategoriesModal
+        open={catManagerOpen}
+        categories={categories}
+        onClose={() => setCatManagerOpen(false)}
+        onAdd={() => setCatDraft(newCategory())}
+        onEdit={(c) => setCatDraft({ ...c })}
+      />
+
+      {/* Add / edit a single category */}
+      <CategoryModal
+        draft={catDraft}
+        setDraft={setCatDraft}
+        onClose={() => {
+          setCatDraft(null)
+          setPendingCatSelect(false)
+        }}
+        onSave={saveCategory}
+        onDelete={() => deleteCategory(catDraft.id)}
+        canDelete={categories.length > 1 && categories.some((c) => c.id === catDraft?.id)}
+        isExisting={catDraft && categories.some((c) => c.id === catDraft.id)}
       />
     </div>
   )
 }
 
-function EventChip({ event, onOpen }) {
+// Relative subtitle for the navigator ("This week", "Next month", …).
+function relLabel(delta, unit) {
+  const u = (n) => `${n} ${unit}${n === 1 ? '' : 's'}`
+  if (delta === 0) return unit === 'month' ? 'This month' : unit === 'week' ? 'This week' : 'Today'
+  if (delta === -1) return unit === 'day' ? 'Yesterday' : `Last ${unit}`
+  if (delta === 1) return unit === 'day' ? 'Tomorrow' : `Next ${unit}`
+  return delta < 0 ? `${u(-delta)} ago` : `In ${u(delta)}`
+}
+
+// Shared navigator: arrows flank a centered label; tap the label to jump to now.
+function Navigator({ primary, secondary, secondaryAccent, onPrev, onNext, onToday }) {
+  return (
+    <div className="flex items-center justify-center gap-3">
+      <button
+        type="button"
+        onClick={onPrev}
+        aria-label="Previous"
+        className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+      >
+        <ChevronLeft className="h-6 w-6" />
+      </button>
+      <button
+        type="button"
+        onClick={onToday}
+        title="Jump to today"
+        className="min-w-[14rem] rounded-xl px-4 py-2 text-center active:scale-95"
+      >
+        <div className="text-xl font-bold text-white">{primary}</div>
+        <div className={secondaryAccent ? 'text-xs text-accent' : 'text-xs text-gray-500'}>
+          {secondary}
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={onNext}
+        aria-label="Next"
+        className="rounded-xl bg-white/5 p-3 text-gray-300 active:scale-95"
+      >
+        <ChevronRight className="h-6 w-6" />
+      </button>
+    </div>
+  )
+}
+
+function EventChip({ event, category, onOpen }) {
   return (
     <button
       type="button"
@@ -186,25 +505,22 @@ function EventChip({ event, onOpen }) {
         onOpen(event)
       }}
       className="flex w-full items-center gap-1.5 truncate rounded-md px-2 py-1 text-left text-xs font-medium text-white active:scale-[0.98]"
-      style={{ backgroundColor: `${CATEGORIES[event.category]}33` }}
+      style={{ backgroundColor: `${category.color}33` }}
     >
-      <span
-        className="h-2 w-2 flex-shrink-0 rounded-full"
-        style={{ backgroundColor: CATEGORIES[event.category] }}
-      />
-      <span className="font-mono text-[10px] text-gray-300">{event.time}</span>
+      <CategoryIcon name={category.icon} className="h-3 w-3 flex-shrink-0" style={{ color: category.color }} />
+      <span className="font-mono text-[10px] text-gray-300">{event.startTime}</span>
       <span className="truncate">{event.title}</span>
     </button>
   )
 }
 
-function MonthView({ cursor, today, eventsByDate, onAdd, onOpen }) {
+function MonthView({ cursor, today, events, categories, onAdd, onOpen }) {
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
   const gridStart = startOfWeek(first)
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
 
   return (
-    <div>
+    <div className="scroll-area h-full">
       <div className="grid grid-cols-7 border-b border-border">
         {WEEKDAYS.map((d) => (
           <div key={d} className="px-2 py-2 text-center text-xs font-semibold text-gray-500">
@@ -217,7 +533,9 @@ function MonthView({ cursor, today, eventsByDate, onAdd, onOpen }) {
           const key = iso(d)
           const inMonth = d.getMonth() === cursor.getMonth()
           const isToday = sameDay(d, today)
-          const dayEvents = eventsByDate[key] || []
+          const dayEvents = events
+            .filter((e) => coversDay(e, key))
+            .sort((a, b) => eventStart(a).localeCompare(eventStart(b)))
           return (
             <button
               key={key}
@@ -238,12 +556,10 @@ function MonthView({ cursor, today, eventsByDate, onAdd, onOpen }) {
               </div>
               <div className="space-y-1">
                 {dayEvents.slice(0, 3).map((e) => (
-                  <EventChip key={e.id} event={e} onOpen={onOpen} />
+                  <EventChip key={e.id} event={e} category={catOf(categories, e.category)} onOpen={onOpen} />
                 ))}
                 {dayEvents.length > 3 && (
-                  <div className="px-2 text-[10px] text-gray-500">
-                    +{dayEvents.length - 3} more
-                  </div>
+                  <div className="px-2 text-[10px] text-gray-500">+{dayEvents.length - 3} more</div>
                 )}
               </div>
             </button>
@@ -254,86 +570,190 @@ function MonthView({ cursor, today, eventsByDate, onAdd, onOpen }) {
   )
 }
 
-function WeekView({ cursor, today, eventsByDate, onAdd, onOpen }) {
-  const start = startOfWeek(cursor)
-  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
+// Hour-slot time grid used by both Week (7 columns) and Day (1 column) views.
+// Vertically scrollable with a tap-friendly scrollbar; mouse press-and-drag
+// pans via useDragScroll while touch uses native scrolling.
+function TimeGrid({ days, today, events, categories, showHeader, onAdd, onOpen }) {
+  const { ref, handlers } = useDragScroll()
+  const single = days.length === 1
+
+  // Open scrolled to the morning so the day's first events are in view.
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = 7 * HOUR_HEIGHT
+  }, [ref])
+
+  const nowMinutes = today.getHours() * 60 + today.getMinutes()
+
   return (
-    <div className="grid grid-cols-7">
-      {days.map((d) => {
-        const key = iso(d)
-        const isToday = sameDay(d, today)
-        const dayEvents = eventsByDate[key] || []
-        return (
-          <div key={key} className="min-h-full border-r border-border">
-            <div
-              className={[
-                'border-b border-border px-2 py-2 text-center',
-                isToday ? 'bg-accent/10' : '',
-              ].join(' ')}
-            >
-              <div className="text-xs text-gray-500">{WEEKDAYS[d.getDay()]}</div>
+    <div className="flex h-full flex-col">
+      {showHeader && (
+        <div className="flex flex-shrink-0 border-b border-border pr-[10px]">
+          <div className="w-14 flex-none" />
+          {days.map((d) => {
+            const isToday = sameDay(d, today)
+            return (
               <div
-                className={[
-                  'font-mono text-lg',
-                  isToday ? 'font-bold text-accent' : 'text-gray-200',
-                ].join(' ')}
+                key={iso(d)}
+                className={['flex-1 py-2 text-center', isToday ? 'bg-accent/10' : ''].join(' ')}
               >
-                {d.getDate()}
+                <div className="text-xs text-gray-500">{WEEKDAYS[d.getDay()]}</div>
+                <div className={['font-mono text-lg', isToday ? 'font-bold text-accent' : 'text-gray-200'].join(' ')}>
+                  {d.getDate()}
+                </div>
               </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => onAdd(key)}
-              className="block min-h-[280px] w-full space-y-1 p-2 text-left align-top active:bg-white/5"
-            >
-              {dayEvents.map((e) => (
-                <EventChip key={e.id} event={e} onOpen={onOpen} />
-              ))}
-            </button>
+            )
+          })}
+        </div>
+      )}
+
+      <div ref={ref} {...handlers} className="scroll-area relative flex-1">
+        <div className="flex" style={{ height: DAY_HEIGHT }}>
+          {/* Hour label gutter */}
+          <div className="relative w-14 flex-none">
+            {HOURS.map((h) => (
+              <div
+                key={h}
+                className="absolute right-2 -translate-y-1/2 font-mono text-[10px] text-gray-500"
+                style={{ top: h * HOUR_HEIGHT }}
+              >
+                {h === 0 ? '' : `${String(h).padStart(2, '0')}:00`}
+              </div>
+            ))}
           </div>
-        )
-      })}
+          {/* Day columns */}
+          {days.map((d) => {
+            const key = iso(d)
+            const isToday = sameDay(d, today)
+            const segs = daySegments(events, key)
+            return (
+              <div key={key} className="relative flex-1 border-l border-border">
+                {/* Hour rows: each is a tap target to add an event at that hour */}
+                {HOURS.map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => onAdd(key, `${String(h).padStart(2, '0')}:00`)}
+                    className="absolute inset-x-0 border-b border-border/60 active:bg-white/5"
+                    style={{ top: h * HOUR_HEIGHT, height: HOUR_HEIGHT }}
+                    aria-label={`Add event ${key} ${h}:00`}
+                  />
+                ))}
+                {/* Current-time indicator */}
+                {isToday && (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 z-20 flex items-center"
+                    style={{ top: (nowMinutes / 60) * HOUR_HEIGHT }}
+                  >
+                    <span className="-ml-1 h-2 w-2 rounded-full bg-loss" />
+                    <span className="h-0.5 flex-1 bg-loss" />
+                  </div>
+                )}
+                {/* Event blocks */}
+                {segs.map((e) => {
+                  const cat = catOf(categories, e.category)
+                  const top = (e.segStart / 60) * HOUR_HEIGHT
+                  const height = Math.max(18, ((e.segEnd - e.segStart) / 60) * HOUR_HEIGHT - 2)
+                  const widthPct = 100 / e.lanes
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation()
+                        onOpen(e)
+                      }}
+                      className="absolute z-10 overflow-hidden rounded-md px-1.5 py-0.5 text-left active:scale-[0.99]"
+                      style={{
+                        top,
+                        height,
+                        left: `calc(${e.lane * widthPct}% + 2px)`,
+                        width: `calc(${widthPct}% - 4px)`,
+                        backgroundColor: `${cat.color}26`,
+                        borderLeft: `3px solid ${cat.color}`,
+                      }}
+                    >
+                      <div className="flex items-center gap-1 truncate text-xs font-semibold text-white">
+                        <CategoryIcon name={cat.icon} className="h-3 w-3 flex-shrink-0" style={{ color: cat.color }} />
+                        <span className="truncate">{e.title || '(untitled)'}</span>
+                      </div>
+                      {height > 30 && (
+                        <div className="truncate font-mono text-[10px] text-gray-300">
+                          {single || !isMultiDay(e)
+                            ? `${fmtMinutes(e.segStart)}–${fmtMinutes(e.segEnd)}`
+                            : 'all day'}
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
 
-function DayView({ cursor, today, eventsByDate, onAdd, onOpen }) {
-  const key = iso(cursor)
-  const dayEvents = eventsByDate[key] || []
-  const isToday = sameDay(cursor, today)
+// Read-only event info page with a pencil edit affordance in the top-right.
+function EventDetail({ event, categories, onClose, onEdit }) {
+  if (!event) return null
+  const cat = catOf(categories, event.category)
   return (
-    <div>
-      {HOURS.map((h) => {
-        const hh = String(h).padStart(2, '0')
-        const slotEvents = dayEvents.filter((e) => Number(String(e.time ?? '').slice(0, 2)) === h)
-        const isNow = isToday && today.getHours() === h
-        return (
-          <button
-            key={h}
-            type="button"
-            onClick={() => onAdd(key, `${hh}:00`)}
-            className={[
-              'flex w-full items-start gap-4 border-b border-border px-4 py-3 text-left active:bg-white/5',
-              isNow ? 'bg-accent/10' : '',
-            ].join(' ')}
+    <Modal
+      open={!!event}
+      onClose={onClose}
+      title="Event"
+      headerExtra={
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label="Edit event"
+          className="rounded-lg p-2 text-accent active:scale-95 active:bg-white/5"
+        >
+          <PencilIcon className="h-6 w-6" />
+        </button>
+      }
+      footer={<Button onClick={onClose}>Close</Button>}
+    >
+      <div className="space-y-5">
+        <div className="flex items-start gap-3">
+          <span
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: `${cat.color}22` }}
           >
-            <div className="w-16 flex-shrink-0 pt-0.5 font-mono text-sm text-gray-500">
-              {hh}:00
-            </div>
-            <div className="flex-1 space-y-1">
-              {slotEvents.map((e) => (
-                <EventChip key={e.id} event={e} onOpen={onOpen} />
-              ))}
-            </div>
-          </button>
-        )
-      })}
-    </div>
+            <CategoryIcon name={cat.icon} className="h-6 w-6" style={{ color: cat.color }} />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-2xl font-bold text-white">{event.title || '(untitled)'}</h3>
+            <span
+              className="mt-1 inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold"
+              style={{ backgroundColor: `${cat.color}22`, color: cat.color }}
+            >
+              {cat.name}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3 text-gray-200">
+          <ClockIcon className="h-5 w-5 flex-shrink-0 text-gray-400" />
+          <span>{rangeText(event)}</span>
+        </div>
+
+        {event.notes?.trim() && (
+          <div className="flex items-start gap-3 rounded-xl bg-white/5 px-4 py-3 text-gray-200">
+            <NoteIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400" />
+            <p className="whitespace-pre-wrap">{event.notes}</p>
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 
-function EventModal({ draft, setDraft, onClose, onSave, onDelete, isExisting }) {
+function EventModal({ draft, setDraft, categories, onClose, onSave, onDelete, onNewCategory, isExisting }) {
   if (!draft) return null
+  const set = (patch) => setDraft({ ...draft, ...patch })
   return (
     <Modal
       open={!!draft}
@@ -353,7 +773,6 @@ function EventModal({ draft, setDraft, onClose, onSave, onDelete, isExisting }) 
         </>
       }
     >
-      {/* Two columns: details on the left, category on the right. */}
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-4">
           <input
@@ -361,45 +780,215 @@ function EventModal({ draft, setDraft, onClose, onSave, onDelete, isExisting }) 
             className={fieldClass}
             placeholder="Event title"
             value={draft.title}
-            onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+            onChange={(e) => set({ title: e.target.value })}
           />
-          <div className="flex gap-3">
-            <input
-              type="date"
+          {/* Time frame: from (date + time) → to (date + time) */}
+          <div className="space-y-3 rounded-xl border border-border bg-bg/40 p-3">
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">From</label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  className={fieldClass}
+                  value={draft.startDate}
+                  onChange={(e) => set({ startDate: e.target.value })}
+                />
+                <input
+                  type="time"
+                  className={fieldClass}
+                  value={draft.startTime}
+                  onChange={(e) => set({ startTime: e.target.value })}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-500">To</label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  className={fieldClass}
+                  value={draft.endDate}
+                  min={draft.startDate}
+                  onChange={(e) => set({ endDate: e.target.value })}
+                />
+                <input
+                  type="time"
+                  className={fieldClass}
+                  value={draft.endTime}
+                  onChange={(e) => set({ endTime: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">Notes</label>
+            <textarea
+              rows={4}
               className={fieldClass}
-              value={draft.date}
-              onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-            />
-            <input
-              type="time"
-              className={fieldClass}
-              value={draft.time}
-              onChange={(e) => setDraft({ ...draft, time: e.target.value })}
+              placeholder="Description / notes…"
+              value={draft.notes}
+              onChange={(e) => set({ notes: e.target.value })}
             />
           </div>
         </div>
         <div>
           <label className="mb-2 block text-xs text-gray-500">Category</label>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(CATEGORIES).map(([name, color]) => (
+            {categories.map((c) => {
+              const on = draft.category === c.id
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => set({ category: c.id })}
+                  className={[
+                    'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold active:scale-95',
+                    on ? 'shadow-glow' : 'opacity-60',
+                  ].join(' ')}
+                  style={{
+                    backgroundColor: `${c.color}22`,
+                    color: c.color,
+                    outline: on ? `2px solid ${c.color}` : 'none',
+                  }}
+                >
+                  <CategoryIcon name={c.icon} className="h-4 w-4" />
+                  {c.name}
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              onClick={onNewCategory}
+              className="flex items-center gap-2 rounded-xl border border-dashed border-border px-4 py-2.5 text-sm font-semibold text-gray-400 active:scale-95"
+            >
+              <PlusIcon className="h-4 w-4" /> New
+            </button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// Manager listing all categories with edit/delete and an add button.
+function CategoriesModal({ open, categories, onClose, onAdd, onEdit }) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Categories"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Done
+          </Button>
+          <Button onClick={onAdd}>
+            <span className="flex items-center gap-2">
+              <PlusIcon className="h-5 w-5" /> Category
+            </span>
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-2 sm:grid-cols-2">
+        {categories.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onEdit(c)}
+            className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3 text-left active:scale-[0.98]"
+            style={{ outline: `1px solid ${c.color}55` }}
+          >
+            <span
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
+              style={{ backgroundColor: `${c.color}22` }}
+            >
+              <CategoryIcon name={c.icon} className="h-5 w-5" style={{ color: c.color }} />
+            </span>
+            <span className="flex-1 truncate font-semibold text-white">{c.name}</span>
+            <PencilIcon className="h-5 w-5 flex-shrink-0 text-gray-400" />
+          </button>
+        ))}
+      </div>
+    </Modal>
+  )
+}
+
+function CategoryModal({ draft, setDraft, onClose, onSave, onDelete, canDelete, isExisting }) {
+  if (!draft) return null
+  const set = (patch) => setDraft({ ...draft, ...patch })
+  return (
+    <Modal
+      open={!!draft}
+      onClose={onClose}
+      size="narrow"
+      title={isExisting ? 'Edit Category' : 'New Category'}
+      footer={
+        <>
+          {canDelete && (
+            <Button variant="danger" onClick={onDelete}>
+              <TrashIcon className="h-5 w-5" />
+            </Button>
+          )}
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={onSave}>Save</Button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div>
+          <label className="mb-2 block text-xs text-gray-500">Name</label>
+          <input
+            autoFocus
+            className={fieldClass}
+            placeholder="Category name (e.g. Travel)"
+            value={draft.name}
+            onChange={(e) => set({ name: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="mb-2 block text-xs text-gray-500">Color</label>
+          <div className="flex flex-wrap gap-3">
+            {PALETTE.map((c) => (
               <button
-                key={name}
+                key={c}
                 type="button"
-                onClick={() => setDraft({ ...draft, category: name })}
-                className={[
-                  'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold active:scale-95',
-                  draft.category === name ? 'shadow-glow' : 'opacity-60',
-                ].join(' ')}
+                onClick={() => set({ color: c })}
+                aria-label={`Color ${c}`}
+                className="h-10 w-10 rounded-full active:scale-90"
                 style={{
-                  backgroundColor: `${color}22`,
-                  color,
-                  outline: draft.category === name ? `2px solid ${color}` : 'none',
+                  backgroundColor: c,
+                  outline: draft.color === c ? '3px solid white' : 'none',
+                  outlineOffset: 2,
                 }}
-              >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-                {name}
-              </button>
+              />
             ))}
+          </div>
+        </div>
+        <div>
+          <label className="mb-2 block text-xs text-gray-500">Icon</label>
+          <div className="flex flex-wrap gap-2">
+            {ICON_NAMES.map((name) => {
+              const on = draft.icon === name
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => set({ icon: name })}
+                  aria-label={`Icon ${name}`}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl active:scale-90"
+                  style={{
+                    backgroundColor: on ? `${draft.color}22` : 'rgba(255,255,255,0.05)',
+                    color: on ? draft.color : '#8B949E',
+                    outline: on ? `2px solid ${draft.color}` : 'none',
+                  }}
+                >
+                  <CategoryIcon name={name} className="h-6 w-6" />
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>

@@ -740,16 +740,27 @@ function GoalsModule({ sectionId }) {
 
 function CalendarModule() {
   const [events] = useLocalState('calendar-events', [])
+  const [categories] = useLocalState('calendar-categories', [])
   const today = iso(new Date())
+  // Start date/time across legacy ({date,time}) and timeframe ({startDate,...}).
+  const evDate = (e) => e.startDate || e.date || ''
+  const evTime = (e) => e.startTime || e.time || ''
   const todays = useMemo(() => {
     const list = Array.isArray(events) ? events : []
     return list
-      .filter((e) => e && typeof e.date === 'string' && e.date === today)
-      .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+      .filter((e) => e && evDate(e) <= today && today <= (e.endDate || e.startDate || e.date || evDate(e)))
+      .sort((a, b) => evTime(a).localeCompare(evTime(b)))
   }, [events, today])
 
   if (todays.length === 0) {
     return <p className="text-sm text-gray-500">Nothing on the calendar today.</p>
+  }
+  const colorOf = (e) => {
+    const cats = Array.isArray(categories) ? categories : []
+    const match = cats.find(
+      (c) => c.id === e.category || c.name?.toLowerCase() === String(e.category || '').toLowerCase(),
+    )
+    return match?.color || CAL_COLORS[e.category] || '#8B949E'
   }
   const fmtTime = (t) => {
     if (!t) return ''
@@ -762,10 +773,10 @@ function CalendarModule() {
         <li key={e.id} className="flex items-center gap-3">
           <span
             className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-            style={{ backgroundColor: CAL_COLORS[e.category] || '#8B949E' }}
+            style={{ backgroundColor: colorOf(e) }}
           />
           <span className="flex-1 truncate text-gray-100">{e.title}</span>
-          <span className="font-mono text-xs text-gray-400">{fmtTime(e.time)}</span>
+          <span className="font-mono text-xs text-gray-400">{fmtTime(evTime(e))}</span>
         </li>
       ))}
     </ul>

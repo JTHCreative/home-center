@@ -3,7 +3,7 @@ import { CloseIcon } from './Icons.jsx'
 // Modal sheet for add/edit forms. Tap the backdrop or X to dismiss.
 // Header and footer are pinned; only the body scrolls (with a fat, grabbable
 // scrollbar), and the body uses the full space above the on-screen keyboard.
-export default function Modal({ open, onClose, title, children, footer, size = 'wide' }) {
+export default function Modal({ open, onClose, title, children, footer, headerExtra, size = 'wide' }) {
   if (!open) return null
   const maxWidth = size === 'narrow' ? 'max-w-lg' : 'max-w-3xl'
   return (
@@ -20,14 +20,17 @@ export default function Modal({ open, onClose, title, children, footer, size = '
       >
         <div className="flex flex-shrink-0 items-center justify-between border-b border-border px-6 py-4">
           <h2 className="text-xl font-bold text-white">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-lg p-2 text-gray-400 active:scale-95 active:bg-white/5"
-          >
-            <CloseIcon className="h-6 w-6" />
-          </button>
+          <div className="flex items-center gap-1">
+            {headerExtra}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-lg p-2 text-gray-400 active:scale-95 active:bg-white/5"
+            >
+              <CloseIcon className="h-6 w-6" />
+            </button>
+          </div>
         </div>
         <div className="scroll-fat flex-1 overflow-y-auto p-6">{children}</div>
         {footer && (

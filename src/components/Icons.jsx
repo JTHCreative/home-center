@@ -353,3 +353,117 @@ export function PencilIcon(props) {
     </svg>
   )
 }
+
+export function ClockIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  )
+}
+
+export function NoteIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 4h16v12l-4 4H4z" />
+      <path d="M14 20v-4h4M8 9h8M8 13h5" />
+    </svg>
+  )
+}
+
+// --- Category icon set (pickable when editing a category) --------------------
+export function BriefcaseIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18" />
+    </svg>
+  )
+}
+
+export function HeartIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 21s-7-4.5-9.5-9A5 5 0 0 1 12 6a5 5 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9z" />
+    </svg>
+  )
+}
+
+export function UserIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20a8 8 0 0 1 16 0" />
+    </svg>
+  )
+}
+
+export function UsersIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 19a6.5 6.5 0 0 1 13 0" />
+      <path d="M16 5.5a3.5 3.5 0 0 1 0 6.9M17 13.5a6 6 0 0 1 4.5 5.5" />
+    </svg>
+  )
+}
+
+export function TagIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3H4a1 1 0 0 0-1 1v5.59a2 2 0 0 0 .59 1.41l9.58 9.59a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z" />
+      <circle cx="7.5" cy="7.5" r="1.2" />
+    </svg>
+  )
+}
+
+export function BookIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 6.5A4.5 4.5 0 0 0 8 4H3v14h5a4 4 0 0 1 4 2 4 4 0 0 1 4-2h5V4h-5a4.5 4.5 0 0 0-4 2.5z" />
+      <path d="M12 6.5V20" />
+    </svg>
+  )
+}
+
+export function GiftIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="8" width="18" height="4" rx="1" />
+      <path d="M4 12v8h16v-8M12 8v12" />
+      <path d="M12 8S10 3 7.5 4.5 9 8 12 8zM12 8s2-5 4.5-3.5S15 8 12 8z" />
+    </svg>
+  )
+}
+
+export function PlaneIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M22 3 2 10l7 3 3 7z" />
+      <path d="M9 13l4-4" />
+    </svg>
+  )
+}
+
+export function DumbbellIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 12h16" />
+      <rect x="2" y="9" width="3" height="6" rx="1" />
+      <rect x="19" y="9" width="3" height="6" rx="1" />
+      <rect x="5" y="10" width="2" height="4" rx="0.5" />
+      <rect x="17" y="10" width="2" height="4" rx="0.5" />
+    </svg>
+  )
+}
+
+export function MusicIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 18V5l12-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="18" cy="16" r="3" />
+    </svg>
+  )
+}
