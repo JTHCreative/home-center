@@ -34,6 +34,7 @@ import {
   TrashIcon,
 } from '../components/Icons.jsx'
 import { SEED_MEALS, SEED_MEMBERS } from '../lib/seeds.js'
+import { MemberBadge, MemberPicker } from '../components/Member.jsx'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
@@ -55,23 +56,11 @@ const SUBPAGES = [
   { id: 'household', label: 'Household' },
 ]
 
-// Household member accent palette (tap to pick when adding/editing a member).
-const MEMBER_COLORS = ['#58A6FF', '#39D353', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
-
 // A planned slot is { mealId, providers: [id], guests: [id] }. Older saves
 // stored just the mealId string, so read through these helpers to stay compatible.
 const slotMealId = (v) => (typeof v === 'string' ? v : v?.mealId || undefined)
 const slotProviders = (v) => (typeof v === 'string' ? [] : v?.providers || [])
 const slotGuests = (v) => (typeof v === 'string' ? [] : v?.guests || [])
-
-// Initials for a member badge (first two word-initials, uppercased).
-const initials = (name) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() || '')
-    .join('')
 
 // --- Date helpers (local, no library; weeks start Sunday) --------------------
 const iso = (d) => {
@@ -187,7 +176,6 @@ export default function Meals() {
   // When a meal is created from the slot editor, auto-select it back into the slot on save.
   const [pendingSlotSelect, setPendingSlotSelect] = useState(false)
   const [slotDraft, setSlotDraft] = useState(null) // { day, slot, mealId, providers, guests }
-  const [memberDraft, setMemberDraft] = useState(null) // { id, name, color }
   const [memberMealsFor, setMemberMealsFor] = useState(null) // member id whose meal list is being edited
   const [mealsTab, setMealsTab] = useState('recipe') // Meals library: 'recipe' | 'takeout'
   const [subpage, setSubpage] = useState('schedule') // Schedule | Household | Meals | Groceries
@@ -300,17 +288,8 @@ export default function Meals() {
     setSlotDraft(null)
   }
 
-  // --- Household member ops --------------------------------------------------
-  const saveMember = () => {
-    if (!memberDraft.name.trim()) return
-    const draft = { ...memberDraft, name: memberDraft.name.trim() }
-    setMembers((list) => {
-      const exists = list.some((m) => m.id === draft.id)
-      return exists ? list.map((m) => (m.id === draft.id ? draft : m)) : [...list, draft]
-    })
-    setMemberDraft(null)
-  }
-  // Toggle a meal in a member's personal list (who likes / makes / orders what).
+  // Household members are added/edited/removed globally in Settings → Household;
+  // here we only assign which meals each member makes/orders.
   const toggleMemberMeal = (memberId, mealId) =>
     setMembers((list) =>
       list.map((m) => {
@@ -319,32 +298,6 @@ export default function Meals() {
         return { ...m, meals: cur.includes(mealId) ? cur.filter((x) => x !== mealId) : [...cur, mealId] }
       }),
     )
-
-  const deleteMember = (id) => {
-    setMembers((list) => list.filter((m) => m.id !== id))
-    // Drop the member from every provider/guest list across all weeks.
-    setPlans((p) => {
-      const next = {}
-      for (const [wk, days] of Object.entries(p)) {
-        next[wk] = {}
-        for (const [day, slots] of Object.entries(days)) {
-          next[wk][day] = {}
-          for (const [slot, val] of Object.entries(slots)) {
-            if (val && typeof val === 'object') {
-              next[wk][day][slot] = {
-                ...val,
-                providers: (val.providers || []).filter((x) => x !== id),
-                guests: (val.guests || []).filter((x) => x !== id),
-              }
-            } else {
-              next[wk][day][slot] = val
-            }
-          }
-        }
-      }
-      return next
-    })
-  }
 
   const toggleChecked = (key) =>
     setCheckedByWeek((c) => ({
@@ -662,19 +615,16 @@ export default function Meals() {
       {/* ---- Household: one card per member, each with their own meals ---- */}
       {subpage === 'household' && (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6">
             <p className="text-sm text-gray-500">
-              Assign the meals & takeout each person likes to make or order.
+              Assign the meals & takeout each person likes to make or order. Add or edit members in{' '}
+              <span className="font-semibold text-gray-400">Settings → Household</span>.
             </p>
-            <Button
-              className="px-4 py-2"
-              onClick={() => setMemberDraft({ id: crypto.randomUUID(), name: '', color: MEMBER_COLORS[0] })}
-            >
-              <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> Member</span>
-            </Button>
           </div>
           {members.length === 0 ? (
-            <Card className="text-sm text-gray-500">Add household members to get started.</Card>
+            <Card className="text-sm text-gray-500">
+              No household members yet — add them in Settings → Household.
+            </Card>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {members.map((mem) => {
@@ -686,14 +636,6 @@ export default function Meals() {
                       <h3 className="flex-1 truncate text-lg font-bold" style={{ color: mem.color }}>
                         {mem.name}
                       </h3>
-                      <button
-                        type="button"
-                        onClick={() => setMemberDraft({ ...mem })}
-                        aria-label={`Edit ${mem.name}`}
-                        className="rounded-lg bg-white/5 p-2 text-gray-300 active:scale-95"
-                      >
-                        <PencilIcon className="h-5 w-5" />
-                      </button>
                     </div>
                     <ul className="mb-3 space-y-2">
                       {memMeals.length === 0 && (
@@ -1041,19 +983,6 @@ export default function Meals() {
         )}
       </Modal>
 
-      {/* Add / edit household member */}
-      <MemberModal
-        draft={memberDraft}
-        setDraft={setMemberDraft}
-        onClose={() => setMemberDraft(null)}
-        onSave={saveMember}
-        onDelete={() => {
-          deleteMember(memberDraft.id)
-          setMemberDraft(null)
-        }}
-        isExisting={memberDraft && members.some((m) => m.id === memberDraft.id)}
-      />
-
       {/* Assign meals to a household member */}
       <MemberMealsModal
         member={members.find((m) => m.id === memberMealsFor) || null}
@@ -1374,62 +1303,12 @@ function ScheduleFilter({ members, filterProviders, filterType, onToggleProvider
   )
 }
 
-// Small circular badge showing a member's initials in their color.
-function MemberBadge({ member, size = 18, ring = false }) {
-  return (
-    <span
-      className="flex flex-shrink-0 items-center justify-center rounded-full font-mono font-bold leading-none"
-      style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.42,
-        backgroundColor: ring ? 'transparent' : member.color,
-        color: ring ? member.color : '#0D1117',
-        border: ring ? `1.5px solid ${member.color}` : 'none',
-      }}
-      title={member.name}
-    >
-      {initials(member.name)}
-    </span>
-  )
-}
-
 // Provider (filled) and guest (ringed) badges shown on a planner cell.
 function MemberRow({ providers, guests, memberById }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-1">
       {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={22} />)}
       {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={22} ring />)}
-    </div>
-  )
-}
-
-// Multi-select row of member chips for picking providers/guests.
-function MemberPicker({ members, selected, onToggle }) {
-  if (members.length === 0) {
-    return <p className="text-xs text-gray-600">No household members yet — add some above.</p>
-  }
-  return (
-    <div className="flex flex-wrap gap-2">
-      {members.map((mem) => {
-        const on = selected.includes(mem.id)
-        return (
-          <button
-            key={mem.id}
-            type="button"
-            onClick={() => onToggle(mem.id)}
-            className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95"
-            style={{
-              backgroundColor: on ? `${mem.color}22` : 'rgba(255,255,255,0.05)',
-              color: on ? mem.color : '#8B949E',
-              outline: on ? `2px solid ${mem.color}` : 'none',
-            }}
-          >
-            <MemberBadge member={mem} ring={!on} />
-            {mem.name}
-          </button>
-        )
-      })}
     </div>
   )
 }
@@ -1553,56 +1432,3 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateM
   )
 }
 
-function MemberModal({ draft, setDraft, onClose, onSave, onDelete, isExisting }) {
-  if (!draft) return null
-  return (
-    <Modal
-      open={!!draft}
-      onClose={onClose}
-      title={isExisting ? 'Edit Member' : 'Add Member'}
-      footer={
-        <>
-          {isExisting && (
-            <Button variant="danger" onClick={onDelete}>
-              <TrashIcon className="h-5 w-5" />
-            </Button>
-          )}
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={onSave}>Save</Button>
-        </>
-      }
-    >
-      <div className="grid gap-5 md:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-xs text-gray-500">Name</label>
-          <input
-            autoFocus
-            className={fieldClass}
-            placeholder="Member name (e.g. Justin)"
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          />
-        </div>
-        <div>
-          <label className="mb-2 block text-xs text-gray-500">Color</label>
-          <div className="flex flex-wrap gap-3">
-            {MEMBER_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setDraft({ ...draft, color: c })}
-                aria-label={`Color ${c}`}
-                className="h-10 w-10 rounded-full active:scale-90"
-                style={{
-                  backgroundColor: c,
-                  outline: draft.color === c ? '3px solid white' : 'none',
-                  outlineOffset: 2,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    </Modal>
-  )
-}

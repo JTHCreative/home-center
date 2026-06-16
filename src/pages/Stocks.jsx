@@ -321,7 +321,7 @@ export default function Stocks() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
-        title="Stocks & Crypto"
+        title="Investments"
         subtitle={
           hasPositions
             ? hasFinnhubKey

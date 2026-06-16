@@ -85,7 +85,7 @@ const MODULE_TYPES = {
   shopping: { title: 'Shopping', configurable: false, multi: false },
   weather: { title: 'Weather', configurable: true, multi: true },
   smarthome: { title: 'Smart Home', configurable: true, multi: false },
-  stocks: { title: 'Stocks & Crypto', configurable: true, multi: false },
+  stocks: { title: 'Investments', configurable: true, multi: false },
   goals: { title: 'Goals', configurable: true, multi: false },
   calendar: { title: "Today's Events", configurable: false, multi: false },
   traffic: { title: 'Traffic', configurable: true, multi: true },
@@ -776,7 +776,7 @@ function CalendarModule() {
             style={{ backgroundColor: colorOf(e) }}
           />
           <span className="flex-1 truncate text-gray-100">{e.title}</span>
-          <span className="font-mono text-xs text-gray-400">{fmtTime(evTime(e))}</span>
+          <span className="font-mono text-xs text-gray-400">{e.allDay ? 'All day' : fmtTime(evTime(e))}</span>
         </li>
       ))}
     </ul>

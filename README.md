@@ -28,7 +28,7 @@ touch targets and no hover-only interactions.
   controls (power, volume, input), and a smart-plug on/off card grid. Uses mock
   state today; structured so Home Assistant calls can be swapped in later (see
   the controller helpers in `src/pages/SmartHome.jsx`).
-- **Stocks & Crypto** — portfolio value + daily P&L, holdings with price,
+- **Investments** — portfolio value + daily P&L, holdings with price,
   % change, and a per-asset sparkline. Separate Stocks / Crypto tabs. Live data
   from the [Finnhub API](https://finnhub.io/) when a key is set, mock data
   otherwise.
