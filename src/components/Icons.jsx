@@ -206,6 +206,16 @@ export function VolumeIcon(props) {
   )
 }
 
+export function CastIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2 16a6 6 0 0 1 6 6" />
+      <path d="M2 12a10 10 0 0 1 10 10" />
+      <path d="M2 8.5V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7" />
+    </svg>
+  )
+}
+
 export function ChevronLeft(props) {
   return (
     <svg {...base} {...props}>
