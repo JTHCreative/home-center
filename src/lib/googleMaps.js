@@ -85,3 +85,20 @@ export function directionsUrl(origin, destination, via = []) {
   if (stops.length) p.set('waypoints', stops.join('|'))
   return `https://www.google.com/maps/dir/?${p.toString()}`
 }
+
+// Build a Google Maps Embed API directions URL for an <iframe>. Shows the route
+// on a live map with traffic-aware routing. Requires the Maps Embed API to be
+// enabled on the same key; returns null without a key so callers can skip the
+// iframe (the Embed API won't render without one).
+export function embedMapUrl(origin, destination, via = []) {
+  if (!API_KEY || !origin?.trim() || !destination?.trim()) return null
+  const stops = (via || []).map((v) => v?.trim()).filter(Boolean)
+  const p = new URLSearchParams({
+    key: API_KEY,
+    origin: origin.trim(),
+    destination: destination.trim(),
+    mode: 'driving',
+  })
+  if (stops.length) p.set('waypoints', stops.join('|'))
+  return `https://www.google.com/maps/embed/v1/directions?${p.toString()}`
+}
