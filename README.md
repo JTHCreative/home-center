@@ -12,7 +12,8 @@ touch targets and no hover-only interactions.
   controls, a chosen Stocks/Crypto watchlist with live quotes, today's planned
   meals (breakfast/lunch/dinner, with who's providing each), a **Shopping** list
   with optional "buy by" dates, current **Weather** for any number of locations
-  (via Open-Meteo — free, no API key), a chosen Goals list (interactive), today's
+  (via Open-Meteo — free, no API key), an embedded **Spotify** player (paste a
+  playlist/album/track link), a chosen Goals list (interactive), today's
   calendar events, and **Traffic** routes showing live drive time with current
   traffic from Google (set a start + destination, optionally forcing a specific
   route through "via" waypoints; add as many routes as you like). To keep API usage minimal, Traffic only polls during commute windows

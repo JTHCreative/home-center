@@ -36,6 +36,7 @@ import {
   MoonIcon,
   PlusIcon,
   PowerIcon,
+  SpotifyIcon,
   SunIcon,
   SunriseIcon,
   TrashIcon,
@@ -65,6 +66,7 @@ const MODULE_TYPES = {
   goals: { title: 'Goals', configurable: true, multi: false },
   calendar: { title: "Today's Events", configurable: false, multi: false },
   traffic: { title: 'Traffic', configurable: true, multi: true },
+  spotify: { title: 'Spotify', configurable: true, multi: true },
 }
 // Order in which singleton instances seed a fresh dashboard / get backfilled.
 const SINGLETONS = ['meals', 'shopping', 'smarthome', 'stocks', 'goals', 'calendar']
@@ -81,6 +83,8 @@ function defaultSettings(type) {
       return { label: '', origin: '', destination: '', via: [] }
     case 'weather':
       return { location: '', units: 'fahrenheit' }
+    case 'spotify':
+      return { label: '', url: '' }
     default:
       return {}
   }
@@ -138,8 +142,21 @@ function migrateDashboard(stored) {
 const moduleTitle = (m) => {
   if (m.type === 'traffic') return m.settings.label?.trim() || 'Traffic'
   if (m.type === 'weather') return m.settings.location?.trim() || 'Weather'
+  if (m.type === 'spotify') return m.settings.label?.trim() || 'Spotify'
   return MODULE_TYPES[m.type].title
 }
+
+// Parse a Spotify share link or URI into { type, id } for the embed player.
+function parseSpotify(input) {
+  const s = (input || '').trim()
+  if (!s) return null
+  let m = s.match(/spotify:(playlist|track|album|artist|show|episode):([A-Za-z0-9]+)/)
+  if (m) return { type: m[1], id: m[2] }
+  m = s.match(/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?(playlist|track|album|artist|show|episode)\/([A-Za-z0-9]+)/)
+  if (m) return { type: m[1], id: m[2] }
+  return null
+}
+const spotifyEmbedUrl = (p) => `https://open.spotify.com/embed/${p.type}/${p.id}?utm_source=generator`
 
 // --- Shared date helpers (local, weeks start Sunday) -------------------------
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -1091,6 +1108,34 @@ function WeatherModule({ settings }) {
   )
 }
 
+function SpotifyModule({ settings }) {
+  const parsed = parseSpotify(settings.url)
+  if (!settings.url?.trim()) {
+    return (
+      <p className="text-sm text-gray-500">
+        Add a Spotify link with the <GearIcon className="inline h-4 w-4" /> in customize mode (Share → Copy
+        link to a playlist, album, track, or show).
+      </p>
+    )
+  }
+  if (!parsed) {
+    return <p className="text-sm text-gray-500">That doesn’t look like a Spotify link.</p>
+  }
+  // Single tracks/episodes look best compact; playlists/albums get the tall card.
+  const height = parsed.type === 'track' || parsed.type === 'episode' ? 152 : 352
+  return (
+    <iframe
+      title="Spotify player"
+      src={spotifyEmbedUrl(parsed)}
+      width="100%"
+      height={height}
+      loading="lazy"
+      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+      style={{ border: 0, borderRadius: 12 }}
+    />
+  )
+}
+
 function ModuleBody({ module }) {
   const { type, settings } = module
   switch (type) {
@@ -1110,6 +1155,8 @@ function ModuleBody({ module }) {
       return <CalendarModule />
     case 'traffic':
       return <TrafficModule settings={settings} />
+    case 'spotify':
+      return <SpotifyModule settings={settings} />
     default:
       return null
   }
@@ -1231,6 +1278,44 @@ function GoalsConfig({ value, onChange }) {
   )
 }
 
+function SpotifyConfig({ settings, onChange }) {
+  const parsed = parseSpotify(settings.url)
+  const url = settings.url?.trim()
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Label (optional)</label>
+        <input
+          className={fieldClass}
+          placeholder="e.g. Morning Mix"
+          value={settings.label || ''}
+          onChange={(e) => onChange({ label: e.target.value })}
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-gray-500">Spotify link</label>
+        <input
+          className={fieldClass}
+          placeholder="https://open.spotify.com/playlist/…"
+          value={settings.url || ''}
+          onChange={(e) => onChange({ url: e.target.value })}
+        />
+        {url && (
+          <p className={`mt-1 text-xs ${parsed ? 'text-gain' : 'text-loss'}`}>
+            {parsed
+              ? `${parsed.type.charAt(0).toUpperCase()}${parsed.type.slice(1)} linked.`
+              : 'Couldn’t read that Spotify link.'}
+          </p>
+        )}
+        <p className="mt-1 text-xs text-gray-600">
+          In Spotify, use Share → Copy link for a playlist, album, track, or show, then paste it here. No
+          login or API key needed.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function WeatherConfig({ settings, onChange }) {
   return (
     <div className="space-y-4">
@@ -1340,6 +1425,8 @@ function TrafficConfig({ settings, onChange }) {
 
 function ModuleConfig({ module, onPatch }) {
   switch (module.type) {
+    case 'spotify':
+      return <SpotifyConfig settings={module.settings} onChange={onPatch} />
     case 'weather':
       return <WeatherConfig settings={module.settings} onChange={onPatch} />
     case 'smarthome':
@@ -1439,6 +1526,7 @@ function SortableModule({ id, children }) {
 const ADDABLE = [
   { type: 'traffic', Icon: CarIcon, label: 'Traffic route', desc: 'Live drive time with current traffic' },
   { type: 'weather', Icon: CloudIcon, label: 'Weather', desc: 'Current conditions for a location' },
+  { type: 'spotify', Icon: SpotifyIcon, label: 'Spotify', desc: 'Embed a playlist, album, or track' },
 ]
 
 // Picker for adding modules: add a new instance of a multi-type module (Traffic,
