@@ -34,6 +34,7 @@ import {
   TrashIcon,
 } from '../components/Icons.jsx'
 import { SEED_MEALS, SEED_MEMBERS } from '../lib/seeds.js'
+import { MEMBER_COLORS, MemberBadge, MemberModal, MemberPicker } from '../components/Member.jsx'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
@@ -55,23 +56,11 @@ const SUBPAGES = [
   { id: 'household', label: 'Household' },
 ]
 
-// Household member accent palette (tap to pick when adding/editing a member).
-const MEMBER_COLORS = ['#58A6FF', '#39D353', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
-
 // A planned slot is { mealId, providers: [id], guests: [id] }. Older saves
 // stored just the mealId string, so read through these helpers to stay compatible.
 const slotMealId = (v) => (typeof v === 'string' ? v : v?.mealId || undefined)
 const slotProviders = (v) => (typeof v === 'string' ? [] : v?.providers || [])
 const slotGuests = (v) => (typeof v === 'string' ? [] : v?.guests || [])
-
-// Initials for a member badge (first two word-initials, uppercased).
-const initials = (name) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() || '')
-    .join('')
 
 // --- Date helpers (local, no library; weeks start Sunday) --------------------
 const iso = (d) => {
@@ -1374,62 +1363,12 @@ function ScheduleFilter({ members, filterProviders, filterType, onToggleProvider
   )
 }
 
-// Small circular badge showing a member's initials in their color.
-function MemberBadge({ member, size = 18, ring = false }) {
-  return (
-    <span
-      className="flex flex-shrink-0 items-center justify-center rounded-full font-mono font-bold leading-none"
-      style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.42,
-        backgroundColor: ring ? 'transparent' : member.color,
-        color: ring ? member.color : '#0D1117',
-        border: ring ? `1.5px solid ${member.color}` : 'none',
-      }}
-      title={member.name}
-    >
-      {initials(member.name)}
-    </span>
-  )
-}
-
 // Provider (filled) and guest (ringed) badges shown on a planner cell.
 function MemberRow({ providers, guests, memberById }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-1">
       {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={22} />)}
       {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={22} ring />)}
-    </div>
-  )
-}
-
-// Multi-select row of member chips for picking providers/guests.
-function MemberPicker({ members, selected, onToggle }) {
-  if (members.length === 0) {
-    return <p className="text-xs text-gray-600">No household members yet — add some above.</p>
-  }
-  return (
-    <div className="flex flex-wrap gap-2">
-      {members.map((mem) => {
-        const on = selected.includes(mem.id)
-        return (
-          <button
-            key={mem.id}
-            type="button"
-            onClick={() => onToggle(mem.id)}
-            className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95"
-            style={{
-              backgroundColor: on ? `${mem.color}22` : 'rgba(255,255,255,0.05)',
-              color: on ? mem.color : '#8B949E',
-              outline: on ? `2px solid ${mem.color}` : 'none',
-            }}
-          >
-            <MemberBadge member={mem} ring={!on} />
-            {mem.name}
-          </button>
-        )
-      })}
     </div>
   )
 }
@@ -1553,56 +1492,3 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateM
   )
 }
 
-function MemberModal({ draft, setDraft, onClose, onSave, onDelete, isExisting }) {
-  if (!draft) return null
-  return (
-    <Modal
-      open={!!draft}
-      onClose={onClose}
-      title={isExisting ? 'Edit Member' : 'Add Member'}
-      footer={
-        <>
-          {isExisting && (
-            <Button variant="danger" onClick={onDelete}>
-              <TrashIcon className="h-5 w-5" />
-            </Button>
-          )}
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={onSave}>Save</Button>
-        </>
-      }
-    >
-      <div className="grid gap-5 md:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-xs text-gray-500">Name</label>
-          <input
-            autoFocus
-            className={fieldClass}
-            placeholder="Member name (e.g. Justin)"
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          />
-        </div>
-        <div>
-          <label className="mb-2 block text-xs text-gray-500">Color</label>
-          <div className="flex flex-wrap gap-3">
-            {MEMBER_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setDraft({ ...draft, color: c })}
-                aria-label={`Color ${c}`}
-                className="h-10 w-10 rounded-full active:scale-90"
-                style={{
-                  backgroundColor: c,
-                  outline: draft.color === c ? '3px solid white' : 'none',
-                  outlineOffset: 2,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    </Modal>
-  )
-}

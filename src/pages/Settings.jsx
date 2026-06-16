@@ -19,14 +19,18 @@ import Card, { PageHeader } from '../components/Card.jsx'
 import Tabs from '../components/Tabs.jsx'
 import Toggle from '../components/Toggle.jsx'
 import Slider from '../components/Slider.jsx'
-import { CheckIcon, GripIcon, MuteIcon, VolumeIcon } from '../components/Icons.jsx'
+import { CheckIcon, GripIcon, MuteIcon, PencilIcon, PlusIcon, VolumeIcon } from '../components/Icons.jsx'
+import { MEMBER_COLORS, MemberBadge, MemberModal } from '../components/Member.jsx'
+import { Button } from '../components/Modal.jsx'
 import { THEMES, useSettings } from '../lib/settings.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { pageById, reconcileMenu } from '../lib/menu.js'
+import { SEED_MEMBERS } from '../lib/seeds.js'
 
 const TABS = [
   { id: 'themes', label: 'Themes' },
   { id: 'menu', label: 'Menu' },
+  { id: 'household', label: 'Household' },
 ]
 
 export default function Settings() {
@@ -40,7 +44,96 @@ export default function Settings() {
 
       {tab === 'themes' && <ThemesTab />}
       {tab === 'menu' && <MenuTab />}
+      {tab === 'household' && <HouseholdTab />}
     </div>
+  )
+}
+
+// Household members are shared with the Meals page (and now Calendar) via the
+// 'meals-members' storage key. This is a full add/edit/manage surface; Meals
+// keeps its own Add Member button too.
+function HouseholdTab() {
+  const [members, setMembers] = useLocalState('meals-members', SEED_MEMBERS)
+  const [, setCalendarEvents] = useLocalState('calendar-events', [])
+  const [draft, setDraft] = useState(null)
+
+  const saveMember = () => {
+    if (!draft.name.trim()) return
+    const m = { ...draft, name: draft.name.trim() }
+    setMembers((list) => {
+      const exists = list.some((x) => x.id === m.id)
+      return exists ? list.map((x) => (x.id === m.id ? m : x)) : [...list, m]
+    })
+    setDraft(null)
+  }
+
+  const deleteMember = (id) => {
+    setMembers((list) => list.filter((m) => m.id !== id))
+    // Drop the member from any calendar events they were assigned to.
+    setCalendarEvents((list) =>
+      Array.isArray(list)
+        ? list.map((e) =>
+            e && Array.isArray(e.members) && e.members.includes(id)
+              ? { ...e, members: e.members.filter((x) => x !== id) }
+              : e,
+          )
+        : list,
+    )
+    setDraft(null)
+  }
+
+  return (
+    <>
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-300">Household Members</h2>
+          <p className="text-sm text-gray-400">
+            Shared with Meals and Calendar — assign members to events and meal slots.
+          </p>
+        </div>
+        <Button
+          onClick={() => setDraft({ id: crypto.randomUUID(), name: '', color: MEMBER_COLORS[0] })}
+        >
+          <span className="flex items-center gap-2">
+            <PlusIcon className="h-5 w-5" /> Member
+          </span>
+        </Button>
+      </div>
+
+      {members.length === 0 ? (
+        <Card className="text-sm text-gray-500">Add household members to get started.</Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {members.map((mem) => (
+            <Card key={mem.id} style={{ borderColor: `${mem.color}66` }}>
+              <div className="flex items-center gap-3">
+                <MemberBadge member={mem} size={40} />
+                <h3 className="flex-1 truncate text-lg font-bold" style={{ color: mem.color }}>
+                  {mem.name}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setDraft({ ...mem })}
+                  aria-label={`Edit ${mem.name}`}
+                  className="rounded-lg bg-white/5 p-2 text-gray-300 active:scale-95"
+                >
+                  <PencilIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <MemberModal
+        draft={draft}
+        setDraft={setDraft}
+        onClose={() => setDraft(null)}
+        onSave={saveMember}
+        onDelete={() => deleteMember(draft.id)}
+        isExisting={draft && members.some((m) => m.id === draft.id)}
+      />
+    </>
   )
 }
 

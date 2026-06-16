@@ -3,8 +3,10 @@ import { PageHeader } from '../components/Card.jsx'
 import Tabs from '../components/Tabs.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Toggle from '../components/Toggle.jsx'
+import { MemberBadge, MemberPicker } from '../components/Member.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { useDragScroll } from '../lib/useDragScroll.js'
+import { SEED_MEMBERS } from '../lib/seeds.js'
 import {
   BellIcon,
   BookIcon,
@@ -14,7 +16,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ClockIcon,
+  CloseIcon,
   DumbbellIcon,
+  FilterIcon,
   GiftIcon,
   HeartIcon,
   HomeIcon,
@@ -127,6 +131,7 @@ function emptyEvent(date, time = '09:00', categoryId = DEFAULT_CATEGORIES[1].id)
     endDate: date,
     endTime: addMinutes(time, 60),
     category: categoryId,
+    members: [],
     notes: '',
   }
 }
@@ -138,7 +143,9 @@ function migrateEvents(list) {
   return list
     .filter((e) => e && typeof e === 'object')
     .map((e) => {
-      if (typeof e.startDate === 'string') return e
+      if (typeof e.startDate === 'string') {
+        return Array.isArray(e.members) ? e : { ...e, members: [] }
+      }
       const date = typeof e.date === 'string' ? e.date : ''
       const time = typeof e.time === 'string' ? e.time : '09:00'
       return {
@@ -150,6 +157,7 @@ function migrateEvents(list) {
         endDate: date,
         endTime: addMinutes(time, 60),
         category: e.category || 'other',
+        members: Array.isArray(e.members) ? e.members : [],
         notes: e.notes || '',
       }
     })
@@ -235,18 +243,44 @@ export default function Calendar() {
   const [cursor, setCursor] = useState(new Date())
   const [events, setEvents] = useLocalState('calendar-events', [], migrateEvents)
   const [categories, setCategories] = useLocalState('calendar-categories', DEFAULT_CATEGORIES)
+  const [members] = useLocalState('meals-members', SEED_MEMBERS) // shared with Meals/Settings
   const [draft, setDraft] = useState(null) // event being added/edited
   const [selectedId, setSelectedId] = useState(null) // event whose info page is open
   const [catManagerOpen, setCatManagerOpen] = useState(false)
   const [catDraft, setCatDraft] = useState(null) // category being added/edited
   // When a category is created from the event editor, re-select it on save.
   const [pendingCatSelect, setPendingCatSelect] = useState(false)
+  // Filter facets: category ids and member ids (each empty == no constraint).
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [filterCategories, setFilterCategories] = useState([])
+  const [filterMembers, setFilterMembers] = useState([])
 
   const today = new Date()
   const selected = useMemo(
     () => events.find((e) => e.id === selectedId) || null,
     [events, selectedId],
   )
+
+  const filterActive = filterCategories.length > 0 || filterMembers.length > 0
+  // An event matches when each active facet is satisfied (category AND member).
+  const visibleEvents = useMemo(() => {
+    if (!filterActive) return events
+    return events.filter((e) => {
+      if (filterCategories.length && !filterCategories.includes(e.category)) return false
+      if (filterMembers.length && !(e.members || []).some((id) => filterMembers.includes(id)))
+        return false
+      return true
+    })
+  }, [events, filterActive, filterCategories, filterMembers])
+
+  const toggleFilterCategory = (id) =>
+    setFilterCategories((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const toggleFilterMember = (id) =>
+    setFilterMembers((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const clearFilter = () => {
+    setFilterCategories([])
+    setFilterMembers([])
+  }
 
   const openNew = (date, time) => {
     const id = categories[0]?.id || DEFAULT_CATEGORIES[0].id
@@ -358,17 +392,10 @@ export default function Calendar() {
         </div>
       </PageHeader>
 
-      {/* Sub-navigation: centered navigator with an action cluster pinned right. */}
+      {/* Sub-navigation: Categories pinned left, centered navigator, and the
+          filter + add-event cluster pinned right. */}
       <div className="relative mb-4">
-        <Navigator
-          primary={nav.primary}
-          secondary={nav.secondary}
-          secondaryAccent={!nav.isNow}
-          onPrev={() => step(-1)}
-          onNext={() => step(1)}
-          onToday={() => setCursor(new Date())}
-        />
-        <div className="absolute inset-y-0 right-0 flex items-center gap-2">
+        <div className="absolute inset-y-0 left-0 flex items-center">
           <button
             type="button"
             onClick={() => setCatManagerOpen(true)}
@@ -377,6 +404,49 @@ export default function Calendar() {
             <TagIcon className="h-5 w-5" />
             <span className="hidden sm:inline">Categories</span>
           </button>
+        </div>
+
+        <Navigator
+          primary={nav.primary}
+          secondary={nav.secondary}
+          secondaryAccent={!nav.isNow}
+          onPrev={() => step(-1)}
+          onNext={() => step(1)}
+          onToday={() => setCursor(new Date())}
+        />
+
+        <div className="absolute inset-y-0 right-0 flex items-center gap-2">
+          <div className="relative flex items-center">
+            <button
+              type="button"
+              onClick={() => setFilterOpen((o) => !o)}
+              aria-label="Filter events"
+              className={[
+                'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
+                filterActive ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
+              ].join(' ')}
+            >
+              <FilterIcon className="h-5 w-5" />
+              <span className="hidden sm:inline">Filter</span>
+              {filterActive && (
+                <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-bg">
+                  {filterCategories.length + filterMembers.length}
+                </span>
+              )}
+            </button>
+            {filterOpen && (
+              <CalendarFilter
+                categories={categories}
+                members={members}
+                filterCategories={filterCategories}
+                filterMembers={filterMembers}
+                onToggleCategory={toggleFilterCategory}
+                onToggleMember={toggleFilterMember}
+                onClear={clearFilter}
+                onClose={() => setFilterOpen(false)}
+              />
+            )}
+          </div>
           <button
             type="button"
             onClick={() => openNew(iso(view === 'day' ? cursor : today))}
@@ -393,7 +463,7 @@ export default function Calendar() {
           <MonthView
             cursor={cursor}
             today={today}
-            events={events}
+            events={visibleEvents}
             categories={categories}
             onAdd={openNew}
             onOpen={(e) => setSelectedId(e.id)}
@@ -403,8 +473,9 @@ export default function Calendar() {
           <TimeGrid
             days={Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(cursor), i))}
             today={today}
-            events={events}
+            events={visibleEvents}
             categories={categories}
+            members={members}
             showHeader
             onAdd={openNew}
             onOpen={(e) => setSelectedId(e.id)}
@@ -414,8 +485,9 @@ export default function Calendar() {
           <TimeGrid
             days={[new Date(cursor)]}
             today={today}
-            events={events}
+            events={visibleEvents}
             categories={categories}
+            members={members}
             onAdd={openNew}
             onOpen={(e) => setSelectedId(e.id)}
           />
@@ -426,6 +498,7 @@ export default function Calendar() {
       <EventDetail
         event={selected}
         categories={categories}
+        members={members}
         onClose={() => setSelectedId(null)}
         onEdit={() => openEdit(selected)}
       />
@@ -435,6 +508,7 @@ export default function Calendar() {
         draft={draft}
         setDraft={setDraft}
         categories={categories}
+        members={members}
         onClose={() => setDraft(null)}
         onSave={saveDraft}
         onDelete={() => deleteEvent(draft.id)}
@@ -589,9 +663,10 @@ function MonthView({ cursor, today, events, categories, onAdd, onOpen }) {
 // Hour-slot time grid used by both Week (7 columns) and Day (1 column) views.
 // Vertically scrollable with a tap-friendly scrollbar; mouse press-and-drag
 // pans via useDragScroll while touch uses native scrolling.
-function TimeGrid({ days, today, events, categories, showHeader, onAdd, onOpen }) {
+function TimeGrid({ days, today, events, categories, members, showHeader, onAdd, onOpen }) {
   const { ref, handlers } = useDragScroll()
   const single = days.length === 1
+  const memberById = useMemo(() => Object.fromEntries((members || []).map((m) => [m.id, m])), [members])
 
   // Open scrolled to the morning so the day's first events are in view.
   useEffect(() => {
@@ -720,6 +795,13 @@ function TimeGrid({ days, today, events, categories, showHeader, onAdd, onOpen }
                             : 'all day'}
                         </div>
                       )}
+                      {height > 48 && (e.members || []).length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-0.5">
+                          {(e.members || []).map(
+                            (id) => memberById[id] && <MemberBadge key={id} member={memberById[id]} size={16} />,
+                          )}
+                        </div>
+                      )}
                     </button>
                   )
                 })}
@@ -733,9 +815,12 @@ function TimeGrid({ days, today, events, categories, showHeader, onAdd, onOpen }
 }
 
 // Read-only event info page with a pencil edit affordance in the top-right.
-function EventDetail({ event, categories, onClose, onEdit }) {
+function EventDetail({ event, categories, members, onClose, onEdit }) {
   if (!event) return null
   const cat = catOf(categories, event.category)
+  const assigned = (event.members || [])
+    .map((id) => (members || []).find((m) => m.id === id))
+    .filter(Boolean)
   return (
     <Modal
       open={!!event}
@@ -777,6 +862,24 @@ function EventDetail({ event, categories, onClose, onEdit }) {
           <span>{rangeText(event)}</span>
         </div>
 
+        {assigned.length > 0 && (
+          <div className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3">
+            <UsersIcon className="h-5 w-5 flex-shrink-0 text-gray-400" />
+            <div className="flex flex-wrap gap-2">
+              {assigned.map((m) => (
+                <span
+                  key={m.id}
+                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold"
+                  style={{ backgroundColor: `${m.color}22`, color: m.color }}
+                >
+                  <MemberBadge member={m} size={18} />
+                  {m.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {event.notes?.trim() && (
           <div className="flex items-start gap-3 rounded-xl bg-white/5 px-4 py-3 text-gray-200">
             <NoteIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400" />
@@ -788,9 +891,15 @@ function EventDetail({ event, categories, onClose, onEdit }) {
   )
 }
 
-function EventModal({ draft, setDraft, categories, onClose, onSave, onDelete, onNewCategory, isExisting }) {
+function EventModal({ draft, setDraft, categories, members, onClose, onSave, onDelete, onNewCategory, isExisting }) {
   if (!draft) return null
   const set = (patch) => setDraft({ ...draft, ...patch })
+  const toggleMember = (id) =>
+    set({
+      members: (draft.members || []).includes(id)
+        ? draft.members.filter((x) => x !== id)
+        : [...(draft.members || []), id],
+    })
   return (
     <Modal
       open={!!draft}
@@ -913,6 +1022,14 @@ function EventModal({ draft, setDraft, categories, onClose, onSave, onDelete, on
               <PlusIcon className="h-4 w-4" /> New
             </button>
           </div>
+
+          <label className="mb-2 mt-5 block text-xs text-gray-500">Members</label>
+          <MemberPicker
+            members={members}
+            selected={draft.members || []}
+            onToggle={toggleMember}
+            emptyHint="No household members yet — add them in Settings → Household."
+          />
         </div>
       </div>
     </Modal>
@@ -1042,5 +1159,78 @@ function CategoryModal({ draft, setDraft, onClose, onSave, onDelete, canDelete, 
         </div>
       </div>
     </Modal>
+  )
+}
+
+// Popover for filtering events by category and/or member. Each active facet
+// must be satisfied for an event to show.
+function CalendarFilter({
+  categories,
+  members,
+  filterCategories,
+  filterMembers,
+  onToggleCategory,
+  onToggleMember,
+  onClear,
+  onClose,
+}) {
+  const active = filterCategories.length > 0 || filterMembers.length > 0
+  return (
+    <>
+      {/* Click-away backdrop. */}
+      <button type="button" aria-label="Close filter" onClick={onClose} className="fixed inset-0 z-40 cursor-default" />
+      <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-2xl border border-border bg-surface p-4 text-left shadow-glow">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-white">Filter events</h3>
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 active:scale-90">
+            <CloseIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        <label className="mb-2 block text-xs text-gray-500">Category</label>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {categories.map((c) => {
+            const on = filterCategories.includes(c.id)
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onToggleCategory(c.id)}
+                className={[
+                  'flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95',
+                  on ? '' : 'opacity-60',
+                ].join(' ')}
+                style={{
+                  backgroundColor: `${c.color}22`,
+                  color: c.color,
+                  outline: on ? `2px solid ${c.color}` : 'none',
+                }}
+              >
+                <CategoryIcon name={c.icon} className="h-4 w-4" />
+                {c.name}
+              </button>
+            )
+          })}
+        </div>
+
+        <label className="mb-2 block text-xs text-gray-500">Member</label>
+        <MemberPicker
+          members={members}
+          selected={filterMembers}
+          onToggle={onToggleMember}
+          emptyHint="No household members yet — add them in Settings → Household."
+        />
+
+        {active && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="mt-4 w-full rounded-xl bg-white/5 px-4 py-2 text-sm font-semibold text-gray-300 active:scale-95"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+    </>
   )
 }
