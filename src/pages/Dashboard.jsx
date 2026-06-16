@@ -41,6 +41,7 @@ import {
   DEFAULT_WATCHLISTS,
   GOALS_SEED,
   SEED_MEALS,
+  SEED_MEMBERS,
 } from '../lib/seeds.js'
 
 // --- Module registry ---------------------------------------------------------
@@ -166,6 +167,7 @@ function migratePlan(stored) {
   return stored
 }
 const slotMealId = (v) => (typeof v === 'string' ? v : v?.mealId || undefined)
+const slotProviders = (v) => (typeof v === 'string' ? [] : v?.providers || [])
 
 // --- Stocks helpers ----------------------------------------------------------
 const money = (n) =>
@@ -333,7 +335,9 @@ const ctrlKey = (c) => (c.kind === 'media' ? 'media' : `${c.kind}:${c.room || ''
 function MealsModule() {
   const [meals] = useLocalState('meals-recipes', SEED_MEALS)
   const [plans] = useLocalState('meals-plan', {}, migratePlan)
+  const [members] = useLocalState('meals-members', SEED_MEMBERS)
   const mealById = useMemo(() => Object.fromEntries(meals.map((m) => [m.id, m])), [meals])
+  const memberById = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members])
   const plan = plans[weekKeyNow()] || {}
   const day = dayNameNow()
 
@@ -342,8 +346,14 @@ function MealsModule() {
       {SLOTS.map((slot) => {
         const theme = SLOT_THEME[slot]
         const SlotIcon = theme.Icon
-        const meal = mealById[slotMealId(plan[day]?.[slot])]
+        const val = plan[day]?.[slot]
+        const meal = mealById[slotMealId(val)]
         const takeout = meal && (meal.type || 'recipe') === 'takeout'
+        const providers = meal
+          ? slotProviders(val)
+              .map((id) => memberById[id])
+              .filter(Boolean)
+          : []
         return (
           <div
             key={slot}
@@ -355,12 +365,27 @@ function MealsModule() {
               {slot}
             </span>
             {meal ? (
-              <span className="flex-1 truncate font-medium text-white">
-                {meal.name}
-                <span className="ml-2 font-mono text-[10px] uppercase text-gray-500">
-                  {takeout ? 'Takeout' : 'Homecooked'}
+              <>
+                <span className="min-w-0 flex-1 truncate font-medium text-white">
+                  {meal.name}
+                  <span className="ml-2 font-mono text-[10px] uppercase text-gray-500">
+                    {takeout ? 'Takeout' : 'Homecooked'}
+                  </span>
                 </span>
-              </span>
+                {providers.length > 0 && (
+                  <span className="flex-shrink-0 text-xs text-gray-400">
+                    Provided by{' '}
+                    {providers.map((m, i) => (
+                      <span key={m.id}>
+                        <span className="font-semibold" style={{ color: m.color }}>
+                          {m.name}
+                        </span>
+                        {i < providers.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </>
             ) : (
               <span className="flex-1 truncate text-sm text-gray-600">Nothing planned</span>
             )}
