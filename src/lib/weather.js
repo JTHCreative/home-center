@@ -22,7 +22,7 @@ export async function geocode(query) {
   }
 }
 
-/** Current weather + a 7-day daily forecast for a coordinate. `units` is 'fahrenheit' | 'celsius'. */
+/** Current weather + a 5-day daily forecast for a coordinate. `units` is 'fahrenheit' | 'celsius'. */
 export async function fetchWeather(latitude, longitude, units = 'fahrenheit') {
   const params = new URLSearchParams({
     latitude,
@@ -32,7 +32,7 @@ export async function fetchWeather(latitude, longitude, units = 'fahrenheit') {
     temperature_unit: units,
     wind_speed_unit: units === 'celsius' ? 'kmh' : 'mph',
     timezone: 'auto',
-    forecast_days: '7',
+    forecast_days: '5',
   })
   const res = await fetch(`${FORECAST}?${params.toString()}`)
   if (!res.ok) throw new Error(`Weather ${res.status}`)

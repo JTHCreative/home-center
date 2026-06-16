@@ -1128,8 +1128,8 @@ function WeatherModule({ settings }) {
         </div>
       </div>
       {data.days?.length > 1 && (
-        <div className="mt-4 grid grid-cols-7 gap-1 border-t border-white/10 pt-3">
-          {data.days.slice(0, 7).map((day, i) => {
+        <div className="mt-4 grid grid-cols-5 gap-1 border-t border-white/10 pt-3">
+          {data.days.slice(0, 5).map((day, i) => {
             const { kind } = describeWeather(day.code)
             const DayIcon = WX_ICON[kind] || CloudIcon
             return (
