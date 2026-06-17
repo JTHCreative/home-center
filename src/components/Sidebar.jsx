@@ -46,22 +46,24 @@ export default function Sidebar() {
     <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-border bg-surface">
       {/* Clock + date, always visible at the top */}
       <div className="border-b border-border px-6 py-6">
-        <div className="flex items-start justify-between">
+        <div className="flex items-center">
           <div className="font-mono text-4xl font-bold tracking-tight text-white">{time}</div>
-          <button
-            type="button"
-            onClick={() => navigate('/alarms')}
-            aria-label="Alarms"
-            className={[
-              'relative rounded-xl p-2 active:scale-95',
-              hasActiveAlarm ? 'bg-accent/15 text-accent' : 'bg-white/5 text-gray-300',
-            ].join(' ')}
-          >
-            <AlarmIcon className="h-6 w-6" />
-            {hasActiveAlarm && (
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent shadow-glow" />
-            )}
-          </button>
+          <div className="flex flex-1 justify-center">
+            <button
+              type="button"
+              onClick={() => navigate('/alarms')}
+              aria-label="Alarms"
+              className={[
+                'relative rounded-lg p-1.5 active:scale-95',
+                hasActiveAlarm ? 'bg-accent/15 text-accent' : 'bg-white/5 text-gray-300',
+              ].join(' ')}
+            >
+              <AlarmIcon className="h-5 w-5" />
+              {hasActiveAlarm && (
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent shadow-glow" />
+              )}
+            </button>
+          </div>
         </div>
         <div className="mt-1 text-sm text-gray-400">{date}</div>
       </div>
