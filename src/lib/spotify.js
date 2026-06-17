@@ -142,29 +142,57 @@ async function exchangeCode(code, verifier) {
   })
 }
 
-/** Valid access token, refreshing if it's expired (or about to be). */
+/** Valid access token, refreshing if it's expired (or about to be).
+ *  Concurrent callers share a single in-flight refresh so we never fire two
+ *  refreshes with the same (rotating) refresh token — the second would be
+ *  rejected with 400 invalid_grant and kill the session. */
+let refreshing = null
 export async function getToken() {
-  let t = readTokens()
+  const t = readTokens()
   if (!t) return null
   if (Date.now() < t.expires_at - 60_000) return t.access_token
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: t.refresh_token,
-      client_id: CLIENT_ID,
-    }),
-  })
-  if (!res.ok) return t.access_token // let the caller fail loudly if it's truly dead
+  if (!refreshing) {
+    refreshing = refreshToken(t).finally(() => {
+      refreshing = null
+    })
+  }
+  return refreshing
+}
+
+async function refreshToken(t) {
+  let res
+  try {
+    res = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: t.refresh_token,
+        client_id: CLIENT_ID,
+      }),
+    })
+  } catch {
+    // Network blip — keep the current token and try again on the next call.
+    return t.access_token
+  }
+  if (!res.ok) {
+    // 4xx means the refresh token was rejected (expired / revoked / rotated).
+    // Clear the session so the UI prompts a fresh login instead of looping on
+    // a dead token; transient 5xx errors keep the current token.
+    if (res.status >= 400 && res.status < 500) {
+      logout()
+      return null
+    }
+    return t.access_token
+  }
   const r = await res.json()
-  t = {
+  const next = {
     access_token: r.access_token,
     refresh_token: r.refresh_token || t.refresh_token,
     expires_at: Date.now() + r.expires_in * 1000,
   }
-  writeTokens(t)
-  return t.access_token
+  writeTokens(next)
+  return next.access_token
 }
 
 export function logout() {
@@ -219,7 +247,12 @@ export async function initPlayer() {
   player.addListener('not_ready', () => setPlayerState({ ready: false }))
   player.addListener('player_state_changed', (s) => setPlayerState({ playback: s }))
   player.addListener('initialization_error', ({ message }) => setPlayerState({ error: message }))
-  player.addListener('authentication_error', ({ message }) => setPlayerState({ error: message }))
+  player.addListener('authentication_error', ({ message }) => {
+    // The token was rejected (revoked/expired). Clear the session so the module
+    // falls back to the preview embed + a "log in" prompt instead of a dead player.
+    setPlayerState({ error: message })
+    logout()
+  })
   player.addListener('account_error', () =>
     setPlayerState({ error: 'Spotify Premium is required for in-app playback.' }),
   )
