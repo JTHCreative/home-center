@@ -9,6 +9,8 @@ import Calendar from './pages/Calendar.jsx'
 import Meals from './pages/Meals.jsx'
 import Goals from './pages/Goals.jsx'
 import Settings from './pages/Settings.jsx'
+import Alarms from './pages/Alarms.jsx'
+import AlarmManager from './components/AlarmManager.jsx'
 
 export default function App() {
   const location = useLocation()
@@ -33,12 +35,17 @@ export default function App() {
             <Route path="/meals" element={<Meals />} />
             <Route path="/goals" element={<Goals />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/alarms" element={<Alarms />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </ErrorBoundary>
       </main>
       <ErrorBoundary fallback={null}>
         <VirtualKeyboard />
+      </ErrorBoundary>
+      {/* App-wide alarm engine: rings + popup over everything, on any page. */}
+      <ErrorBoundary fallback={null}>
+        <AlarmManager />
       </ErrorBoundary>
     </div>
   )

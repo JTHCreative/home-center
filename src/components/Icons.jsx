@@ -345,6 +345,18 @@ export function BellIcon(props) {
   )
 }
 
+// Alarm clock — used for the alarms feature.
+export function AlarmIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2.5 2" />
+      <path d="M5 3 2.5 5.5M19 3l2.5 2.5" />
+      <path d="M6.5 20.5 4.5 23M17.5 20.5l2 2.5" />
+    </svg>
+  )
+}
+
 export function PencilIcon(props) {
   return (
     <svg {...base} {...props}>
