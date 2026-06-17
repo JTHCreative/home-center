@@ -34,6 +34,46 @@ export function setMasterVolume(v) {
   if (master) master.gain.value = Math.max(0, Math.min(1, v))
 }
 
+// --- Alarm chime: a gentle repeating two-note beep. --------------------------
+// Independent of the ambient master gain / "sound on" setting so an alarm is
+// always audible. Loops until stopAlarm() is called.
+let alarmTimer = null
+export function startAlarm() {
+  if (alarmTimer) return // already ringing
+  const c = getCtx()
+  if (c.state === 'suspended') c.resume()
+  const beep = () => {
+    const now = c.currentTime
+    // Two soft notes (G5, B5) with a quick attack and gentle decay.
+    ;[
+      [784, 0],
+      [988, 0.18],
+    ].forEach(([freq, offset]) => {
+      const o = c.createOscillator()
+      o.type = 'sine'
+      o.frequency.value = freq
+      const g = c.createGain()
+      g.gain.value = 0
+      o.connect(g).connect(c.destination)
+      const t = now + offset
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.linearRampToValueAtTime(0.16, t + 0.04)
+      g.gain.exponentialRampToValueAtTime(0.0008, t + 0.5)
+      o.start(t)
+      o.stop(t + 0.55)
+    })
+  }
+  beep()
+  alarmTimer = setInterval(beep, 1400)
+}
+
+export function stopAlarm() {
+  if (alarmTimer) {
+    clearInterval(alarmTimer)
+    alarmTimer = null
+  }
+}
+
 export function stopSoundscape() {
   cleanups.forEach((fn) => {
     try {
