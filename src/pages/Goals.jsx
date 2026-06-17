@@ -16,6 +16,7 @@ import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
+import { MemberBadge } from '../components/Member.jsx'
 import { useLocalState } from '../lib/storage.js'
 import {
   CheckIcon,
@@ -25,7 +26,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from '../components/Icons.jsx'
-import { GOALS_SEED as SEED } from '../lib/seeds.js'
+import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
 const COLORS = ['#39D353', '#58A6FF', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
@@ -101,6 +102,7 @@ export default function Goals() {
   const [progress, setProgress] = useLocalState('goals-progress', {}) // weekKey -> { items, children }
   const [calendarEvents] = useLocalState('calendar-events', []) // read-only, shared with Calendar
   const [calendarCategories] = useLocalState('calendar-categories', []) // read-only, for colors
+  const [members] = useLocalState('meals-members', SEED_MEMBERS) // read-only, for event member circles
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
@@ -127,6 +129,12 @@ export default function Goals() {
       (c) => c.id === e.category || c.name?.toLowerCase() === String(e.category || '').toLowerCase(),
     )
     return match?.color || CAL_COLORS[e.category] || '#8B949E'
+  }
+
+  // Household members assigned to an event (skips any that no longer exist).
+  const eventMembers = (e) => {
+    const list = Array.isArray(members) ? members : []
+    return (e.members || []).map((id) => list.find((m) => m.id === id)).filter(Boolean)
   }
 
   // --- Per-week progress mutations ------------------------------------------
@@ -290,22 +298,35 @@ export default function Goals() {
           {upcoming.length === 0 ? (
             <p className="text-sm text-gray-500">No upcoming events on the Calendar.</p>
           ) : (
-            <ul className="space-y-2">
-              {upcoming.map((e) => (
-                <li key={e.id} className="flex items-center gap-3">
-                  <span
-                    className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                    style={{ backgroundColor: eventColor(e) }}
-                  />
-                  <span className="flex-1 truncate text-gray-200">{e.title}</span>
-                  <span className="font-mono text-xs text-gray-400">
-                    {new Date(`${evDate(e)}T${evTime(e) || '00:00'}`).toLocaleDateString([], {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </span>
-                </li>
-              ))}
+            <ul className="space-y-1">
+              {upcoming.map((e) => {
+                const evMembers = eventMembers(e)
+                return (
+                  <li key={e.id} className="flex items-center gap-3 py-2">
+                    <span
+                      className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
+                      style={{ backgroundColor: eventColor(e) }}
+                    />
+                    <span className="flex-1 truncate text-gray-200">{e.title}</span>
+                    {/* Household members involved (none shown if unassigned). */}
+                    {evMembers.length > 0 ? (
+                      <div className="flex flex-shrink-0 items-center -space-x-1.5">
+                        {evMembers.map((m) => (
+                          <MemberBadge key={m.id} member={m} size={22} />
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="flex-shrink-0 text-xs text-gray-600">None</span>
+                    )}
+                    <span className="w-12 flex-shrink-0 text-right font-mono text-xs text-gray-400">
+                      {new Date(`${evDate(e)}T${evTime(e) || '00:00'}`).toLocaleDateString([], {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </Card>
