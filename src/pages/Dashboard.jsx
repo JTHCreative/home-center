@@ -74,6 +74,7 @@ import {
   SEED_MEALS,
   SEED_MEMBERS,
 } from '../lib/seeds.js'
+import { MemberBadge } from '../components/Member.jsx'
 
 // --- Module registry ---------------------------------------------------------
 // The dashboard is a customizable stack of module *instances*. Each instance has
@@ -741,6 +742,7 @@ function GoalsModule({ sectionId }) {
 function CalendarModule() {
   const [events] = useLocalState('calendar-events', [])
   const [categories] = useLocalState('calendar-categories', [])
+  const [members] = useLocalState('meals-members', SEED_MEMBERS)
   const today = iso(new Date())
   // Start date/time across legacy ({date,time}) and timeframe ({startDate,...}).
   const evDate = (e) => e.startDate || e.date || ''
@@ -767,18 +769,38 @@ function CalendarModule() {
     const d = new Date(`${today}T${t}`)
     return Number.isNaN(d.getTime()) ? t : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   }
+  // Household members assigned to an event (skips any that no longer exist).
+  const eventMembers = (e) => {
+    const list = Array.isArray(members) ? members : []
+    return (e.members || []).map((id) => list.find((m) => m.id === id)).filter(Boolean)
+  }
   return (
-    <ul className="space-y-2">
-      {todays.map((e) => (
-        <li key={e.id} className="flex items-center gap-3">
-          <span
-            className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-            style={{ backgroundColor: colorOf(e) }}
-          />
-          <span className="flex-1 truncate text-gray-100">{e.title}</span>
-          <span className="font-mono text-xs text-gray-400">{e.allDay ? 'All day' : fmtTime(evTime(e))}</span>
-        </li>
-      ))}
+    <ul className="space-y-1">
+      {todays.map((e) => {
+        const evMembers = eventMembers(e)
+        return (
+          <li key={e.id} className="flex items-center gap-3 py-2">
+            <span
+              className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
+              style={{ backgroundColor: colorOf(e) }}
+            />
+            <span className="flex-1 truncate text-gray-100">{e.title}</span>
+            {/* Household members involved (none shown if unassigned). */}
+            {evMembers.length > 0 ? (
+              <div className="flex flex-shrink-0 items-center -space-x-1.5">
+                {evMembers.map((m) => (
+                  <MemberBadge key={m.id} member={m} size={22} />
+                ))}
+              </div>
+            ) : (
+              <span className="flex-shrink-0 text-xs text-gray-600">None</span>
+            )}
+            <span className="w-16 flex-shrink-0 text-right font-mono text-xs text-gray-400">
+              {e.allDay ? 'All day' : fmtTime(evTime(e))}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   )
 }
