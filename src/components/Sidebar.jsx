@@ -47,7 +47,7 @@ export default function Sidebar() {
       {/* Clock + date, always visible at the top */}
       <div className="border-b border-border px-6 py-6">
         <div className="flex items-center">
-          <div className="font-mono text-4xl font-bold tracking-tight text-white">{time}</div>
+          <div className="font-mono text-3xl font-bold tracking-tight text-white">{time}</div>
           <div className="flex flex-1 justify-center">
             <button
               type="button"
