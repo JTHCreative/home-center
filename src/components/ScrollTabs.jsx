@@ -134,7 +134,9 @@ export default function ScrollTabs({
         <ChevronLeft className="h-7 w-7" />
       </Arrow>
 
-      <div className="relative flex-shrink-0" style={{ width: barWidth }}>
+      {/* Prefers `barWidth` (sized for `visible` tabs) but shrinks to fit on
+          narrow screens; the viewport below scrolls the overflow either way. */}
+      <div className="relative min-w-0" style={{ width: barWidth, maxWidth: '100%' }}>
         <div
           ref={viewportRef}
           onPointerDown={onPointerDown}

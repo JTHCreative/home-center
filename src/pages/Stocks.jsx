@@ -333,7 +333,7 @@ export default function Stocks() {
 
       {/* Watchlist bar: shows 7 at a time, swipe or arrow to scroll. The New
           Watchlist button sits above, right-aligned with the bar's right arrow. */}
-      <div className="mb-4 w-fit">
+      <div className="mb-4 w-fit max-w-full">
         <div className="mb-2 flex justify-end">
           <Button className="px-4 py-2" onClick={() => setListDraft({ name: '' })}>
             <span className="flex items-center gap-2"><PlusIcon className="h-4 w-4" /> New Watchlist</span>

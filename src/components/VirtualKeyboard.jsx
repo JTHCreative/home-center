@@ -17,6 +17,13 @@ const TEXT_TYPES = ['text', 'search', 'email', 'url', 'tel', 'password']
 // keyboard with a mouse on a non-touch machine.
 const TOUCH_ONLY = true
 
+// Phones bring their own OS keyboard, so the in-app one would just stack on top
+// of it. The kiosk runs on a large touchscreen (1080p) with no native keyboard,
+// so gate the in-app keyboard to non-phone widths — matching the layout's `md`
+// breakpoint where the desktop shell takes over.
+const isPhone = () =>
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+
 // Which keyboard (if any) a focused element should get.
 function classify(el) {
   if (!el || el.disabled || el.readOnly) return null
@@ -196,6 +203,8 @@ export default function VirtualKeyboard() {
     }
     const onFocusIn = (e) => {
       if (TOUCH_ONLY && !touchInput) return setTarget(null)
+      // On phones, defer to the native OS keyboard instead of stacking ours.
+      if (isPhone()) return setTarget(null)
       const next = classify(e.target) ? e.target : null
       setTarget(next)
       if (next) {
