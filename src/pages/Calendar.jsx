@@ -3,6 +3,7 @@ import { PageHeader } from '../components/Card.jsx'
 import Tabs from '../components/Tabs.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Toggle from '../components/Toggle.jsx'
+import TimePicker from '../components/TimePicker.jsx'
 import { MemberBadge, MemberPicker } from '../components/Member.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { useDragScroll } from '../lib/useDragScroll.js'
@@ -948,11 +949,10 @@ function EventModal({ draft, setDraft, categories, members, onClose, onSave, onD
                   onChange={(e) => set({ startDate: e.target.value })}
                 />
                 {!draft.allDay && (
-                  <input
-                    type="time"
-                    className={fieldClass}
+                  <TimePicker
                     value={draft.startTime}
-                    onChange={(e) => set({ startTime: e.target.value })}
+                    ariaLabel="Start time"
+                    onChange={(v) => set({ startTime: v })}
                   />
                 )}
               </div>
@@ -968,11 +968,10 @@ function EventModal({ draft, setDraft, categories, members, onClose, onSave, onD
                   onChange={(e) => set({ endDate: e.target.value })}
                 />
                 {!draft.allDay && (
-                  <input
-                    type="time"
-                    className={fieldClass}
+                  <TimePicker
                     value={draft.endTime}
-                    onChange={(e) => set({ endTime: e.target.value })}
+                    ariaLabel="End time"
+                    onChange={(v) => set({ endTime: v })}
                   />
                 )}
               </div>
