@@ -77,9 +77,9 @@ export default function TimePicker({ value, onChange, ariaLabel = 'Time' }) {
         aria-label={ariaLabel}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`${fieldClass} flex items-center justify-between gap-2 text-left`}
+        className={`${fieldClass} flex items-center justify-between gap-2 px-3 text-left`}
       >
-        <span>{format12(value)}</span>
+        <span className="whitespace-nowrap">{format12(value)}</span>
         <ClockIcon className="h-5 w-5 flex-shrink-0 text-gray-400" />
       </button>
 
