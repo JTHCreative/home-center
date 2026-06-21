@@ -392,69 +392,76 @@ export default function Calendar() {
         </div>
       </PageHeader>
 
-      {/* Sub-navigation: Categories pinned left, centered navigator, and the
-          filter + add-event cluster pinned right. */}
-      <div className="relative mb-4">
-        <div className="absolute inset-y-0 left-0 flex items-center">
-          <button
-            type="button"
-            onClick={() => setCatManagerOpen(true)}
-            className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-3 text-sm font-semibold text-gray-300 active:scale-95"
-          >
-            <TagIcon className="h-5 w-5" />
-            <span className="hidden sm:inline">Categories</span>
-          </button>
+      {/* Sub-navigation: on phones everything stacks (navigator on top, the
+          action buttons in a row below). At sm+ the navigator is centered with
+          Categories pinned left and the filter + add-event cluster pinned right. */}
+      <div className="mb-4 flex flex-col gap-3 sm:relative sm:block">
+        <div className="order-1 sm:order-none">
+          <Navigator
+            primary={nav.primary}
+            secondary={nav.secondary}
+            secondaryAccent={!nav.isNow}
+            onPrev={() => step(-1)}
+            onNext={() => step(1)}
+            onToday={() => setCursor(new Date())}
+          />
         </div>
 
-        <Navigator
-          primary={nav.primary}
-          secondary={nav.secondary}
-          secondaryAccent={!nav.isNow}
-          onPrev={() => step(-1)}
-          onNext={() => step(1)}
-          onToday={() => setCursor(new Date())}
-        />
-
-        <div className="absolute inset-y-0 right-0 flex items-center gap-2">
-          <div className="relative flex items-center">
+        {/* Action buttons: a justify-between row on phones; the two groups become
+            absolutely-positioned corners at sm+ (children opt in via sm: prefixes). */}
+        <div className="order-2 flex items-center justify-between gap-2 sm:order-none">
+          <div className="sm:absolute sm:inset-y-0 sm:left-0 sm:flex sm:items-center">
             <button
               type="button"
-              onClick={() => setFilterOpen((o) => !o)}
-              aria-label="Filter events"
-              className={[
-                'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
-                filterActive ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
-              ].join(' ')}
+              onClick={() => setCatManagerOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-3 text-sm font-semibold text-gray-300 active:scale-95"
             >
-              <FilterIcon className="h-5 w-5" />
-              <span className="hidden sm:inline">Filter</span>
-              {filterActive && (
-                <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-bg">
-                  {filterCategories.length + filterMembers.length}
-                </span>
-              )}
+              <TagIcon className="h-5 w-5" />
+              <span className="hidden sm:inline">Categories</span>
             </button>
-            {filterOpen && (
-              <CalendarFilter
-                categories={categories}
-                members={members}
-                filterCategories={filterCategories}
-                filterMembers={filterMembers}
-                onToggleCategory={toggleFilterCategory}
-                onToggleMember={toggleFilterMember}
-                onClear={clearFilter}
-                onClose={() => setFilterOpen(false)}
-              />
-            )}
           </div>
-          <button
-            type="button"
-            onClick={() => openNew(iso(view === 'day' ? cursor : today))}
-            className="flex items-center gap-2 rounded-xl bg-accent/15 px-4 py-3 text-sm font-semibold text-accent shadow-glow active:scale-95"
-          >
-            <PlusIcon className="h-5 w-5" />
-            <span className="hidden sm:inline">Event</span>
-          </button>
+
+          <div className="flex items-center gap-2 sm:absolute sm:inset-y-0 sm:right-0">
+            <div className="relative flex items-center">
+              <button
+                type="button"
+                onClick={() => setFilterOpen((o) => !o)}
+                aria-label="Filter events"
+                className={[
+                  'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold active:scale-95',
+                  filterActive ? 'bg-accent/15 text-accent shadow-glow' : 'bg-white/5 text-gray-300',
+                ].join(' ')}
+              >
+                <FilterIcon className="h-5 w-5" />
+                <span className="hidden sm:inline">Filter</span>
+                {filterActive && (
+                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-bg">
+                    {filterCategories.length + filterMembers.length}
+                  </span>
+                )}
+              </button>
+              {filterOpen && (
+                <CalendarFilter
+                  categories={categories}
+                  members={members}
+                  filterCategories={filterCategories}
+                  filterMembers={filterMembers}
+                  onToggleCategory={toggleFilterCategory}
+                  onToggleMember={toggleFilterMember}
+                  onClear={clearFilter}
+                  onClose={() => setFilterOpen(false)}
+                />
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => openNew(iso(view === 'day' ? cursor : today))}
+              className="flex items-center gap-2 rounded-xl bg-accent/15 px-4 py-3 text-sm font-semibold text-accent shadow-glow active:scale-95"
+            >
+              <PlusIcon className="h-5 w-5" />
+              <span className="hidden sm:inline">Event</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -567,7 +574,7 @@ function Navigator({ primary, secondary, secondaryAccent, onPrev, onNext, onToda
         type="button"
         onClick={onToday}
         title="Jump to today"
-        className="min-w-[14rem] rounded-xl px-4 py-2 text-center active:scale-95"
+        className="min-w-[11rem] rounded-xl px-4 py-2 text-center active:scale-95 sm:min-w-[14rem]"
       >
         <div className="text-xl font-bold text-white">{primary}</div>
         <div className={secondaryAccent ? 'text-xs text-accent' : 'text-xs text-gray-500'}>

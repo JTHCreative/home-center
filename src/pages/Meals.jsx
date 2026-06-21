@@ -474,13 +474,15 @@ export default function Meals() {
       {/* ---- Schedule (fills the available height) ---- */}
       {subpage === 'schedule' && (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="relative">
+          {/* On phones the navigator and filter stack; at sm+ the filter pins to
+              the top-right corner beside the centered navigator. */}
+          <div className="flex flex-col items-center gap-2 sm:relative sm:block">
             {weekNav}
             {/* Filter sits top-right, where the old "This Week" button was.
                 Centered via flex (not a transform) so the popover's fixed
                 backdrop actually covers the viewport and isn't trapped in a
                 transformed stacking context behind the schedule grid. */}
-            <div className="absolute inset-y-0 right-0 flex items-center">
+            <div className="relative flex items-center sm:absolute sm:inset-y-0 sm:right-0">
               <button
                 type="button"
                 onClick={() => setFilterOpen((o) => !o)}
@@ -689,7 +691,7 @@ export default function Meals() {
       {/* ---- Meals library: Recipe / Takeout tabs ---- */}
       {subpage === 'meals' && (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold text-gray-300">Meals</h2>
               <Tabs

@@ -1,7 +1,7 @@
 // Segmented tab control. `tabs` is an array of { id, label }.
 export default function Tabs({ tabs, active, onChange }) {
   return (
-    <div className="inline-flex rounded-xl border border-border bg-surface p-1">
+    <div className="inline-flex flex-wrap rounded-xl border border-border bg-surface p-1">
       {tabs.map((tab) => {
         const isActive = tab.id === active
         return (
