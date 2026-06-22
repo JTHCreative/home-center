@@ -7,41 +7,56 @@ import { setMasterVolume, startSoundscape, stopSoundscape } from './soundscapes.
 // colors are for the Settings previews and mirror index.css.
 export const THEMES = [
   {
-    id: 'midnight',
-    name: 'Midnight',
+    id: 'dusk',
+    name: 'Dusk',
     sound: null,
     soundLabel: 'Silent',
-    colors: { bg: '#0D1117', surface: '#161B22', accent: '#58A6FF' },
+    colors: { bg: '#1C1917', surface: '#292524', accent: '#D4956A' },
   },
   {
-    id: 'ocean',
-    name: 'Ocean',
-    sound: 'waves',
-    soundLabel: 'Waves',
-    colors: { bg: '#081628', surface: '#0E243A', accent: '#38BDF8' },
-  },
-  {
-    id: 'forest',
-    name: 'Forest',
+    id: 'grove',
+    name: 'Grove',
     sound: 'forest',
     soundLabel: 'Forest birds',
-    colors: { bg: '#0D1A11', surface: '#15271B', accent: '#6EE787' },
+    colors: { bg: '#151D17', surface: '#1C2820', accent: '#6BAF7A' },
   },
   {
-    id: 'moon',
-    name: 'Moon & Sky',
+    id: 'slate',
+    name: 'Slate',
+    sound: 'waves',
+    soundLabel: 'Waves',
+    colors: { bg: '#141C26', surface: '#1B2537', accent: '#6A9EC0' },
+  },
+  {
+    id: 'peat',
+    name: 'Peat',
     sound: 'crickets',
     soundLabel: 'Cricket chirps',
-    colors: { bg: '#0B1026', surface: '#151A3A', accent: '#A78BFA' },
+    colors: { bg: '#1A1620', surface: '#231E2E', accent: '#9B84C0' },
   },
 ]
 
 const SettingsContext = createContext(null)
 
+// Legacy theme ids → nearest equivalent in the new nature-inspired palette, so
+// existing saved preferences still land on a valid theme.
+const LEGACY_THEME_MAP = {
+  midnight: 'slate',
+  ocean: 'slate',
+  forest: 'grove',
+  moon: 'peat',
+}
+
 export function SettingsProvider({ children }) {
-  const [theme, setTheme] = useLocalState('theme', 'midnight')
+  const [theme, setTheme] = useLocalState('theme', 'dusk')
   const [soundOn, setSoundOn] = useLocalState('sound-on', false)
   const [volume, setVolume] = useLocalState('sound-volume', 50) // 0–100
+
+  // Migrate any legacy theme id forward once on mount.
+  useEffect(() => {
+    if (LEGACY_THEME_MAP[theme]) setTheme(LEGACY_THEME_MAP[theme])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Apply the theme palette.
   useEffect(() => {

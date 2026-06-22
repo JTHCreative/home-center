@@ -174,16 +174,16 @@ const moduleTitle = (m) => {
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
 const SLOT_THEME = {
-  Breakfast: { color: '#D29922', Icon: SunriseIcon },
-  Lunch: { color: '#39D353', Icon: SunIcon },
-  Dinner: { color: '#58A6FF', Icon: MoonIcon },
+  Breakfast: { color: '#C4A882', Icon: SunriseIcon },
+  Lunch: { color: '#D4956A', Icon: SunIcon },
+  Dinner: { color: '#6A9EC0', Icon: MoonIcon },
 }
 const CAL_COLORS = {
-  Work: '#58A6FF',
-  Personal: '#39D353',
-  Health: '#F85149',
-  Family: '#BC8CFF',
-  Other: '#8B949E',
+  Work: '#6A9EC0',
+  Personal: '#6BAF7A',
+  Health: '#B87E72',
+  Family: '#9B84C0',
+  Other: '#8C9480',
 }
 
 const iso = (d) => {

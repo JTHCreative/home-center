@@ -29,16 +29,30 @@ import {
 import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
-const COLORS = ['#39D353', '#58A6FF', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#8B949E']
+// Nature-inspired Color Design System palette, shared across the app.
+const COLORS = [
+  '#D4956A', // Ember
+  '#6BAF7A', // Sage
+  '#6A9EC0', // Water
+  '#9B84C0', // Thistle
+  '#C4A882', // Sand
+  '#9DC49F', // Fern
+  '#B87E72', // Dusk
+  '#8AAABB', // Fog
+  '#A89060', // Lichen
+  '#A87898', // Heather
+  '#8C9480', // Stone
+  '#5A9090', // Tide
+]
 
 // Default calendar category colors (mirrors Calendar.jsx) for the Upcoming
 // Events list, used as a fallback when no stored categories match.
 const CAL_COLORS = {
-  Work: '#58A6FF',
-  Personal: '#39D353',
-  Health: '#F85149',
-  Family: '#BC8CFF',
-  Other: '#8B949E',
+  Work: '#6A9EC0',
+  Personal: '#6BAF7A',
+  Health: '#B87E72',
+  Family: '#9B84C0',
+  Other: '#8C9480',
 }
 
 // Read an event's start date/time across both the legacy ({ date, time }) and
