@@ -473,7 +473,7 @@ export default function Calendar() {
             <button
               type="button"
               onClick={() => openNew(iso(view === 'day' ? cursor : today))}
-              className="flex items-center gap-2 rounded-xl bg-accent/15 px-4 py-3 text-sm font-semibold text-accent shadow-glow active:scale-95"
+              className="flex items-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-bg shadow-glow active:scale-95"
             >
               <PlusIcon className="h-5 w-5" />
               <span className="hidden sm:inline">Event</span>
