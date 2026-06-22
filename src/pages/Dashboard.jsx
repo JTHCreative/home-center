@@ -1069,12 +1069,12 @@ const WX_ICON = {
   thunder: CloudLightningIcon,
 }
 const WX_COLOR = {
-  clear: '#C4A882',
-  cloud: '#8C9480',
-  fog: '#8C9480',
-  rain: '#6A9EC0',
-  snow: '#8AAABB',
-  thunder: '#A89060',
+  clear: '#F0A92B',
+  cloud: '#8B949E',
+  fog: '#8B949E',
+  rain: '#58A6FF',
+  snow: '#A5D8FF',
+  thunder: '#D29922',
 }
 
 // Geocode the location once, then refresh weather periodically while the tab is
@@ -1166,7 +1166,7 @@ function WeatherModule({ settings }) {
   const { label, kind } = describeWeather(data.code)
   const night = kind === 'clear' && !data.isDay
   const Icon = night ? MoonIcon : WX_ICON[kind] || CloudIcon
-  const color = night ? '#9B84C0' : WX_COLOR[kind] || '#8C9480'
+  const color = night ? '#A78BFA' : WX_COLOR[kind] || '#8B949E'
 
   return (
     <div>
@@ -1210,7 +1210,7 @@ function WeatherModule({ settings }) {
                     ? 'Today'
                     : new Date(`${day.date}T00:00`).toLocaleDateString([], { weekday: 'short' })}
                 </div>
-                <DayIcon className="h-5 w-5" style={{ color: WX_COLOR[kind] || '#8C9480' }} />
+                <DayIcon className="h-5 w-5" style={{ color: WX_COLOR[kind] || '#8B949E' }} />
                 <div className="text-xs leading-tight">
                   <span className="font-semibold text-white">{Math.round(day.hi)}°</span>
                   <span className="ml-1 text-gray-500">{Math.round(day.lo)}°</span>
