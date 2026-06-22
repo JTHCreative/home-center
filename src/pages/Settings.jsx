@@ -345,7 +345,7 @@ function MenuBoard({ config, onChange }) {
           id="pool"
           title="Available"
           subtitle="Drag in to add to the menu"
-          accent="#8C9480"
+          accent="#8C948F"
           items={cols.pool}
           activeId={activeId}
           overId={overId}

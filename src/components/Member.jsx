@@ -5,18 +5,18 @@ import { TrashIcon } from './Icons.jsx'
 // Household member accent palette (tap to pick when adding/editing a member).
 // Nature-inspired Color Design System palette, shared across the app.
 export const MEMBER_COLORS = [
-  '#D4956A', // Ember
-  '#6BAF7A', // Sage
-  '#6A9EC0', // Water
-  '#9B84C0', // Thistle
-  '#C4A882', // Sand
-  '#9DC49F', // Fern
-  '#B87E72', // Dusk
-  '#8AAABB', // Fog
-  '#A89060', // Lichen
-  '#A87898', // Heather
-  '#8C9480', // Stone
-  '#5A9090', // Tide
+  '#E28F54', // Ember
+  '#52C167', // Sage
+  '#61A2E0', // Water
+  '#AC88E0', // Thistle
+  '#CDA86C', // Sand
+  '#8FC992', // Fern
+  '#D8685E', // Dusk
+  '#82B0C8', // Fog
+  '#BD9541', // Lichen
+  '#D078A9', // Heather
+  '#8C948F', // Stone
+  '#44B2A8', // Tide
 ]
 
 // Initials for a member badge (first two word-initials, uppercased).
@@ -65,7 +65,7 @@ export function MemberPicker({ members, selected, onToggle, emptyHint = 'No hous
             className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95"
             style={{
               backgroundColor: on ? `${mem.color}22` : 'rgba(255,255,255,0.05)',
-              color: on ? mem.color : '#8C9480',
+              color: on ? mem.color : '#8C948F',
               outline: on ? `2px solid ${mem.color}` : 'none',
             }}
           >

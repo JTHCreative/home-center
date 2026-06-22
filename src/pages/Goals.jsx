@@ -32,28 +32,28 @@ import { migrateColors } from '../lib/colors.js'
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
 const COLORS = [
-  '#D4956A', // Ember
-  '#6BAF7A', // Sage
-  '#6A9EC0', // Water
-  '#9B84C0', // Thistle
-  '#C4A882', // Sand
-  '#9DC49F', // Fern
-  '#B87E72', // Dusk
-  '#8AAABB', // Fog
-  '#A89060', // Lichen
-  '#A87898', // Heather
-  '#8C9480', // Stone
-  '#5A9090', // Tide
+  '#E28F54', // Ember
+  '#52C167', // Sage
+  '#61A2E0', // Water
+  '#AC88E0', // Thistle
+  '#CDA86C', // Sand
+  '#8FC992', // Fern
+  '#D8685E', // Dusk
+  '#82B0C8', // Fog
+  '#BD9541', // Lichen
+  '#D078A9', // Heather
+  '#8C948F', // Stone
+  '#44B2A8', // Tide
 ]
 
 // Default calendar category colors (mirrors Calendar.jsx) for the Upcoming
 // Events list, used as a fallback when no stored categories match.
 const CAL_COLORS = {
-  Work: '#6A9EC0',
-  Personal: '#6BAF7A',
-  Health: '#B87E72',
-  Family: '#9B84C0',
-  Other: '#8C9480',
+  Work: '#61A2E0',
+  Personal: '#52C167',
+  Health: '#D8685E',
+  Family: '#AC88E0',
+  Other: '#8C948F',
 }
 
 // Read an event's start date/time across both the legacy ({ date, time }) and
@@ -143,7 +143,7 @@ export default function Goals() {
     const match = cats.find(
       (c) => c.id === e.category || c.name?.toLowerCase() === String(e.category || '').toLowerCase(),
     )
-    return match?.color || CAL_COLORS[e.category] || '#8C9480'
+    return match?.color || CAL_COLORS[e.category] || '#8C948F'
   }
 
   // Household members assigned to an event (skips any that no longer exist).

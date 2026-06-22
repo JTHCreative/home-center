@@ -175,16 +175,16 @@ const moduleTitle = (m) => {
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
 const SLOT_THEME = {
-  Breakfast: { color: '#A89060', Icon: SunriseIcon }, // Lichen (was gold)
-  Lunch: { color: '#6BAF7A', Icon: SunIcon }, // Sage (was green)
-  Dinner: { color: '#6A9EC0', Icon: MoonIcon }, // Water (was blue)
+  Breakfast: { color: '#BD9541', Icon: SunriseIcon }, // Lichen (was gold)
+  Lunch: { color: '#52C167', Icon: SunIcon }, // Sage (was green)
+  Dinner: { color: '#61A2E0', Icon: MoonIcon }, // Water (was blue)
 }
 const CAL_COLORS = {
-  Work: '#6A9EC0',
-  Personal: '#6BAF7A',
-  Health: '#B87E72',
-  Family: '#9B84C0',
-  Other: '#8C9480',
+  Work: '#61A2E0',
+  Personal: '#52C167',
+  Health: '#D8685E',
+  Family: '#AC88E0',
+  Other: '#8C948F',
 }
 
 const iso = (d) => {
@@ -763,7 +763,7 @@ function CalendarModule() {
     const match = cats.find(
       (c) => c.id === e.category || c.name?.toLowerCase() === String(e.category || '').toLowerCase(),
     )
-    return match?.color || CAL_COLORS[e.category] || '#8C9480'
+    return match?.color || CAL_COLORS[e.category] || '#8C948F'
   }
   const fmtTime = (t) => {
     if (!t) return ''
@@ -961,7 +961,7 @@ function ShoppingModule() {
     if (date < today) return 'text-loss'
     if (date === today) return 'text-loss'
     const diff = (new Date(`${date}T00:00`) - new Date(`${today}T00:00`)) / 86_400_000
-    return diff <= 3 ? 'text-[#A89060]' : 'text-gray-400'
+    return diff <= 3 ? 'text-[#BD9541]' : 'text-gray-400'
   }
 
   return (
