@@ -100,6 +100,7 @@ const emptyMeal = () => ({
   id: crypto.randomUUID(),
   type: 'recipe',
   name: '',
+  members: [], // household member ids this meal is assigned to (who makes / orders it)
   ingredients: [{ id: crypto.randomUUID(), qty: '', text: '' }],
   instructions: '',
   place: '',
@@ -192,7 +193,24 @@ export default function Meals() {
 
   const mealById = useMemo(() => Object.fromEntries(meals.map((m) => [m.id, m])), [meals])
   const memberById = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members])
-  const visibleMeals = useMemo(() => meals.filter((m) => mealType(m) === mealsTab), [meals, mealsTab])
+  // mealId -> [member]: who that meal is assigned to (makes / orders it).
+  const membersForMeal = useMemo(() => {
+    const map = {}
+    for (const mem of members) for (const id of mem.meals || []) (map[id] ||= []).push(mem)
+    return map
+  }, [members])
+  // Meals library filter (by household member), mirrors the schedule filter.
+  const [mealsFilterOpen, setMealsFilterOpen] = useState(false)
+  const [mealsFilterMembers, setMealsFilterMembers] = useState([]) // member ids
+  const toggleMealsFilterMember = (id) =>
+    setMealsFilterMembers((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const visibleMeals = useMemo(() => {
+    const list = meals.filter((m) => mealType(m) === mealsTab)
+    if (mealsFilterMembers.length === 0) return list
+    return list.filter((m) =>
+      (membersForMeal[m.id] || []).some((mem) => mealsFilterMembers.includes(mem.id)),
+    )
+  }, [meals, mealsTab, mealsFilterMembers, membersForMeal])
 
   // Auto-generated grocery list: ingredients across all recipes planned for the
   // selected week (takeout has nothing to buy), grouped by name with quantities.
@@ -343,13 +361,21 @@ export default function Meals() {
       const exists = list.some((m) => m.id === meal.id)
       return exists ? list.map((m) => (m.id === meal.id ? meal : m)) : [...list, meal]
     })
+    // Reconcile which members this meal is assigned to (edited in the meal form):
+    // add the meal to chosen members, remove it from the rest.
+    const wanted = mealDraft.members || []
+    setMembers((list) =>
+      list.map((mem) => {
+        const has = (mem.meals || []).includes(meal.id)
+        const want = wanted.includes(mem.id)
+        if (has === want) return mem
+        const cur = mem.meals || []
+        return { ...mem, meals: want ? [...cur, meal.id] : cur.filter((x) => x !== meal.id) }
+      }),
+    )
     // If we opened the meal editor from the slot, drop the new meal into that slot.
     if (pendingSlotSelect) {
-      setSlotDraft((d) =>
-        d
-          ? { ...d, mealId: meal.id, providers: members.filter((mem) => (mem.meals || []).includes(meal.id)).map((mem) => mem.id) }
-          : d,
-      )
+      setSlotDraft((d) => (d ? { ...d, mealId: meal.id, providers: wanted } : d))
     }
     setMealDraft(null)
     setPendingSlotSelect(false)
@@ -370,6 +396,7 @@ export default function Meals() {
       id: m.id,
       type: mealType(m),
       name: m.name,
+      members: members.filter((mem) => (mem.meals || []).includes(m.id)).map((mem) => mem.id),
       ingredients: (m.ingredients?.length ? m.ingredients : [{ name: '', qty: '' }]).map((ing) => ({
         id: crypto.randomUUID(),
         qty: ingQty(ing),
@@ -381,6 +408,15 @@ export default function Meals() {
       details: m.details || '',
       cost: m.cost ?? '',
     })
+
+  // Toggle a household member on the meal being edited (assigned = makes / orders it).
+  const toggleDraftMember = (id) =>
+    setMealDraft((d) => ({
+      ...d,
+      members: (d.members || []).includes(id)
+        ? d.members.filter((x) => x !== id)
+        : [...(d.members || []), id],
+    }))
 
   // Ingredient-row editing within the recipe draft.
   const addIngredient = () =>
@@ -703,38 +739,87 @@ export default function Meals() {
                 onChange={setMealsTab}
               />
             </div>
-            <Button
-              className="px-4 py-2"
-              onClick={() =>
-                setMealDraft(mealsTab === 'takeout' ? { ...emptyMeal(), type: 'takeout' } : emptyMeal())
-              }
-            >
-              <span className="flex items-center gap-2">
-                <PlusIcon className="h-4 w-4" /> {mealsTab === 'takeout' ? 'Takeout' : 'Recipe'}
-              </span>
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Filter the library by household member. */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMealsFilterOpen((o) => !o)}
+                  aria-label="Filter meals"
+                  className={[
+                    'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold active:scale-95',
+                    mealsFilterMembers.length > 0
+                      ? 'bg-accent/15 text-accent shadow-glow'
+                      : 'bg-white/5 text-gray-300',
+                  ].join(' ')}
+                >
+                  <FilterIcon className="h-5 w-5" />
+                  <span>Filter</span>
+                  {mealsFilterMembers.length > 0 && (
+                    <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-bg">
+                      {mealsFilterMembers.length}
+                    </span>
+                  )}
+                </button>
+                {mealsFilterOpen && (
+                  <MemberFilterPopover
+                    title="Filter meals"
+                    members={members}
+                    selected={mealsFilterMembers}
+                    onToggle={toggleMealsFilterMember}
+                    onClear={() => setMealsFilterMembers([])}
+                    onClose={() => setMealsFilterOpen(false)}
+                  />
+                )}
+              </div>
+              <Button
+                className="px-4 py-2"
+                onClick={() =>
+                  setMealDraft(mealsTab === 'takeout' ? { ...emptyMeal(), type: 'takeout' } : emptyMeal())
+                }
+              >
+                <span className="flex items-center gap-2">
+                  <PlusIcon className="h-4 w-4" /> {mealsTab === 'takeout' ? 'Takeout' : 'Recipe'}
+                </span>
+              </Button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleMeals.length === 0 && (
-              <Card className="text-sm text-gray-500">No {mealsTab} meals yet.</Card>
+              <Card className="text-sm text-gray-500">
+                {mealsFilterMembers.length > 0
+                  ? `No ${mealsTab} meals assigned to the selected member${mealsFilterMembers.length > 1 ? 's' : ''}.`
+                  : `No ${mealsTab} meals yet.`}
+              </Card>
             )}
             {visibleMeals.map((m) => {
               const takeout = mealType(m) === 'takeout'
+              const assigned = membersForMeal[m.id] || []
               return (
                 <Card key={m.id}>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-white">{m.name}</h3>
-                      <span
-                        className="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
-                        style={
-                          takeout
-                            ? { backgroundColor: '#F0883E22', color: '#F0883E' }
-                            : { backgroundColor: 'rgb(var(--c-accent) / 0.15)', color: 'rgb(var(--c-accent))' }
-                        }
-                      >
-                        {takeout ? 'Takeout' : 'Recipe'}
-                      </span>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h3 className="truncate font-bold text-white">{m.name}</h3>
+                        <span
+                          className="flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
+                          style={
+                            takeout
+                              ? { backgroundColor: '#F0883E22', color: '#F0883E' }
+                              : { backgroundColor: 'rgb(var(--c-accent) / 0.15)', color: 'rgb(var(--c-accent))' }
+                          }
+                        >
+                          {takeout ? 'Takeout' : 'Recipe'}
+                        </span>
+                      </div>
+                      {/* Who this meal is assigned to (makes / orders it). */}
+                      {assigned.length > 0 && (
+                        <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1">
+                          {assigned.map((mem) => (
+                            <MemberBadge key={mem.id} member={mem} size={22} />
+                          ))}
+                        </div>
+                      )}
                     </div>
                     {takeout ? (
                       <p className="mt-1 text-xs text-gray-400">
@@ -880,6 +965,19 @@ export default function Meals() {
               value={mealDraft.name}
               onChange={(e) => setMealDraft({ ...mealDraft, name: e.target.value })}
             />
+
+            {/* Assign this meal to the household members who make / order it. */}
+            <div>
+              <label className="mb-2 block text-xs text-gray-500">
+                Assigned to (who makes or orders this)
+              </label>
+              <MemberPicker
+                members={members}
+                selected={mealDraft.members || []}
+                onToggle={toggleDraftMember}
+                emptyHint="Add household members in Settings → Household."
+              />
+            </div>
 
             {mealDraft.type === 'takeout' ? (
               <div className="grid gap-4 md:grid-cols-2">
@@ -1250,6 +1348,45 @@ function ItemRow({ item, isChecked, onToggle, dragHandleProps, dragging }) {
   )
 }
 
+// Popover for filtering a meal list by household member (used by the Meals library).
+function MemberFilterPopover({ title, members, selected, onToggle, onClear, onClose }) {
+  return (
+    <>
+      {/* Click-away backdrop. */}
+      <button
+        type="button"
+        aria-label="Close filter"
+        onClick={onClose}
+        className="fixed inset-0 z-40 cursor-default"
+      />
+      <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-2xl border border-border bg-surface p-4 text-left shadow-glow">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-white">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg p-1 text-gray-400 active:scale-90"
+          >
+            <CloseIcon className="h-5 w-5" />
+          </button>
+        </div>
+        <label className="mb-2 block text-xs text-gray-500">Household member</label>
+        <MemberPicker members={members} selected={selected} onToggle={onToggle} />
+        {selected.length > 0 && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="mt-4 w-full rounded-xl bg-white/5 px-4 py-2 text-sm font-semibold text-gray-300 active:scale-95"
+          >
+            Clear filter
+          </button>
+        )}
+      </div>
+    </>
+  )
+}
+
 // Popover for filtering the schedule by provider and/or meal type.
 function ScheduleFilter({ members, filterProviders, filterType, onToggleProvider, onSetType, onClear, onClose }) {
   const active = filterProviders.length > 0 || filterType !== 'all'
@@ -1317,8 +1454,23 @@ function MemberRow({ providers, guests, memberById }) {
 
 function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateMeal }) {
   const [tab, setTab] = useState('recipe') // 'recipe' | 'takeout'
+  // Filter the meal list by household member (who makes / orders it).
+  const [filterMembers, setFilterMembers] = useState([])
+  const [filterShown, setFilterShown] = useState(false)
+  const toggleFilterMember = (id) =>
+    setFilterMembers((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
   if (!draft) return null
-  const tabMeals = meals.filter((m) => mealType(m) === tab)
+  const allTabMeals = meals.filter((m) => mealType(m) === tab)
+  // Allowed meal ids when filtering: union of the selected members' assigned meals.
+  const allowed =
+    filterMembers.length > 0
+      ? new Set(
+          members
+            .filter((mem) => filterMembers.includes(mem.id))
+            .flatMap((mem) => mem.meals || []),
+        )
+      : null
+  const tabMeals = allowed ? allTabMeals.filter((m) => allowed.has(m.id)) : allTabMeals
   const toggleIn = (key, id) =>
     setDraft((d) => ({
       ...d,
@@ -1361,6 +1513,41 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateM
               onChange={setTab}
             />
           </div>
+          {/* Filter the meal choices by household member. */}
+          {members.length > 0 && (
+            <div className="mb-2">
+              <button
+                type="button"
+                onClick={() => setFilterShown((s) => !s)}
+                className={[
+                  'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95',
+                  filterMembers.length > 0 ? 'bg-accent/15 text-accent' : 'bg-white/5 text-gray-300',
+                ].join(' ')}
+              >
+                <FilterIcon className="h-4 w-4" />
+                <span>Filter by member</span>
+                {filterMembers.length > 0 && (
+                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-bg">
+                    {filterMembers.length}
+                  </span>
+                )}
+              </button>
+              {filterShown && (
+                <div className="mt-2 rounded-xl border border-border bg-bg/40 p-3">
+                  <MemberPicker members={members} selected={filterMembers} onToggle={toggleFilterMember} />
+                  {filterMembers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterMembers([])}
+                      className="mt-3 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-300 active:scale-95"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"
