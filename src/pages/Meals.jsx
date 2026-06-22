@@ -189,7 +189,7 @@ export default function Meals() {
   const [memberMealsFor, setMemberMealsFor] = useState(null) // member id whose meal list is being edited
   const [mealsTab, setMealsTab] = useState('recipe') // Meals library: 'recipe' | 'takeout'
   const [mealsSearch, setMealsSearch] = useState('') // Meals library name search
-  const [newCategoryOpen, setNewCategoryOpen] = useState(false) // create-category modal
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false) // edit/recolor/delete categories
   const [categoryToDelete, setCategoryToDelete] = useState(null) // category id pending deletion
   const [mealCatName, setMealCatName] = useState(null) // in-progress new category typed inside the meal editor
   const [subpage, setSubpage] = useState('schedule') // Schedule | Household | Meals | Groceries
@@ -399,6 +399,9 @@ export default function Meals() {
     setCategories((list) => list.filter((c) => c.id !== id))
     setCategoryToDelete(null)
   }
+  // Recolor a category (chosen from the palette in the category manager).
+  const setCategoryColor = (id, color) =>
+    setCategories((list) => list.map((c) => (c.id === id ? { ...c, color } : c)))
 
   const saveMeal = () => {
     if (!mealDraft.name.trim()) return
@@ -848,14 +851,14 @@ export default function Meals() {
                   />
                 )}
               </div>
-              {/* Create a new organizing category. */}
+              {/* Manage categories — recolor, delete, or add new ones. */}
               <button
                 type="button"
-                onClick={() => setNewCategoryOpen(true)}
+                onClick={() => setCategoryManagerOpen(true)}
                 className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
               >
                 <TagIcon className="h-5 w-5" />
-                <span>New Category</span>
+                <span>Edit Categories</span>
               </button>
               <Button
                 className="px-4 py-2"
@@ -1204,12 +1207,14 @@ export default function Meals() {
         onClose={() => setMemberMealsFor(null)}
       />
 
-      {/* Create a new meal category */}
-      <NewCategoryModal
-        open={newCategoryOpen}
-        existing={categories}
+      {/* Manage categories — recolor, delete, or add new ones */}
+      <CategoryManagerModal
+        open={categoryManagerOpen}
+        categories={categories}
         onCreate={(name) => createCategory(name)}
-        onClose={() => setNewCategoryOpen(false)}
+        onSetColor={setCategoryColor}
+        onDelete={(id) => setCategoryToDelete(id)}
+        onClose={() => setCategoryManagerOpen(false)}
       />
 
       {/* Delete a category — move its meals to No Category or another category */}
@@ -1924,49 +1929,99 @@ function MealCard({ meal, assigned, onEdit, onDelete }) {
   )
 }
 
-// Create a new meal category (name only — color is auto-assigned).
-function NewCategoryModal({ open, existing, onCreate, onClose }) {
+// Manage meal categories: recolor, delete (with meal transfer), or add new ones.
+function CategoryManagerModal({ open, categories, onCreate, onSetColor, onDelete, onClose }) {
   const [name, setName] = useState('')
   const trimmed = name.trim()
-  const dup = existing.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())
+  const dup = categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())
   const close = () => {
     setName('')
     onClose()
   }
-  const submit = () => {
+  const add = () => {
     if (!trimmed || dup) return
     onCreate(trimmed)
-    close()
+    setName('')
   }
   return (
     <Modal
       open={open}
       onClose={close}
-      title="New Category"
+      title="Edit Categories"
       size="narrow"
-      footer={
-        <>
-          <Button variant="ghost" onClick={close}>
-            Cancel
-          </Button>
-          <Button onClick={submit}>Create</Button>
-        </>
-      }
+      footer={<Button onClick={close}>Done</Button>}
     >
-      <label className="mb-2 block text-xs text-gray-500">Category name</label>
-      <input
-        autoFocus
-        className={fieldClass}
-        placeholder="e.g. Breakfast, Quick Dinners, Desserts"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') submit()
-        }}
-      />
-      {dup && trimmed !== '' && (
-        <p className="mt-2 text-xs text-loss">A category named “{trimmed}” already exists.</p>
-      )}
+      <div className="space-y-4">
+        {categories.length === 0 ? (
+          <p className="text-sm text-gray-500">No categories yet — add one below.</p>
+        ) : (
+          <div className="space-y-3">
+            {categories.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-xl border p-3"
+                style={{ borderColor: `${c.color}66` }}
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: c.color }} />
+                  <span className="flex-1 truncate font-semibold" style={{ color: c.color }}>
+                    {c.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(c.id)}
+                    aria-label={`Delete ${c.name}`}
+                    className="rounded-lg bg-loss/15 p-2 text-loss active:scale-95"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
+                </div>
+                {/* Color palette — tap a swatch to recolor the category. */}
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORY_COLORS.map((col) => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => onSetColor(c.id, col)}
+                      aria-label={`Set ${c.name} color`}
+                      className="h-8 w-8 rounded-full active:scale-90"
+                      style={{
+                        backgroundColor: col,
+                        outline: c.color === col ? '3px solid white' : 'none',
+                        outlineOffset: 2,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add a new category. */}
+        <div className="border-t border-border pt-4">
+          <label className="mb-2 block text-xs text-gray-500">Add category</label>
+          <div className="flex items-center gap-2">
+            <input
+              className={`${fieldClass} min-w-0 flex-1`}
+              placeholder="e.g. Breakfast, Quick Dinners, Desserts"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') add()
+              }}
+            />
+            <Button onClick={add} className="flex-shrink-0 px-4 py-3">
+              <span className="flex items-center gap-2">
+                <PlusIcon className="h-4 w-4" /> Add
+              </span>
+            </Button>
+          </div>
+          {dup && trimmed !== '' && (
+            <p className="mt-2 text-xs text-loss">A category named “{trimmed}” already exists.</p>
+          )}
+        </div>
+      </div>
     </Modal>
   )
 }
