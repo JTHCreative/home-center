@@ -190,6 +190,15 @@ export function CloseIcon(props) {
   )
 }
 
+export function SearchIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
+  )
+}
+
 export function CheckIcon(props) {
   return (
     <svg {...base} {...props}>
