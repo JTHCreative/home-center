@@ -65,7 +65,7 @@ export function MemberPicker({ members, selected, onToggle, emptyHint = 'No hous
             className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95"
             style={{
               backgroundColor: on ? `${mem.color}22` : 'rgba(255,255,255,0.05)',
-              color: on ? mem.color : '#8B949E',
+              color: on ? mem.color : '#8C9480',
               outline: on ? `2px solid ${mem.color}` : 'none',
             }}
           >

@@ -18,6 +18,7 @@ export default function ScrollTabs({
   onLongPress,
   defaultId,
   longPressMs = 3000,
+  fill = false,
 }) {
   const viewportRef = useRef(null)
   const drag = useRef(null)
@@ -134,9 +135,13 @@ export default function ScrollTabs({
         <ChevronLeft className="h-7 w-7" />
       </Arrow>
 
-      {/* Prefers `barWidth` (sized for `visible` tabs) but shrinks to fit on
-          narrow screens; the viewport below scrolls the overflow either way. */}
-      <div className="relative min-w-0" style={{ width: barWidth, maxWidth: '100%' }}>
+      {/* In `fill` mode the bar grows to fill the row and tabs stretch to share
+          the space; otherwise it prefers `barWidth` (sized for `visible` tabs)
+          but shrinks to fit on narrow screens. The viewport scrolls overflow. */}
+      <div
+        className={['relative min-w-0', fill ? 'flex-1' : ''].join(' ')}
+        style={fill ? undefined : { width: barWidth, maxWidth: '100%' }}
+      >
         <div
           ref={viewportRef}
           onPointerDown={onPointerDown}
@@ -149,8 +154,16 @@ export default function ScrollTabs({
           {tabs.map((t) => {
             const isActive = t.id === active
             const isDefault = t.id === defaultId
+            // Active tabs normally highlight in the theme accent; if a tab
+            // carries its own `color` (e.g. a meal category), the active state
+            // uses that color instead so the highlight matches the category.
+            const activeColor = isActive ? t.color : null
             return (
-              <div key={t.id} className="flex-none p-0.5" style={{ width: TAB_W }}>
+              <div
+                key={t.id}
+                className={fill ? 'p-0.5' : 'flex-none p-0.5'}
+                style={fill ? { flex: `1 0 ${TAB_W}px` } : { width: TAB_W }}
+              >
                 <button
                   type="button"
                   data-active={isActive}
@@ -165,12 +178,25 @@ export default function ScrollTabs({
                     }
                     onChange(t.id)
                   }}
+                  style={
+                    activeColor
+                      ? {
+                          backgroundColor: `${activeColor}26`,
+                          color: activeColor,
+                          boxShadow: `0 0 0 1px ${activeColor}66, 0 0 16px ${activeColor}40`,
+                        }
+                      : undefined
+                  }
                   className={[
                     'relative flex w-full items-center justify-center gap-1 overflow-hidden rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors active:scale-[0.97]',
-                    isActive ? 'bg-accent/15 text-accent shadow-glow' : 'text-gray-400',
+                    isActive
+                      ? activeColor
+                        ? ''
+                        : 'bg-accent/15 text-accent shadow-glow'
+                      : 'text-gray-400',
                   ].join(' ')}
                 >
-                  {isDefault && <StarIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#D29922' }} />}
+                  {isDefault && <StarIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#A89060' }} />}
                   <span className="truncate">{t.label}</span>
                   {/* Press-and-hold progress; fills over longPressMs, then sets default. */}
                   <span
@@ -185,8 +211,10 @@ export default function ScrollTabs({
             )
           })}
 
-          {/* Empty slots: each is a "+" that adds a new watchlist. */}
+          {/* Empty slots: each is a "+" that adds a new watchlist. Skipped in
+              fill mode, where the real tabs stretch to occupy the whole bar. */}
           {onAdd &&
+            !fill &&
             Array.from({ length: Math.max(0, visible - tabs.length) }, (_, i) => (
               <div key={`empty-${i}`} className="flex-none p-0.5" style={{ width: TAB_W }}>
                 <button

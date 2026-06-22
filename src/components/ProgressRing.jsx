@@ -1,7 +1,7 @@
 import { Cell, Pie, PieChart } from 'recharts'
 
 // Completion summary ring built on Recharts. `value` is 0–100.
-export default function ProgressRing({ value = 0, size = 120, label, color = '#39D353' }) {
+export default function ProgressRing({ value = 0, size = 120, label, color = '#6BAF7A' }) {
   const pct = Math.max(0, Math.min(100, Math.round(value)))
   const data = [
     { name: 'done', value: pct },

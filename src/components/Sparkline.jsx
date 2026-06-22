@@ -1,9 +1,14 @@
 import { Line, LineChart, ResponsiveContainer, YAxis } from 'recharts'
 
 // Compact price sparkline. `data` is an array of numbers.
+// Gain/loss hex, kept in sync with the bright --c-gain / --c-loss tokens used by
+// the change / net-chg figures so the chart color matches the numbers.
+const GAIN_HEX = '#39D353'
+const LOSS_HEX = '#F85149'
+
 export default function Sparkline({ data = [], up = true, width = 120, height = 40 }) {
   const points = data.map((v, i) => ({ i, v }))
-  const color = up ? '#39D353' : '#F85149'
+  const color = up ? GAIN_HEX : LOSS_HEX
 
   if (points.length < 2) {
     return <div style={{ width, height }} />

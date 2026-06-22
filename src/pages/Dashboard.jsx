@@ -74,6 +74,7 @@ import {
   SEED_MEALS,
   SEED_MEMBERS,
 } from '../lib/seeds.js'
+import { migrateColors } from '../lib/colors.js'
 import { MemberBadge } from '../components/Member.jsx'
 
 // --- Module registry ---------------------------------------------------------
@@ -174,9 +175,9 @@ const moduleTitle = (m) => {
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
 const SLOT_THEME = {
-  Breakfast: { color: '#C4A882', Icon: SunriseIcon },
-  Lunch: { color: '#D4956A', Icon: SunIcon },
-  Dinner: { color: '#6A9EC0', Icon: MoonIcon },
+  Breakfast: { color: '#A89060', Icon: SunriseIcon }, // Lichen (was gold)
+  Lunch: { color: '#6BAF7A', Icon: SunIcon }, // Sage (was green)
+  Dinner: { color: '#6A9EC0', Icon: MoonIcon }, // Water (was blue)
 }
 const CAL_COLORS = {
   Work: '#6A9EC0',
@@ -408,7 +409,7 @@ const ctrlKey = (c) => (c.kind === 'media' ? 'media' : `${c.kind}:${c.room || ''
 function MealsModule() {
   const [meals] = useLocalState('meals-recipes', SEED_MEALS)
   const [plans] = useLocalState('meals-plan', {}, migratePlan)
-  const [members] = useLocalState('meals-members', SEED_MEMBERS)
+  const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors)
   const mealById = useMemo(() => Object.fromEntries(meals.map((m) => [m.id, m])), [meals])
   const memberById = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members])
   const plan = plans[weekKeyNow()] || {}
@@ -629,7 +630,7 @@ function StocksModule({ watchlistId }) {
 }
 
 function GoalsModule({ sectionId }) {
-  const [sections] = useLocalState('goals-sections', GOALS_SEED)
+  const [sections] = useLocalState('goals-sections', GOALS_SEED, migrateColors)
   const [progress, setProgress] = useLocalState('goals-progress', {})
   const section = sections.find((s) => s.id === sectionId) || sections[0]
   const wk = weekKeyNow()
@@ -741,8 +742,8 @@ function GoalsModule({ sectionId }) {
 
 function CalendarModule() {
   const [events] = useLocalState('calendar-events', [])
-  const [categories] = useLocalState('calendar-categories', [])
-  const [members] = useLocalState('meals-members', SEED_MEMBERS)
+  const [categories] = useLocalState('calendar-categories', [], migrateColors)
+  const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors)
   const today = iso(new Date())
   // Start date/time across legacy ({date,time}) and timeframe ({startDate,...}).
   const evDate = (e) => e.startDate || e.date || ''
@@ -762,7 +763,7 @@ function CalendarModule() {
     const match = cats.find(
       (c) => c.id === e.category || c.name?.toLowerCase() === String(e.category || '').toLowerCase(),
     )
-    return match?.color || CAL_COLORS[e.category] || '#8B949E'
+    return match?.color || CAL_COLORS[e.category] || '#8C9480'
   }
   const fmtTime = (t) => {
     if (!t) return ''
@@ -960,7 +961,7 @@ function ShoppingModule() {
     if (date < today) return 'text-loss'
     if (date === today) return 'text-loss'
     const diff = (new Date(`${date}T00:00`) - new Date(`${today}T00:00`)) / 86_400_000
-    return diff <= 3 ? 'text-[#D29922]' : 'text-gray-400'
+    return diff <= 3 ? 'text-[#A89060]' : 'text-gray-400'
   }
 
   return (
@@ -1563,7 +1564,7 @@ function StocksConfig({ value, onChange }) {
 }
 
 function GoalsConfig({ value, onChange }) {
-  const [sections] = useLocalState('goals-sections', GOALS_SEED)
+  const [sections] = useLocalState('goals-sections', GOALS_SEED, migrateColors)
   return (
     <ChoiceList
       value={value}
