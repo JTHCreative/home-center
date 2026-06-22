@@ -66,9 +66,9 @@ export const DEFAULT_WATCHLISTS = [
 
 // --- Goals --------------------------------------------------------------------
 export const GOALS_SEED = [
-  { id: crypto.randomUUID(), title: "Justin's Goals", color: '#39D353', items: [] },
-  { id: crypto.randomUUID(), title: "Kitty's Goals", color: '#F0883E', items: [] },
-  { id: crypto.randomUUID(), title: 'Weekly Goals', color: '#58A6FF', items: [] },
+  { id: crypto.randomUUID(), title: "Justin's Goals", color: '#6BAF7A', items: [] },
+  { id: crypto.randomUUID(), title: "Kitty's Goals", color: '#D4956A', items: [] },
+  { id: crypto.randomUUID(), title: 'Weekly Goals', color: '#6A9EC0', items: [] },
 ]
 
 // --- Meals --------------------------------------------------------------------
@@ -92,6 +92,6 @@ export const SEED_MEALS = [
 
 // Household members (providers/guests on planned meals reference these by id).
 export const SEED_MEMBERS = [
-  { id: crypto.randomUUID(), name: 'Justin', color: '#58A6FF' },
-  { id: crypto.randomUUID(), name: 'Kitty', color: '#F0883E' },
+  { id: crypto.randomUUID(), name: 'Justin', color: '#6A9EC0' },
+  { id: crypto.randomUUID(), name: 'Kitty', color: '#D4956A' },
 ]

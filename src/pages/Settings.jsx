@@ -221,7 +221,7 @@ function ThemesTab() {
               <div className="text-sm text-gray-400">
                 {current?.sound
                   ? `Plays “${current.soundLabel}” with the ${current.name} theme`
-                  : `The ${current?.name} theme is silent — pick Ocean, Forest, or Moon & Sky for sound`}
+                  : `The ${current?.name} theme is silent — pick Grove, Slate, or Peat for sound`}
               </div>
             </div>
           </div>

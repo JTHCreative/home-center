@@ -72,15 +72,29 @@ function CategoryIcon({ name, ...props }) {
   return <Cmp {...props} />
 }
 
-// Color palette shared with Meals/Goals so categories feel consistent.
-const PALETTE = ['#58A6FF', '#39D353', '#F0883E', '#BC8CFF', '#F85149', '#D29922', '#2DD4BF', '#8B949E']
+// Nature-inspired category palette from the Color Design System, shared with
+// Meals/Goals/Members so categories feel consistent across the app.
+const PALETTE = [
+  '#D4956A', // Ember
+  '#6BAF7A', // Sage
+  '#6A9EC0', // Water
+  '#9B84C0', // Thistle
+  '#C4A882', // Sand
+  '#9DC49F', // Fern
+  '#B87E72', // Dusk
+  '#8AAABB', // Fog
+  '#A89060', // Lichen
+  '#A87898', // Heather
+  '#8C9480', // Stone
+  '#5A9090', // Tide
+]
 
 const DEFAULT_CATEGORIES = [
-  { id: 'work', name: 'Work', color: '#58A6FF', icon: 'briefcase' },
-  { id: 'personal', name: 'Personal', color: '#39D353', icon: 'user' },
-  { id: 'health', name: 'Health', color: '#F85149', icon: 'heart' },
-  { id: 'family', name: 'Family', color: '#BC8CFF', icon: 'users' },
-  { id: 'other', name: 'Other', color: '#8B949E', icon: 'tag' },
+  { id: 'work', name: 'Work', color: '#6A9EC0', icon: 'briefcase' },
+  { id: 'personal', name: 'Personal', color: '#6BAF7A', icon: 'user' },
+  { id: 'health', name: 'Health', color: '#B87E72', icon: 'heart' },
+  { id: 'family', name: 'Family', color: '#9B84C0', icon: 'users' },
+  { id: 'other', name: 'Other', color: '#8C9480', icon: 'tag' },
 ]
 
 // Resolve an event's stored category reference (id, or legacy name) to a

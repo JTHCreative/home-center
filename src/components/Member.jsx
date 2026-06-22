@@ -3,14 +3,20 @@ import Modal, { Button, fieldClass } from './Modal.jsx'
 import { TrashIcon } from './Icons.jsx'
 
 // Household member accent palette (tap to pick when adding/editing a member).
+// Nature-inspired Color Design System palette, shared across the app.
 export const MEMBER_COLORS = [
-  '#58A6FF',
-  '#39D353',
-  '#F0883E',
-  '#BC8CFF',
-  '#F85149',
-  '#D29922',
-  '#8B949E',
+  '#D4956A', // Ember
+  '#6BAF7A', // Sage
+  '#6A9EC0', // Water
+  '#9B84C0', // Thistle
+  '#C4A882', // Sand
+  '#9DC49F', // Fern
+  '#B87E72', // Dusk
+  '#8AAABB', // Fog
+  '#A89060', // Lichen
+  '#A87898', // Heather
+  '#8C9480', // Stone
+  '#5A9090', // Tide
 ]
 
 // Initials for a member badge (first two word-initials, uppercased).

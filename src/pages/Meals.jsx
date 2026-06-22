@@ -51,8 +51,23 @@ const SLOT_THEME = {
 }
 const TAKEOUT_COLOR = '#F0883E'
 
-// Palette for meal categories — auto-assigned (cycled) as categories are created.
-const CATEGORY_COLORS = ['#58A6FF', '#39D353', '#BC8CFF', '#D29922', '#F85149', '#2DD4BF', '#F778BA', '#8B949E']
+// Nature-inspired palette (Color Design System) for meal categories —
+// auto-assigned (cycled) as categories are created, and offered in the recolor
+// picker. Shared with Calendar/Goals/Members for a consistent feel.
+const CATEGORY_COLORS = [
+  '#D4956A', // Ember
+  '#6BAF7A', // Sage
+  '#6A9EC0', // Water
+  '#9B84C0', // Thistle
+  '#C4A882', // Sand
+  '#9DC49F', // Fern
+  '#B87E72', // Dusk
+  '#8AAABB', // Fog
+  '#A89060', // Lichen
+  '#A87898', // Heather
+  '#8C9480', // Stone
+  '#5A9090', // Tide
+]
 // Sentinel used to group meals that have no (or a since-deleted) category.
 const NO_CATEGORY = '__none__'
 
