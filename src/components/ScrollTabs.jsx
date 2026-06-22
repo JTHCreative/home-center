@@ -149,6 +149,10 @@ export default function ScrollTabs({
           {tabs.map((t) => {
             const isActive = t.id === active
             const isDefault = t.id === defaultId
+            // Active tabs normally highlight in the theme accent; if a tab
+            // carries its own `color` (e.g. a meal category), the active state
+            // uses that color instead so the highlight matches the category.
+            const activeColor = isActive ? t.color : null
             return (
               <div key={t.id} className="flex-none p-0.5" style={{ width: TAB_W }}>
                 <button
@@ -165,9 +169,22 @@ export default function ScrollTabs({
                     }
                     onChange(t.id)
                   }}
+                  style={
+                    activeColor
+                      ? {
+                          backgroundColor: `${activeColor}26`,
+                          color: activeColor,
+                          boxShadow: `0 0 0 1px ${activeColor}66, 0 0 16px ${activeColor}40`,
+                        }
+                      : undefined
+                  }
                   className={[
                     'relative flex w-full items-center justify-center gap-1 overflow-hidden rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors active:scale-[0.97]',
-                    isActive ? 'bg-accent/15 text-accent shadow-glow' : 'text-gray-400',
+                    isActive
+                      ? activeColor
+                        ? ''
+                        : 'bg-accent/15 text-accent shadow-glow'
+                      : 'text-gray-400',
                   ].join(' ')}
                 >
                   {isDefault && <StarIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#A89060' }} />}

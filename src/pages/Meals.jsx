@@ -266,7 +266,7 @@ export default function Meals() {
   const categoryTabs = useMemo(
     () => [
       { id: 'all', label: 'All' },
-      ...categories.map((c) => ({ id: c.id, label: c.name })),
+      ...categories.map((c) => ({ id: c.id, label: c.name, color: c.color })),
       { id: NO_CATEGORY, label: 'No Category' },
     ],
     [categories],
@@ -924,6 +924,7 @@ export default function Meals() {
                 <MealCard
                   key={m.id}
                   meal={m}
+                  category={m.categoryId ? categoryById[m.categoryId] : null}
                   assigned={membersForMeal[m.id] || []}
                   onEdit={() => editMeal(m)}
                   onDelete={() => deleteMeal(m.id)}
@@ -1854,13 +1855,13 @@ function CategoryChip({ label, color, on, onClick }) {
 
 // A single meal card in the Meals library (extracted so it can be reused across
 // the category sections).
-function MealCard({ meal, assigned, onEdit, onDelete }) {
+function MealCard({ meal, category, assigned, onEdit, onDelete }) {
   const takeout = mealType(meal) === 'takeout'
   return (
     <Card>
       <div>
         <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h3 className="truncate font-bold text-white">{meal.name}</h3>
             <span
               className="flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
@@ -1872,6 +1873,14 @@ function MealCard({ meal, assigned, onEdit, onDelete }) {
             >
               {takeout ? 'Takeout' : 'Recipe'}
             </span>
+            {category && (
+              <span
+                className="flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
+                style={{ backgroundColor: `${category.color}22`, color: category.color }}
+              >
+                {category.name}
+              </span>
+            )}
           </div>
           {/* Who this meal is assigned to (makes / orders it). */}
           {assigned.length > 0 && (
