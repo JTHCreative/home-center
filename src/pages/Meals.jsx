@@ -46,28 +46,28 @@ const DAY_SET = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
 
 // Each meal slot gets a time-of-day theme: color + icon for its row.
 const SLOT_THEME = {
-  Breakfast: { color: '#A89060', Icon: SunriseIcon }, // Lichen / morning
-  Lunch: { color: '#6BAF7A', Icon: SunIcon }, // Sage / midday
-  Dinner: { color: '#6A9EC0', Icon: MoonIcon }, // Water / night
+  Breakfast: { color: '#BD9541', Icon: SunriseIcon }, // Lichen / morning
+  Lunch: { color: '#52C167', Icon: SunIcon }, // Sage / midday
+  Dinner: { color: '#61A2E0', Icon: MoonIcon }, // Water / night
 }
-const TAKEOUT_COLOR = '#D4956A' // Ember
+const TAKEOUT_COLOR = '#E28F54' // Ember
 
 // Nature-inspired palette (Color Design System) for meal categories —
 // auto-assigned (cycled) as categories are created, and offered in the recolor
 // picker. Shared with Calendar/Goals/Members for a consistent feel.
 const CATEGORY_COLORS = [
-  '#D4956A', // Ember
-  '#6BAF7A', // Sage
-  '#6A9EC0', // Water
-  '#9B84C0', // Thistle
-  '#C4A882', // Sand
-  '#9DC49F', // Fern
-  '#B87E72', // Dusk
-  '#8AAABB', // Fog
-  '#A89060', // Lichen
-  '#A87898', // Heather
-  '#8C9480', // Stone
-  '#5A9090', // Tide
+  '#E28F54', // Ember
+  '#52C167', // Sage
+  '#61A2E0', // Water
+  '#AC88E0', // Thistle
+  '#CDA86C', // Sand
+  '#8FC992', // Fern
+  '#D8685E', // Dusk
+  '#82B0C8', // Fog
+  '#BD9541', // Lichen
+  '#D078A9', // Heather
+  '#8C948F', // Stone
+  '#44B2A8', // Tide
 ]
 // Sentinel used to group meals that have no (or a since-deleted) category.
 const NO_CATEGORY = '__none__'
@@ -141,10 +141,10 @@ const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 // Grocery list sections, shown as separate columns. 'other' catches anything
 // that doesn't match (grains, baking staples, etc.) so nothing is dropped.
 const GROCERY_CATEGORIES = [
-  { id: 'meatdairy', label: 'Meats & Dairy', color: '#B87E72' }, // Dusk (was red)
-  { id: 'produce', label: 'Fruits & Veggies', color: '#6BAF7A' }, // Sage (was green)
-  { id: 'saucesseasonings', label: 'Sauces & Seasonings', color: '#A89060' }, // Lichen (was gold)
-  { id: 'other', label: 'Other', color: '#8C9480' }, // Stone (was grey)
+  { id: 'meatdairy', label: 'Meats & Dairy', color: '#D8685E' }, // Dusk (was red)
+  { id: 'produce', label: 'Fruits & Veggies', color: '#52C167' }, // Sage (was green)
+  { id: 'saucesseasonings', label: 'Sauces & Seasonings', color: '#BD9541' }, // Lichen (was gold)
+  { id: 'other', label: 'Other', color: '#8C948F' }, // Stone (was grey)
 ]
 
 // Older saves used separate 'sauces'/'seasonings' columns — fold any saved
@@ -785,7 +785,7 @@ export default function Meals() {
                               className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
                               style={{
                                 color: takeout ? TAKEOUT_COLOR : 'rgb(var(--c-accent))',
-                                backgroundColor: takeout ? '#D4956A22' : 'rgb(var(--c-accent) / 0.15)',
+                                backgroundColor: takeout ? '#E28F5422' : 'rgb(var(--c-accent) / 0.15)',
                               }}
                             >
                               {takeout ? 'Takeout' : 'Recipe'}
@@ -1036,7 +1036,7 @@ export default function Meals() {
               <div className="flex flex-wrap items-center gap-2">
                 <CategoryChip
                   label="No Category"
-                  color="#8C9480"
+                  color="#8C948F"
                   on={!mealDraft.categoryId}
                   onClick={() => setMealDraft({ ...mealDraft, categoryId: null })}
                 />
@@ -1267,7 +1267,7 @@ function MemberMealsModal({ member, meals, onToggle, onClose }) {
           {tabMeals.map((m) => {
             const takeout = mealType(m) === 'takeout'
             const on = selected.includes(m.id)
-            const color = takeout ? TAKEOUT_COLOR : '#6A9EC0'
+            const color = takeout ? TAKEOUT_COLOR : '#61A2E0'
             return (
               <button
                 key={m.id}
@@ -1707,7 +1707,7 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categorie
                       <div className="flex flex-wrap gap-2">
                         <CategoryChip
                           label="No Category"
-                          color="#8C9480"
+                          color="#8C948F"
                           on={filterCats.includes(NO_CATEGORY)}
                           onClick={() => toggleFilterCat(NO_CATEGORY)}
                         />
@@ -1763,7 +1763,7 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categorie
                     'rounded-xl px-4 py-3 text-left active:scale-[0.98]',
                     on ? 'shadow-glow' : 'bg-white/5',
                   ].join(' ')}
-                  style={on ? { backgroundColor: `${takeout ? TAKEOUT_COLOR : '#6A9EC0'}22`, outline: `2px solid ${takeout ? TAKEOUT_COLOR : '#6A9EC0'}` } : undefined}
+                  style={on ? { backgroundColor: `${takeout ? TAKEOUT_COLOR : '#61A2E0'}22`, outline: `2px solid ${takeout ? TAKEOUT_COLOR : '#61A2E0'}` } : undefined}
                 >
                   <div className="font-medium text-white">{m.name}</div>
                   <div
@@ -1847,7 +1847,7 @@ function CategoryChip({ label, color, on, onClick }) {
       className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95"
       style={{
         backgroundColor: on ? `${color}22` : 'rgba(255,255,255,0.05)',
-        color: on ? color : '#8C9480',
+        color: on ? color : '#8C948F',
         outline: on ? `2px solid ${color}` : 'none',
       }}
     >
@@ -1871,7 +1871,7 @@ function MealCard({ meal, category, assigned, onEdit, onDelete }) {
               className="flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
               style={
                 takeout
-                  ? { backgroundColor: '#D4956A22', color: '#D4956A' }
+                  ? { backgroundColor: '#E28F5422', color: '#E28F54' }
                   : { backgroundColor: 'rgb(var(--c-accent) / 0.15)', color: 'rgb(var(--c-accent))' }
               }
             >
@@ -2052,7 +2052,7 @@ function DeleteCategoryModal({ category, categories, mealCount, onConfirm, onClo
   }, [category?.id])
   if (!category) return null
   const others = categories.filter((c) => c.id !== category.id)
-  const options = [{ id: null, name: 'No Category', color: '#8C9480' }, ...others]
+  const options = [{ id: null, name: 'No Category', color: '#8C948F' }, ...others]
   return (
     <Modal
       open={!!category}

@@ -76,26 +76,26 @@ function CategoryIcon({ name, ...props }) {
 // Nature-inspired category palette from the Color Design System, shared with
 // Meals/Goals/Members so categories feel consistent across the app.
 const PALETTE = [
-  '#D4956A', // Ember
-  '#6BAF7A', // Sage
-  '#6A9EC0', // Water
-  '#9B84C0', // Thistle
-  '#C4A882', // Sand
-  '#9DC49F', // Fern
-  '#B87E72', // Dusk
-  '#8AAABB', // Fog
-  '#A89060', // Lichen
-  '#A87898', // Heather
-  '#8C9480', // Stone
-  '#5A9090', // Tide
+  '#E28F54', // Ember
+  '#52C167', // Sage
+  '#61A2E0', // Water
+  '#AC88E0', // Thistle
+  '#CDA86C', // Sand
+  '#8FC992', // Fern
+  '#D8685E', // Dusk
+  '#82B0C8', // Fog
+  '#BD9541', // Lichen
+  '#D078A9', // Heather
+  '#8C948F', // Stone
+  '#44B2A8', // Tide
 ]
 
 const DEFAULT_CATEGORIES = [
-  { id: 'work', name: 'Work', color: '#6A9EC0', icon: 'briefcase' },
-  { id: 'personal', name: 'Personal', color: '#6BAF7A', icon: 'user' },
-  { id: 'health', name: 'Health', color: '#B87E72', icon: 'heart' },
-  { id: 'family', name: 'Family', color: '#9B84C0', icon: 'users' },
-  { id: 'other', name: 'Other', color: '#8C9480', icon: 'tag' },
+  { id: 'work', name: 'Work', color: '#61A2E0', icon: 'briefcase' },
+  { id: 'personal', name: 'Personal', color: '#52C167', icon: 'user' },
+  { id: 'health', name: 'Health', color: '#D8685E', icon: 'heart' },
+  { id: 'family', name: 'Family', color: '#AC88E0', icon: 'users' },
+  { id: 'other', name: 'Other', color: '#8C948F', icon: 'tag' },
 ]
 
 // Resolve an event's stored category reference (id, or legacy name) to a
@@ -1167,7 +1167,7 @@ function CategoryModal({ draft, setDraft, onClose, onSave, onDelete, canDelete, 
                   className="flex h-11 w-11 items-center justify-center rounded-xl active:scale-90"
                   style={{
                     backgroundColor: on ? `${draft.color}22` : 'rgba(255,255,255,0.05)',
-                    color: on ? draft.color : '#8C9480',
+                    color: on ? draft.color : '#8C948F',
                     outline: on ? `2px solid ${draft.color}` : 'none',
                   }}
                 >
