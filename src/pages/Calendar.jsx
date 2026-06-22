@@ -9,6 +9,7 @@ import { MemberBadge, MemberPicker } from '../components/Member.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { useDragScroll } from '../lib/useDragScroll.js'
 import { SEED_MEMBERS } from '../lib/seeds.js'
+import { migrateColors } from '../lib/colors.js'
 import {
   BellIcon,
   BookIcon,
@@ -258,8 +259,8 @@ export default function Calendar() {
   const [view, setView] = useState('month')
   const [cursor, setCursor] = useState(new Date())
   const [events, setEvents] = useLocalState('calendar-events', [], migrateEvents)
-  const [categories, setCategories] = useLocalState('calendar-categories', DEFAULT_CATEGORIES)
-  const [members] = useLocalState('meals-members', SEED_MEMBERS) // shared with Meals/Settings
+  const [categories, setCategories] = useLocalState('calendar-categories', DEFAULT_CATEGORIES, migrateColors)
+  const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors) // shared with Meals/Settings
   const [draft, setDraft] = useState(null) // event being added/edited
   const [selectedId, setSelectedId] = useState(null) // event whose info page is open
   const [catManagerOpen, setCatManagerOpen] = useState(false)
@@ -1166,7 +1167,7 @@ function CategoryModal({ draft, setDraft, onClose, onSave, onDelete, canDelete, 
                   className="flex h-11 w-11 items-center justify-center rounded-xl active:scale-90"
                   style={{
                     backgroundColor: on ? `${draft.color}22` : 'rgba(255,255,255,0.05)',
-                    color: on ? draft.color : '#8B949E',
+                    color: on ? draft.color : '#8C9480',
                     outline: on ? `2px solid ${draft.color}` : 'none',
                   }}
                 >

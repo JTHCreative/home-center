@@ -26,6 +26,7 @@ import { THEMES, useSettings } from '../lib/settings.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { pageById, reconcileMenu } from '../lib/menu.js'
 import { SEED_MEMBERS } from '../lib/seeds.js'
+import { migrateColors } from '../lib/colors.js'
 
 const TABS = [
   { id: 'themes', label: 'Themes' },
@@ -53,7 +54,7 @@ export default function Settings() {
 // 'meals-members' storage key. This is a full add/edit/manage surface; Meals
 // keeps its own Add Member button too.
 function HouseholdTab() {
-  const [members, setMembers] = useLocalState('meals-members', SEED_MEMBERS)
+  const [members, setMembers] = useLocalState('meals-members', SEED_MEMBERS, migrateColors)
   const [, setCalendarEvents] = useLocalState('calendar-events', [])
   const [, setPlans] = useLocalState('meals-plan', {})
   const [draft, setDraft] = useState(null)
@@ -221,7 +222,7 @@ function ThemesTab() {
               <div className="text-sm text-gray-400">
                 {current?.sound
                   ? `Plays “${current.soundLabel}” with the ${current.name} theme`
-                  : `The ${current?.name} theme is silent — pick Grove, Slate, or Peat for sound`}
+                  : `The ${current?.name} theme is silent — pick Forest, Ocean, or Twilight for sound`}
               </div>
             </div>
           </div>
@@ -344,7 +345,7 @@ function MenuBoard({ config, onChange }) {
           id="pool"
           title="Available"
           subtitle="Drag in to add to the menu"
-          accent="#8B949E"
+          accent="#8C9480"
           items={cols.pool}
           activeId={activeId}
           overId={overId}

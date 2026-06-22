@@ -27,6 +27,7 @@ import {
   TrashIcon,
 } from '../components/Icons.jsx'
 import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
+import { migrateColors } from '../lib/colors.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
@@ -112,11 +113,11 @@ const newItem = () => ({
 })
 
 export default function Goals() {
-  const [sections, setSections] = useLocalState('goals-sections', SEED)
+  const [sections, setSections] = useLocalState('goals-sections', SEED, migrateColors)
   const [progress, setProgress] = useLocalState('goals-progress', {}) // weekKey -> { items, children }
   const [calendarEvents] = useLocalState('calendar-events', []) // read-only, shared with Calendar
-  const [calendarCategories] = useLocalState('calendar-categories', []) // read-only, for colors
-  const [members] = useLocalState('meals-members', SEED_MEMBERS) // read-only, for event member circles
+  const [calendarCategories] = useLocalState('calendar-categories', [], migrateColors) // read-only, for colors
+  const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors) // read-only, for event member circles
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
@@ -142,7 +143,7 @@ export default function Goals() {
     const match = cats.find(
       (c) => c.id === e.category || c.name?.toLowerCase() === String(e.category || '').toLowerCase(),
     )
-    return match?.color || CAL_COLORS[e.category] || '#8B949E'
+    return match?.color || CAL_COLORS[e.category] || '#8C9480'
   }
 
   // Household members assigned to an event (skips any that no longer exist).

@@ -170,7 +170,7 @@ export default function ScrollTabs({
                     isActive ? 'bg-accent/15 text-accent shadow-glow' : 'text-gray-400',
                   ].join(' ')}
                 >
-                  {isDefault && <StarIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#D29922' }} />}
+                  {isDefault && <StarIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#A89060' }} />}
                   <span className="truncate">{t.label}</span>
                   {/* Press-and-hold progress; fills over longPressMs, then sets default. */}
                   <span

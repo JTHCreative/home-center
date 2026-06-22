@@ -7,6 +7,13 @@ import { setMasterVolume, startSoundscape, stopSoundscape } from './soundscapes.
 // colors are for the Settings previews and mirror index.css.
 export const THEMES = [
   {
+    id: 'slate',
+    name: 'Slate',
+    sound: null,
+    soundLabel: 'Silent',
+    colors: { bg: '#16181C', surface: '#1E2126', accent: '#8FA3B8' },
+  },
+  {
     id: 'dusk',
     name: 'Dusk',
     sound: null,
@@ -14,22 +21,22 @@ export const THEMES = [
     colors: { bg: '#1C1917', surface: '#292524', accent: '#D4956A' },
   },
   {
-    id: 'grove',
-    name: 'Grove',
+    id: 'forest',
+    name: 'Forest',
     sound: 'forest',
     soundLabel: 'Forest birds',
     colors: { bg: '#151D17', surface: '#1C2820', accent: '#6BAF7A' },
   },
   {
-    id: 'slate',
-    name: 'Slate',
+    id: 'ocean',
+    name: 'Ocean',
     sound: 'waves',
     soundLabel: 'Waves',
     colors: { bg: '#141C26', surface: '#1B2537', accent: '#6A9EC0' },
   },
   {
-    id: 'peat',
-    name: 'Peat',
+    id: 'twilight',
+    name: 'Twilight',
     sound: 'crickets',
     soundLabel: 'Cricket chirps',
     colors: { bg: '#1A1620', surface: '#231E2E', accent: '#9B84C0' },
@@ -38,17 +45,17 @@ export const THEMES = [
 
 const SettingsContext = createContext(null)
 
-// Legacy theme ids → nearest equivalent in the new nature-inspired palette, so
-// existing saved preferences still land on a valid theme.
+// Legacy theme ids → nearest equivalent in the current catalog, so existing
+// saved preferences still land on a valid theme after renames.
 const LEGACY_THEME_MAP = {
-  midnight: 'slate',
-  ocean: 'slate',
-  forest: 'grove',
-  moon: 'peat',
+  midnight: 'slate', // old neutral grey/navy default → new neutral grey Slate
+  moon: 'twilight',
+  grove: 'forest',
+  peat: 'twilight',
 }
 
 export function SettingsProvider({ children }) {
-  const [theme, setTheme] = useLocalState('theme', 'dusk')
+  const [theme, setTheme] = useLocalState('theme', 'slate')
   const [soundOn, setSoundOn] = useLocalState('sound-on', false)
   const [volume, setVolume] = useLocalState('sound-volume', 50) // 0–100
 

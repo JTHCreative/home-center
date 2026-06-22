@@ -37,6 +37,7 @@ import {
   TrashIcon,
 } from '../components/Icons.jsx'
 import { SEED_MEALS, SEED_MEMBERS } from '../lib/seeds.js'
+import { migrateColors } from '../lib/colors.js'
 import { MemberBadge, MemberPicker } from '../components/Member.jsx'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -45,11 +46,11 @@ const DAY_SET = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
 
 // Each meal slot gets a time-of-day theme: color + icon for its row.
 const SLOT_THEME = {
-  Breakfast: { color: '#D29922', Icon: SunriseIcon }, // yellow / morning
-  Lunch: { color: '#39D353', Icon: SunIcon }, // green / midday
-  Dinner: { color: '#58A6FF', Icon: MoonIcon }, // blue / night
+  Breakfast: { color: '#A89060', Icon: SunriseIcon }, // Lichen / morning
+  Lunch: { color: '#6BAF7A', Icon: SunIcon }, // Sage / midday
+  Dinner: { color: '#6A9EC0', Icon: MoonIcon }, // Water / night
 }
-const TAKEOUT_COLOR = '#F0883E'
+const TAKEOUT_COLOR = '#D4956A' // Ember
 
 // Nature-inspired palette (Color Design System) for meal categories —
 // auto-assigned (cycled) as categories are created, and offered in the recolor
@@ -140,10 +141,10 @@ const ingQty = (ing) => (typeof ing === 'string' ? '' : ing?.qty || '')
 // Grocery list sections, shown as separate columns. 'other' catches anything
 // that doesn't match (grains, baking staples, etc.) so nothing is dropped.
 const GROCERY_CATEGORIES = [
-  { id: 'meatdairy', label: 'Meats & Dairy', color: '#F85149' },
-  { id: 'produce', label: 'Fruits & Veggies', color: '#39D353' },
-  { id: 'saucesseasonings', label: 'Sauces & Seasonings', color: '#D29922' },
-  { id: 'other', label: 'Other', color: '#8B949E' },
+  { id: 'meatdairy', label: 'Meats & Dairy', color: '#B87E72' }, // Dusk (was red)
+  { id: 'produce', label: 'Fruits & Veggies', color: '#6BAF7A' }, // Sage (was green)
+  { id: 'saucesseasonings', label: 'Sauces & Seasonings', color: '#A89060' }, // Lichen (was gold)
+  { id: 'other', label: 'Other', color: '#8C9480' }, // Stone (was grey)
 ]
 
 // Older saves used separate 'sauces'/'seasonings' columns — fold any saved
@@ -187,10 +188,10 @@ function categorize(name) {
 
 export default function Meals() {
   const [meals, setMeals] = useLocalState('meals-recipes', SEED_MEALS)
-  const [categories, setCategories] = useLocalState('meals-categories', []) // [{ id, name, color }]
+  const [categories, setCategories] = useLocalState('meals-categories', [], migrateColors) // [{ id, name, color }]
   const [plans, setPlans] = useLocalState('meals-plan', {}, migratePlan)
   const [checkedByWeek, setCheckedByWeek] = useLocalState('meals-grocery-checked', {})
-  const [members, setMembers] = useLocalState('meals-members', SEED_MEMBERS)
+  const [members, setMembers] = useLocalState('meals-members', SEED_MEMBERS, migrateColors)
   // Grocery drag-and-drop state (global, keyed by lowercased ingredient name so
   // it survives the weekly auto-rebuild): category overrides + custom order.
   const [groceryCat, setGroceryCat] = useLocalState('meals-grocery-cat', {}) // { name: catId }
@@ -784,7 +785,7 @@ export default function Meals() {
                               className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
                               style={{
                                 color: takeout ? TAKEOUT_COLOR : 'rgb(var(--c-accent))',
-                                backgroundColor: takeout ? '#F0883E22' : 'rgb(var(--c-accent) / 0.15)',
+                                backgroundColor: takeout ? '#D4956A22' : 'rgb(var(--c-accent) / 0.15)',
                               }}
                             >
                               {takeout ? 'Takeout' : 'Recipe'}
@@ -1030,7 +1031,7 @@ export default function Meals() {
               <div className="flex flex-wrap items-center gap-2">
                 <CategoryChip
                   label="No Category"
-                  color="#8B949E"
+                  color="#8C9480"
                   on={!mealDraft.categoryId}
                   onClick={() => setMealDraft({ ...mealDraft, categoryId: null })}
                 />
@@ -1261,7 +1262,7 @@ function MemberMealsModal({ member, meals, onToggle, onClose }) {
           {tabMeals.map((m) => {
             const takeout = mealType(m) === 'takeout'
             const on = selected.includes(m.id)
-            const color = takeout ? TAKEOUT_COLOR : '#58A6FF'
+            const color = takeout ? TAKEOUT_COLOR : '#6A9EC0'
             return (
               <button
                 key={m.id}
@@ -1701,7 +1702,7 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categorie
                       <div className="flex flex-wrap gap-2">
                         <CategoryChip
                           label="No Category"
-                          color="#8B949E"
+                          color="#8C9480"
                           on={filterCats.includes(NO_CATEGORY)}
                           onClick={() => toggleFilterCat(NO_CATEGORY)}
                         />
@@ -1757,7 +1758,7 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categorie
                     'rounded-xl px-4 py-3 text-left active:scale-[0.98]',
                     on ? 'shadow-glow' : 'bg-white/5',
                   ].join(' ')}
-                  style={on ? { backgroundColor: `${takeout ? TAKEOUT_COLOR : '#58A6FF'}22`, outline: `2px solid ${takeout ? TAKEOUT_COLOR : '#58A6FF'}` } : undefined}
+                  style={on ? { backgroundColor: `${takeout ? TAKEOUT_COLOR : '#6A9EC0'}22`, outline: `2px solid ${takeout ? TAKEOUT_COLOR : '#6A9EC0'}` } : undefined}
                 >
                   <div className="font-medium text-white">{m.name}</div>
                   <div
@@ -1841,7 +1842,7 @@ function CategoryChip({ label, color, on, onClick }) {
       className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95"
       style={{
         backgroundColor: on ? `${color}22` : 'rgba(255,255,255,0.05)',
-        color: on ? color : '#8B949E',
+        color: on ? color : '#8C9480',
         outline: on ? `2px solid ${color}` : 'none',
       }}
     >
@@ -1865,7 +1866,7 @@ function MealCard({ meal, assigned, onEdit, onDelete }) {
               className="flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
               style={
                 takeout
-                  ? { backgroundColor: '#F0883E22', color: '#F0883E' }
+                  ? { backgroundColor: '#D4956A22', color: '#D4956A' }
                   : { backgroundColor: 'rgb(var(--c-accent) / 0.15)', color: 'rgb(var(--c-accent))' }
               }
             >
@@ -2038,7 +2039,7 @@ function DeleteCategoryModal({ category, categories, mealCount, onConfirm, onClo
   }, [category?.id])
   if (!category) return null
   const others = categories.filter((c) => c.id !== category.id)
-  const options = [{ id: null, name: 'No Category', color: '#8B949E' }, ...others]
+  const options = [{ id: null, name: 'No Category', color: '#8C9480' }, ...others]
   return (
     <Modal
       open={!!category}

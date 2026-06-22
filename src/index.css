@@ -6,41 +6,50 @@
   /* Nature-inspired theme palettes — RGB channels consumed by
      tailwind.config.js. Sourced from the Color Design System: each theme maps
      base → --c-bg, surface → --c-surface, raised → --c-border (subtle elevated
-     divider line), and accent → --c-accent. gain/loss stay semantically
-     green/red so financial up/down reads consistently across themes. The
-     default (Dusk) lives on :root; data-theme overrides swap the whole palette. */
+     divider line), and accent → --c-accent. gain/loss stay BRIGHT and saturated
+     across every theme — they're reserved for investments (red/green charting
+     and status), the one place that keeps vivid color. The default (Slate, a
+     neutral grey) lives on :root; data-theme overrides swap the whole palette. */
   :root,
+  [data-theme='slate'] {
+    --c-bg: 22 24 28; /* base    #16181C */
+    --c-surface: 30 33 38; /* surface #1E2126 */
+    --c-border: 44 48 54; /* raised  #2C3036 */
+    --c-accent: 143 163 184; /* accent  #8FA3B8 (cool neutral steel) */
+    --c-gain: 57 211 83;
+    --c-loss: 248 81 73;
+  }
   [data-theme='dusk'] {
     --c-bg: 28 25 23; /* base    #1C1917 */
     --c-surface: 41 37 36; /* surface #292524 */
     --c-border: 59 51 48; /* raised  #3B3330 */
     --c-accent: 212 149 106; /* accent  #D4956A */
-    --c-gain: 107 175 122;
-    --c-loss: 224 120 106;
+    --c-gain: 57 211 83;
+    --c-loss: 248 81 73;
   }
-  [data-theme='grove'] {
+  [data-theme='forest'] {
     --c-bg: 21 29 23; /* base    #151D17 */
     --c-surface: 28 40 32; /* surface #1C2820 */
     --c-border: 40 56 48; /* raised  #283830 */
     --c-accent: 107 175 122; /* accent  #6BAF7A */
-    --c-gain: 157 196 159;
-    --c-loss: 224 120 106;
+    --c-gain: 57 211 83;
+    --c-loss: 248 81 73;
   }
-  [data-theme='slate'] {
+  [data-theme='ocean'] {
     --c-bg: 20 28 38; /* base    #141C26 */
     --c-surface: 27 37 55; /* surface #1B2537 */
     --c-border: 37 51 73; /* raised  #253349 */
     --c-accent: 106 158 192; /* accent  #6A9EC0 */
-    --c-gain: 107 175 122;
-    --c-loss: 224 120 106;
+    --c-gain: 57 211 83;
+    --c-loss: 248 81 73;
   }
-  [data-theme='peat'] {
+  [data-theme='twilight'] {
     --c-bg: 26 22 32; /* base    #1A1620 */
     --c-surface: 35 30 46; /* surface #231E2E */
     --c-border: 46 40 64; /* raised  #2E2840 */
     --c-accent: 155 132 192; /* accent  #9B84C0 */
-    --c-gain: 107 175 122;
-    --c-loss: 224 120 106;
+    --c-gain: 57 211 83;
+    --c-loss: 248 81 73;
   }
 
   html,
