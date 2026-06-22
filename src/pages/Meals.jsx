@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Tabs from '../components/Tabs.jsx'
+import ScrollTabs from '../components/ScrollTabs.jsx'
 import { useLocalState } from '../lib/storage.js'
 import {
   CheckIcon,
@@ -217,6 +218,7 @@ export default function Meals() {
   // Meals library filter (by household member), mirrors the schedule filter.
   const [mealsFilterOpen, setMealsFilterOpen] = useState(false)
   const [mealsFilterMembers, setMealsFilterMembers] = useState([]) // member ids
+  const [mealsCategoryTab, setMealsCategoryTab] = useState('all') // 'all' | NO_CATEGORY | categoryId
   const toggleMealsFilterMember = (id) =>
     setMealsFilterMembers((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
   const visibleMeals = useMemo(() => {
@@ -230,27 +232,29 @@ export default function Meals() {
     return list
   }, [meals, mealsTab, mealsSearch, mealsFilterMembers, membersForMeal])
 
-  // Group the visible meals into category sections. When a filter/search is
-  // active we only surface sections that have matches; otherwise every category
-  // is shown (even empty ones) so they can be organized and deleted in place.
-  const mealSections = useMemo(() => {
-    const byCat = new Map()
-    for (const m of visibleMeals) {
+  // The category-navigator tab acts as a single-select category filter above the
+  // grid. Fall back to "All" if the selected category was deleted.
+  const activeCategoryTab =
+    mealsCategoryTab === 'all' || mealsCategoryTab === NO_CATEGORY || categoryById[mealsCategoryTab]
+      ? mealsCategoryTab
+      : 'all'
+  const gridMeals = useMemo(() => {
+    if (activeCategoryTab === 'all') return visibleMeals
+    return visibleMeals.filter((m) => {
       const key = m.categoryId && categoryById[m.categoryId] ? m.categoryId : NO_CATEGORY
-      if (!byCat.has(key)) byCat.set(key, [])
-      byCat.get(key).push(m)
-    }
-    const narrowing = mealsFilterMembers.length > 0 || mealsSearch.trim() !== ''
-    const sections = []
-    for (const cat of categories) {
-      const items = byCat.get(cat.id) || []
-      if (narrowing && items.length === 0) continue
-      sections.push({ key: cat.id, category: cat, items })
-    }
-    const none = byCat.get(NO_CATEGORY) || []
-    if (none.length > 0) sections.push({ key: NO_CATEGORY, category: null, items: none })
-    return sections
-  }, [visibleMeals, categories, categoryById, mealsFilterMembers, mealsSearch])
+      return key === activeCategoryTab
+    })
+  }, [visibleMeals, activeCategoryTab, categoryById])
+
+  // Tabs for the category navigator: All, every category, then No Category.
+  const categoryTabs = useMemo(
+    () => [
+      { id: 'all', label: 'All' },
+      ...categories.map((c) => ({ id: c.id, label: c.name })),
+      { id: NO_CATEGORY, label: 'No Category' },
+    ],
+    [categories],
+  )
 
   // Auto-generated grocery list: ingredients across all recipes planned for the
   // selected week (takeout has nothing to buy), grouped by name with quantities.
@@ -872,58 +876,42 @@ export default function Meals() {
               </Button>
             </div>
           </div>
-          {mealSections.length === 0 ? (
+          {/* Category navigator — a swipeable bar that filters the grid by
+              category (All · each category · No Category). Empty slots show a
+              "+" that opens the category manager. */}
+          {categories.length > 0 && (
+            <div className="mb-4 w-fit max-w-full">
+              <ScrollTabs
+                tabs={categoryTabs}
+                active={activeCategoryTab}
+                onChange={setMealsCategoryTab}
+                onAdd={() => setCategoryManagerOpen(true)}
+                visible={6}
+              />
+            </div>
+          )}
+          {gridMeals.length === 0 ? (
             <Card className="text-sm text-gray-500">
               {mealsSearch.trim() !== ''
                 ? `No ${mealsTab} meals match “${mealsSearch.trim()}”.`
                 : mealsFilterMembers.length > 0
                   ? `No ${mealsTab} meals assigned to the selected member${mealsFilterMembers.length > 1 ? 's' : ''}.`
-                  : `No ${mealsTab} meals yet.`}
+                  : activeCategoryTab === NO_CATEGORY
+                    ? `No uncategorized ${mealsTab} meals.`
+                    : activeCategoryTab !== 'all'
+                      ? `No ${mealsTab} meals in this category yet.`
+                      : `No ${mealsTab} meals yet.`}
             </Card>
           ) : (
-            <div className="space-y-6">
-              {mealSections.map(({ key, category, items }) => (
-                <section key={key}>
-                  {/* Category header — color dot, name, count, and (for real
-                      categories) a delete button that opens the transfer modal. */}
-                  <div className="mb-3 flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: category ? category.color : '#8B949E' }}
-                    />
-                    <h3 className="text-base font-bold" style={{ color: category ? category.color : '#8B949E' }}>
-                      {category ? category.name : 'No Category'}
-                    </h3>
-                    <span className="font-mono text-xs text-gray-500">{items.length}</span>
-                    {category && (
-                      <button
-                        type="button"
-                        onClick={() => setCategoryToDelete(category.id)}
-                        aria-label={`Delete category ${category.name}`}
-                        className="ml-1 rounded-lg p-1.5 text-gray-500 active:scale-90 active:text-loss"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                  {items.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-xs text-gray-600">
-                      No {mealsTab} meals in this category yet.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {items.map((m) => (
-                        <MealCard
-                          key={m.id}
-                          meal={m}
-                          assigned={membersForMeal[m.id] || []}
-                          onEdit={() => editMeal(m)}
-                          onDelete={() => deleteMeal(m.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </section>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {gridMeals.map((m) => (
+                <MealCard
+                  key={m.id}
+                  meal={m}
+                  assigned={membersForMeal[m.id] || []}
+                  onEdit={() => editMeal(m)}
+                  onDelete={() => deleteMeal(m.id)}
+                />
               ))}
             </div>
           )}
