@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Tabs from '../components/Tabs.jsx'
+import ScrollTabs from '../components/ScrollTabs.jsx'
 import { useLocalState } from '../lib/storage.js'
 import {
   CheckIcon,
@@ -189,7 +190,7 @@ export default function Meals() {
   const [memberMealsFor, setMemberMealsFor] = useState(null) // member id whose meal list is being edited
   const [mealsTab, setMealsTab] = useState('recipe') // Meals library: 'recipe' | 'takeout'
   const [mealsSearch, setMealsSearch] = useState('') // Meals library name search
-  const [newCategoryOpen, setNewCategoryOpen] = useState(false) // create-category modal
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false) // edit/recolor/delete categories
   const [categoryToDelete, setCategoryToDelete] = useState(null) // category id pending deletion
   const [mealCatName, setMealCatName] = useState(null) // in-progress new category typed inside the meal editor
   const [subpage, setSubpage] = useState('schedule') // Schedule | Household | Meals | Groceries
@@ -217,6 +218,7 @@ export default function Meals() {
   // Meals library filter (by household member), mirrors the schedule filter.
   const [mealsFilterOpen, setMealsFilterOpen] = useState(false)
   const [mealsFilterMembers, setMealsFilterMembers] = useState([]) // member ids
+  const [mealsCategoryTab, setMealsCategoryTab] = useState('all') // 'all' | NO_CATEGORY | categoryId
   const toggleMealsFilterMember = (id) =>
     setMealsFilterMembers((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
   const visibleMeals = useMemo(() => {
@@ -230,27 +232,29 @@ export default function Meals() {
     return list
   }, [meals, mealsTab, mealsSearch, mealsFilterMembers, membersForMeal])
 
-  // Group the visible meals into category sections. When a filter/search is
-  // active we only surface sections that have matches; otherwise every category
-  // is shown (even empty ones) so they can be organized and deleted in place.
-  const mealSections = useMemo(() => {
-    const byCat = new Map()
-    for (const m of visibleMeals) {
+  // The category-navigator tab acts as a single-select category filter above the
+  // grid. Fall back to "All" if the selected category was deleted.
+  const activeCategoryTab =
+    mealsCategoryTab === 'all' || mealsCategoryTab === NO_CATEGORY || categoryById[mealsCategoryTab]
+      ? mealsCategoryTab
+      : 'all'
+  const gridMeals = useMemo(() => {
+    if (activeCategoryTab === 'all') return visibleMeals
+    return visibleMeals.filter((m) => {
       const key = m.categoryId && categoryById[m.categoryId] ? m.categoryId : NO_CATEGORY
-      if (!byCat.has(key)) byCat.set(key, [])
-      byCat.get(key).push(m)
-    }
-    const narrowing = mealsFilterMembers.length > 0 || mealsSearch.trim() !== ''
-    const sections = []
-    for (const cat of categories) {
-      const items = byCat.get(cat.id) || []
-      if (narrowing && items.length === 0) continue
-      sections.push({ key: cat.id, category: cat, items })
-    }
-    const none = byCat.get(NO_CATEGORY) || []
-    if (none.length > 0) sections.push({ key: NO_CATEGORY, category: null, items: none })
-    return sections
-  }, [visibleMeals, categories, categoryById, mealsFilterMembers, mealsSearch])
+      return key === activeCategoryTab
+    })
+  }, [visibleMeals, activeCategoryTab, categoryById])
+
+  // Tabs for the category navigator: All, every category, then No Category.
+  const categoryTabs = useMemo(
+    () => [
+      { id: 'all', label: 'All' },
+      ...categories.map((c) => ({ id: c.id, label: c.name })),
+      { id: NO_CATEGORY, label: 'No Category' },
+    ],
+    [categories],
+  )
 
   // Auto-generated grocery list: ingredients across all recipes planned for the
   // selected week (takeout has nothing to buy), grouped by name with quantities.
@@ -399,6 +403,9 @@ export default function Meals() {
     setCategories((list) => list.filter((c) => c.id !== id))
     setCategoryToDelete(null)
   }
+  // Recolor a category (chosen from the palette in the category manager).
+  const setCategoryColor = (id, color) =>
+    setCategories((list) => list.map((c) => (c.id === id ? { ...c, color } : c)))
 
   const saveMeal = () => {
     if (!mealDraft.name.trim()) return
@@ -848,14 +855,14 @@ export default function Meals() {
                   />
                 )}
               </div>
-              {/* Create a new organizing category. */}
+              {/* Manage categories — recolor, delete, or add new ones. */}
               <button
                 type="button"
-                onClick={() => setNewCategoryOpen(true)}
+                onClick={() => setCategoryManagerOpen(true)}
                 className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
               >
                 <TagIcon className="h-5 w-5" />
-                <span>New Category</span>
+                <span>Edit Categories</span>
               </button>
               <Button
                 className="px-4 py-2"
@@ -869,58 +876,42 @@ export default function Meals() {
               </Button>
             </div>
           </div>
-          {mealSections.length === 0 ? (
+          {/* Category navigator — a swipeable bar that filters the grid by
+              category (All · each category · No Category). Empty slots show a
+              "+" that opens the category manager. */}
+          {categories.length > 0 && (
+            <div className="mb-4 w-fit max-w-full">
+              <ScrollTabs
+                tabs={categoryTabs}
+                active={activeCategoryTab}
+                onChange={setMealsCategoryTab}
+                onAdd={() => setCategoryManagerOpen(true)}
+                visible={6}
+              />
+            </div>
+          )}
+          {gridMeals.length === 0 ? (
             <Card className="text-sm text-gray-500">
               {mealsSearch.trim() !== ''
                 ? `No ${mealsTab} meals match “${mealsSearch.trim()}”.`
                 : mealsFilterMembers.length > 0
                   ? `No ${mealsTab} meals assigned to the selected member${mealsFilterMembers.length > 1 ? 's' : ''}.`
-                  : `No ${mealsTab} meals yet.`}
+                  : activeCategoryTab === NO_CATEGORY
+                    ? `No uncategorized ${mealsTab} meals.`
+                    : activeCategoryTab !== 'all'
+                      ? `No ${mealsTab} meals in this category yet.`
+                      : `No ${mealsTab} meals yet.`}
             </Card>
           ) : (
-            <div className="space-y-6">
-              {mealSections.map(({ key, category, items }) => (
-                <section key={key}>
-                  {/* Category header — color dot, name, count, and (for real
-                      categories) a delete button that opens the transfer modal. */}
-                  <div className="mb-3 flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: category ? category.color : '#8B949E' }}
-                    />
-                    <h3 className="text-base font-bold" style={{ color: category ? category.color : '#8B949E' }}>
-                      {category ? category.name : 'No Category'}
-                    </h3>
-                    <span className="font-mono text-xs text-gray-500">{items.length}</span>
-                    {category && (
-                      <button
-                        type="button"
-                        onClick={() => setCategoryToDelete(category.id)}
-                        aria-label={`Delete category ${category.name}`}
-                        className="ml-1 rounded-lg p-1.5 text-gray-500 active:scale-90 active:text-loss"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                  {items.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-xs text-gray-600">
-                      No {mealsTab} meals in this category yet.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {items.map((m) => (
-                        <MealCard
-                          key={m.id}
-                          meal={m}
-                          assigned={membersForMeal[m.id] || []}
-                          onEdit={() => editMeal(m)}
-                          onDelete={() => deleteMeal(m.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </section>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {gridMeals.map((m) => (
+                <MealCard
+                  key={m.id}
+                  meal={m}
+                  assigned={membersForMeal[m.id] || []}
+                  onEdit={() => editMeal(m)}
+                  onDelete={() => deleteMeal(m.id)}
+                />
               ))}
             </div>
           )}
@@ -972,6 +963,7 @@ export default function Meals() {
         onSave={saveSlot}
         meals={meals}
         members={members}
+        categories={categories}
         onCreateMeal={createMealForSlot}
       />
 
@@ -1203,12 +1195,14 @@ export default function Meals() {
         onClose={() => setMemberMealsFor(null)}
       />
 
-      {/* Create a new meal category */}
-      <NewCategoryModal
-        open={newCategoryOpen}
-        existing={categories}
+      {/* Manage categories — recolor, delete, or add new ones */}
+      <CategoryManagerModal
+        open={categoryManagerOpen}
+        categories={categories}
         onCreate={(name) => createCategory(name)}
-        onClose={() => setNewCategoryOpen(false)}
+        onSetColor={setCategoryColor}
+        onDelete={(id) => setCategoryToDelete(id)}
+        onClose={() => setCategoryManagerOpen(false)}
       />
 
       {/* Delete a category — move its meals to No Category or another category */}
@@ -1581,19 +1575,22 @@ function MemberRow({ providers, guests, memberById }) {
   )
 }
 
-function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateMeal }) {
+function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categories, onCreateMeal }) {
   const [tab, setTab] = useState('recipe') // 'recipe' | 'takeout'
   const [search, setSearch] = useState('') // search the meal choices by name
-  // Filter the meal list by household member (who makes / orders it).
+  // Filter the meal list by household member (who makes / orders it) and/or category.
   const [filterMembers, setFilterMembers] = useState([])
+  const [filterCats, setFilterCats] = useState([]) // category ids (or NO_CATEGORY)
   const [filterShown, setFilterShown] = useState(false)
   const toggleFilterMember = (id) =>
     setFilterMembers((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const toggleFilterCat = (id) =>
+    setFilterCats((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
   if (!draft) return null
   const q = search.trim().toLowerCase()
   let allTabMeals = meals.filter((m) => mealType(m) === tab)
   if (q) allTabMeals = allTabMeals.filter((m) => m.name.toLowerCase().includes(q))
-  // Allowed meal ids when filtering: union of the selected members' assigned meals.
+  // Allowed meal ids when filtering by member: union of the selected members' assigned meals.
   const allowed =
     filterMembers.length > 0
       ? new Set(
@@ -1602,7 +1599,14 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateM
             .flatMap((mem) => mem.meals || []),
         )
       : null
-  const tabMeals = allowed ? allTabMeals.filter((m) => allowed.has(m.id)) : allTabMeals
+  let tabMeals = allowed ? allTabMeals.filter((m) => allowed.has(m.id)) : allTabMeals
+  if (filterCats.length > 0) {
+    tabMeals = tabMeals.filter((m) => {
+      const key = m.categoryId && categories.some((c) => c.id === m.categoryId) ? m.categoryId : NO_CATEGORY
+      return filterCats.includes(key)
+    })
+  }
+  const filterCount = filterMembers.length + filterCats.length
   const toggleIn = (key, id) =>
     setDraft((d) => ({
       ...d,
@@ -1649,35 +1653,65 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateM
           <div className="mb-2">
             <SearchField value={search} onChange={setSearch} placeholder="Search meals…" full />
           </div>
-          {/* Filter the meal choices by household member. */}
-          {members.length > 0 && (
+          {/* Filter the meal choices by household member and/or category. */}
+          {(members.length > 0 || categories.length > 0) && (
             <div className="mb-2">
               <button
                 type="button"
                 onClick={() => setFilterShown((s) => !s)}
                 className={[
                   'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95',
-                  filterMembers.length > 0 ? 'bg-accent/15 text-accent' : 'bg-white/5 text-gray-300',
+                  filterCount > 0 ? 'bg-accent/15 text-accent' : 'bg-white/5 text-gray-300',
                 ].join(' ')}
               >
                 <FilterIcon className="h-4 w-4" />
-                <span>Filter by member</span>
-                {filterMembers.length > 0 && (
+                <span>Filter</span>
+                {filterCount > 0 && (
                   <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-bg">
-                    {filterMembers.length}
+                    {filterCount}
                   </span>
                 )}
               </button>
               {filterShown && (
-                <div className="mt-2 rounded-xl border border-border bg-bg/40 p-3">
-                  <MemberPicker members={members} selected={filterMembers} onToggle={toggleFilterMember} />
-                  {filterMembers.length > 0 && (
+                <div className="mt-2 space-y-3 rounded-xl border border-border bg-bg/40 p-3">
+                  {members.length > 0 && (
+                    <div>
+                      <label className="mb-2 block text-xs text-gray-500">Member</label>
+                      <MemberPicker members={members} selected={filterMembers} onToggle={toggleFilterMember} />
+                    </div>
+                  )}
+                  {categories.length > 0 && (
+                    <div>
+                      <label className="mb-2 block text-xs text-gray-500">Category</label>
+                      <div className="flex flex-wrap gap-2">
+                        <CategoryChip
+                          label="No Category"
+                          color="#8B949E"
+                          on={filterCats.includes(NO_CATEGORY)}
+                          onClick={() => toggleFilterCat(NO_CATEGORY)}
+                        />
+                        {categories.map((c) => (
+                          <CategoryChip
+                            key={c.id}
+                            label={c.name}
+                            color={c.color}
+                            on={filterCats.includes(c.id)}
+                            onClick={() => toggleFilterCat(c.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {filterCount > 0 && (
                     <button
                       type="button"
-                      onClick={() => setFilterMembers([])}
-                      className="mt-3 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-300 active:scale-95"
+                      onClick={() => {
+                        setFilterMembers([])
+                        setFilterCats([])
+                      }}
+                      className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-300 active:scale-95"
                     >
-                      Clear
+                      Clear filters
                     </button>
                   )}
                 </div>
@@ -1883,49 +1917,99 @@ function MealCard({ meal, assigned, onEdit, onDelete }) {
   )
 }
 
-// Create a new meal category (name only — color is auto-assigned).
-function NewCategoryModal({ open, existing, onCreate, onClose }) {
+// Manage meal categories: recolor, delete (with meal transfer), or add new ones.
+function CategoryManagerModal({ open, categories, onCreate, onSetColor, onDelete, onClose }) {
   const [name, setName] = useState('')
   const trimmed = name.trim()
-  const dup = existing.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())
+  const dup = categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())
   const close = () => {
     setName('')
     onClose()
   }
-  const submit = () => {
+  const add = () => {
     if (!trimmed || dup) return
     onCreate(trimmed)
-    close()
+    setName('')
   }
   return (
     <Modal
       open={open}
       onClose={close}
-      title="New Category"
+      title="Edit Categories"
       size="narrow"
-      footer={
-        <>
-          <Button variant="ghost" onClick={close}>
-            Cancel
-          </Button>
-          <Button onClick={submit}>Create</Button>
-        </>
-      }
+      footer={<Button onClick={close}>Done</Button>}
     >
-      <label className="mb-2 block text-xs text-gray-500">Category name</label>
-      <input
-        autoFocus
-        className={fieldClass}
-        placeholder="e.g. Breakfast, Quick Dinners, Desserts"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') submit()
-        }}
-      />
-      {dup && trimmed !== '' && (
-        <p className="mt-2 text-xs text-loss">A category named “{trimmed}” already exists.</p>
-      )}
+      <div className="space-y-4">
+        {categories.length === 0 ? (
+          <p className="text-sm text-gray-500">No categories yet — add one below.</p>
+        ) : (
+          <div className="space-y-3">
+            {categories.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-xl border p-3"
+                style={{ borderColor: `${c.color}66` }}
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: c.color }} />
+                  <span className="flex-1 truncate font-semibold" style={{ color: c.color }}>
+                    {c.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(c.id)}
+                    aria-label={`Delete ${c.name}`}
+                    className="rounded-lg bg-loss/15 p-2 text-loss active:scale-95"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
+                </div>
+                {/* Color palette — tap a swatch to recolor the category. */}
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORY_COLORS.map((col) => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => onSetColor(c.id, col)}
+                      aria-label={`Set ${c.name} color`}
+                      className="h-8 w-8 rounded-full active:scale-90"
+                      style={{
+                        backgroundColor: col,
+                        outline: c.color === col ? '3px solid white' : 'none',
+                        outlineOffset: 2,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add a new category. */}
+        <div className="border-t border-border pt-4">
+          <label className="mb-2 block text-xs text-gray-500">Add category</label>
+          <div className="flex items-center gap-2">
+            <input
+              className={`${fieldClass} min-w-0 flex-1`}
+              placeholder="e.g. Breakfast, Quick Dinners, Desserts"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') add()
+              }}
+            />
+            <Button onClick={add} className="flex-shrink-0 px-4 py-3">
+              <span className="flex items-center gap-2">
+                <PlusIcon className="h-4 w-4" /> Add
+              </span>
+            </Button>
+          </div>
+          {dup && trimmed !== '' && (
+            <p className="mt-2 text-xs text-loss">A category named “{trimmed}” already exists.</p>
+          )}
+        </div>
+      </div>
     </Modal>
   )
 }
