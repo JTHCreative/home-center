@@ -871,15 +871,6 @@ export default function Meals() {
                   />
                 )}
               </div>
-              {/* Manage categories — recolor, delete, or add new ones. */}
-              <button
-                type="button"
-                onClick={() => setCategoryManagerOpen(true)}
-                className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
-              >
-                <TagIcon className="h-5 w-5" />
-                <span>Edit Categories</span>
-              </button>
               <Button
                 className="px-4 py-2"
                 onClick={() =>
@@ -896,14 +887,27 @@ export default function Meals() {
               category (All · each category · No Category). Empty slots show a
               "+" that opens the category manager. */}
           {categories.length > 0 && (
-            <div className="mb-4 w-fit max-w-full">
-              <ScrollTabs
-                tabs={categoryTabs}
-                active={activeCategoryTab}
-                onChange={setMealsCategoryTab}
-                onAdd={() => setCategoryManagerOpen(true)}
-                visible={6}
-              />
+            <div className="mb-4 flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <ScrollTabs
+                  tabs={categoryTabs}
+                  active={activeCategoryTab}
+                  onChange={setMealsCategoryTab}
+                  onAdd={() => setCategoryManagerOpen(true)}
+                  visible={6}
+                  fill
+                />
+              </div>
+              {/* Manage categories — recolor, delete, or add new ones. */}
+              <button
+                type="button"
+                onClick={() => setCategoryManagerOpen(true)}
+                aria-label="Edit categories"
+                title="Edit categories"
+                className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-gray-300 active:scale-95"
+              >
+                <TagIcon className="h-5 w-5" />
+              </button>
             </div>
           )}
           {gridMeals.length === 0 ? (
