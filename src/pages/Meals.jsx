@@ -972,6 +972,7 @@ export default function Meals() {
         onSave={saveSlot}
         meals={meals}
         members={members}
+        categories={categories}
         onCreateMeal={createMealForSlot}
       />
 
@@ -1581,19 +1582,22 @@ function MemberRow({ providers, guests, memberById }) {
   )
 }
 
-function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateMeal }) {
+function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categories, onCreateMeal }) {
   const [tab, setTab] = useState('recipe') // 'recipe' | 'takeout'
   const [search, setSearch] = useState('') // search the meal choices by name
-  // Filter the meal list by household member (who makes / orders it).
+  // Filter the meal list by household member (who makes / orders it) and/or category.
   const [filterMembers, setFilterMembers] = useState([])
+  const [filterCats, setFilterCats] = useState([]) // category ids (or NO_CATEGORY)
   const [filterShown, setFilterShown] = useState(false)
   const toggleFilterMember = (id) =>
     setFilterMembers((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const toggleFilterCat = (id) =>
+    setFilterCats((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
   if (!draft) return null
   const q = search.trim().toLowerCase()
   let allTabMeals = meals.filter((m) => mealType(m) === tab)
   if (q) allTabMeals = allTabMeals.filter((m) => m.name.toLowerCase().includes(q))
-  // Allowed meal ids when filtering: union of the selected members' assigned meals.
+  // Allowed meal ids when filtering by member: union of the selected members' assigned meals.
   const allowed =
     filterMembers.length > 0
       ? new Set(
@@ -1602,7 +1606,14 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateM
             .flatMap((mem) => mem.meals || []),
         )
       : null
-  const tabMeals = allowed ? allTabMeals.filter((m) => allowed.has(m.id)) : allTabMeals
+  let tabMeals = allowed ? allTabMeals.filter((m) => allowed.has(m.id)) : allTabMeals
+  if (filterCats.length > 0) {
+    tabMeals = tabMeals.filter((m) => {
+      const key = m.categoryId && categories.some((c) => c.id === m.categoryId) ? m.categoryId : NO_CATEGORY
+      return filterCats.includes(key)
+    })
+  }
+  const filterCount = filterMembers.length + filterCats.length
   const toggleIn = (key, id) =>
     setDraft((d) => ({
       ...d,
@@ -1649,35 +1660,65 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, onCreateM
           <div className="mb-2">
             <SearchField value={search} onChange={setSearch} placeholder="Search meals…" full />
           </div>
-          {/* Filter the meal choices by household member. */}
-          {members.length > 0 && (
+          {/* Filter the meal choices by household member and/or category. */}
+          {(members.length > 0 || categories.length > 0) && (
             <div className="mb-2">
               <button
                 type="button"
                 onClick={() => setFilterShown((s) => !s)}
                 className={[
                   'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold active:scale-95',
-                  filterMembers.length > 0 ? 'bg-accent/15 text-accent' : 'bg-white/5 text-gray-300',
+                  filterCount > 0 ? 'bg-accent/15 text-accent' : 'bg-white/5 text-gray-300',
                 ].join(' ')}
               >
                 <FilterIcon className="h-4 w-4" />
-                <span>Filter by member</span>
-                {filterMembers.length > 0 && (
+                <span>Filter</span>
+                {filterCount > 0 && (
                   <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-bg">
-                    {filterMembers.length}
+                    {filterCount}
                   </span>
                 )}
               </button>
               {filterShown && (
-                <div className="mt-2 rounded-xl border border-border bg-bg/40 p-3">
-                  <MemberPicker members={members} selected={filterMembers} onToggle={toggleFilterMember} />
-                  {filterMembers.length > 0 && (
+                <div className="mt-2 space-y-3 rounded-xl border border-border bg-bg/40 p-3">
+                  {members.length > 0 && (
+                    <div>
+                      <label className="mb-2 block text-xs text-gray-500">Member</label>
+                      <MemberPicker members={members} selected={filterMembers} onToggle={toggleFilterMember} />
+                    </div>
+                  )}
+                  {categories.length > 0 && (
+                    <div>
+                      <label className="mb-2 block text-xs text-gray-500">Category</label>
+                      <div className="flex flex-wrap gap-2">
+                        <CategoryChip
+                          label="No Category"
+                          color="#8B949E"
+                          on={filterCats.includes(NO_CATEGORY)}
+                          onClick={() => toggleFilterCat(NO_CATEGORY)}
+                        />
+                        {categories.map((c) => (
+                          <CategoryChip
+                            key={c.id}
+                            label={c.name}
+                            color={c.color}
+                            on={filterCats.includes(c.id)}
+                            onClick={() => toggleFilterCat(c.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {filterCount > 0 && (
                     <button
                       type="button"
-                      onClick={() => setFilterMembers([])}
-                      className="mt-3 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-300 active:scale-95"
+                      onClick={() => {
+                        setFilterMembers([])
+                        setFilterCats([])
+                      }}
+                      className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-300 active:scale-95"
                     >
-                      Clear
+                      Clear filters
                     </button>
                   )}
                 </div>
