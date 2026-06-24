@@ -2067,17 +2067,24 @@ export default function Dashboard() {
     )
   }
 
-  const grid = (
+  const grid = editing ? (
+    // While customizing, a real grid keeps drag-and-drop reordering predictable.
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-      {visible.map((m) =>
-        editing ? (
-          <SortableModule key={m.id} id={m.id}>
-            {(handle) => renderCard(m, handle)}
-          </SortableModule>
-        ) : (
-          <div key={m.id}>{renderCard(m, null)}</div>
-        ),
-      )}
+      {visible.map((m) => (
+        <SortableModule key={m.id} id={m.id}>
+          {(handle) => renderCard(m, handle)}
+        </SortableModule>
+      ))}
+    </div>
+  ) : (
+    // Normal view: a balanced two-column masonry so modules of different
+    // heights pack tightly with no zig-zag gaps between them.
+    <div className="gap-6 lg:columns-2">
+      {visible.map((m) => (
+        <div key={m.id} className="mb-6 break-inside-avoid">
+          {renderCard(m, null)}
+        </div>
+      ))}
     </div>
   )
 
