@@ -28,15 +28,18 @@ export const initials = (name) =>
     .map((w) => w[0]?.toUpperCase() || '')
     .join('')
 
-// Small circular badge showing a member's initials in their color.
+// Small circular badge showing a member's initials in their color. `size` is a
+// number (px) or any CSS length string (e.g. a clamp()/container-query value),
+// in which case the font size is derived with calc().
 export function MemberBadge({ member, size = 18, ring = false }) {
+  const fontSize = typeof size === 'number' ? size * 0.42 : `calc(${size} * 0.42)`
   return (
     <span
       className="flex flex-shrink-0 items-center justify-center rounded-full font-mono font-bold leading-none"
       style={{
         width: size,
         height: size,
-        fontSize: size * 0.42,
+        fontSize,
         backgroundColor: ring ? 'transparent' : member.color,
         color: ring ? member.color : '#0D1117',
         border: ring ? `1.5px solid ${member.color}` : 'none',
