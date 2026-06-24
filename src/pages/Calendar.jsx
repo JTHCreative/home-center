@@ -10,6 +10,7 @@ import { useLocalState } from '../lib/storage.js'
 import { useDragScroll } from '../lib/useDragScroll.js'
 import { SEED_MEMBERS } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
+import { parseLocalDate } from '../lib/dates.js'
 import {
   BellIcon,
   BookIcon,
@@ -188,8 +189,8 @@ const isMultiDay = (e) => (e.endDate || e.startDate) !== e.startDate
 
 // Human-readable range, e.g. "Mon, Jun 16 · 9:00 – 10:00" or a multi-day span.
 function rangeText(e) {
-  const sd = new Date(`${e.startDate}T00:00`)
-  const ed = new Date(`${(e.endDate || e.startDate)}T00:00`)
+  const sd = parseLocalDate(e.startDate)
+  const ed = parseLocalDate(e.endDate || e.startDate)
   const dayFmt = { weekday: 'short', month: 'short', day: 'numeric' }
   if (e.allDay) {
     return isMultiDay(e)

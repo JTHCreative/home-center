@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from './Icons.jsx'
 import { useDragScroll } from '../lib/useDragScroll.js'
+import { parseLocalDate } from '../lib/dates.js'
 
 // Touch-friendly calendar date picker. Value/onChange use 'YYYY-MM-DD' strings.
 // Weeks start Sunday, to match the Calendar and Meals pages. The month and year
@@ -64,7 +65,7 @@ export default function DatePicker({ value, onChange, onClear, min }) {
 
   // The month being shown; starts on the selected date's month, else today's.
   const [cursor, setCursor] = useState(() => {
-    const base = value ? new Date(`${value}T00:00`) : today
+    const base = value ? parseLocalDate(value) : today
     const d = Number.isNaN(base.getTime()) ? today : base
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
