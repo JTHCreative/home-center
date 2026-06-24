@@ -689,14 +689,18 @@ export default function Meals() {
                   return (
                     <div
                       key={day}
-                      className="min-h-0 border-b border-r border-border p-1.5"
+                      // `container-type: inline-size` lets the cell's contents
+                      // size themselves in cqi units (1cqi = 1% of cell width),
+                      // so text/icons scale with the column and never clip on
+                      // narrower screens like an iPad.
+                      className="min-h-0 border-b border-r border-border p-1.5 [container-type:inline-size]"
                       style={{ backgroundColor: `${theme.color}0D` }}
                     >
                       <button
                         type="button"
                         onClick={() => openSlot(day, slot)}
                         className={[
-                          'flex h-full min-h-[88px] w-full flex-col items-center gap-1.5 overflow-hidden rounded-lg px-2 py-2 text-center text-base transition-opacity active:scale-[0.98]',
+                          'flex h-full min-h-[88px] w-full flex-col items-center gap-1.5 overflow-hidden rounded-lg px-2 py-2 text-center transition-opacity active:scale-[0.98]',
                           // Filled cells anchor to the top so the meal name is never
                           // pushed out of view by the member badges; empty cells center the +.
                           m ? 'justify-start font-semibold' : 'justify-center bg-white/5 text-gray-600',
@@ -716,8 +720,16 @@ export default function Meals() {
                       >
                         {m ? (
                           <>
-                            <span className="line-clamp-2 leading-tight">{m.name}</span>
-                            <span className="text-[11px] uppercase opacity-70">
+                            <span
+                              className="line-clamp-2 leading-tight"
+                              style={{ fontSize: 'clamp(0.625rem, 12cqi, 1rem)' }}
+                            >
+                              {m.name}
+                            </span>
+                            <span
+                              className="uppercase opacity-70"
+                              style={{ fontSize: 'clamp(0.5rem, 8cqi, 0.6875rem)' }}
+                            >
                               {takeout ? 'Takeout' : 'Homecooked'}
                             </span>
                             {(providers.length > 0 || guests.length > 0) && (
@@ -725,11 +737,12 @@ export default function Meals() {
                                 providers={providers}
                                 guests={guests}
                                 memberById={memberById}
+                                size="clamp(14px, 20cqi, 22px)"
                               />
                             )}
                           </>
                         ) : (
-                          <PlusIcon className="h-7 w-7" />
+                          <PlusIcon style={{ width: 'clamp(1rem, 24cqi, 1.75rem)', height: 'clamp(1rem, 24cqi, 1.75rem)' }} />
                         )}
                       </button>
                     </div>
@@ -1587,11 +1600,11 @@ function ScheduleFilter({ members, filterProviders, filterType, onToggleProvider
 }
 
 // Provider (filled) and guest (ringed) badges shown on a planner cell.
-function MemberRow({ providers, guests, memberById }) {
+function MemberRow({ providers, guests, memberById, size = 22 }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-1">
-      {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={22} />)}
-      {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={22} ring />)}
+      {providers.map((id) => memberById[id] && <MemberBadge key={`p${id}`} member={memberById[id]} size={size} />)}
+      {guests.map((id) => memberById[id] && <MemberBadge key={`g${id}`} member={memberById[id]} size={size} ring />)}
     </div>
   )
 }

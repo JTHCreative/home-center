@@ -25,8 +25,8 @@ export async function geocode(query) {
 /** Current weather + a 5-day daily forecast for a coordinate. `units` is 'fahrenheit' | 'celsius'. */
 export async function fetchWeather(latitude, longitude, units = 'fahrenheit') {
   const params = new URLSearchParams({
-    latitude,
-    longitude,
+    latitude: String(latitude),
+    longitude: String(longitude),
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day',
     daily: 'temperature_2m_max,temperature_2m_min,weather_code',
     temperature_unit: units,

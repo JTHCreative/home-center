@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { CalendarIcon } from './Icons.jsx'
 import { fieldClass } from './Modal.jsx'
 import DatePicker from './DatePicker.jsx'
+import { parseLocalDate } from '../lib/dates.js'
 
 // Themed replacement for <input type="date">: a field-styled tap target with a
 // calendar icon that opens the themed DatePicker in a popover (month/year
 // dropdowns included). Value/onChange use 'YYYY-MM-DD', like the native input.
 const formatDate = (value) => {
   if (!value) return 'Select date'
-  const d = new Date(`${value}T00:00`)
+  const d = parseLocalDate(value)
   return Number.isNaN(d.getTime())
     ? value
     : d.toLocaleDateString([], { year: 'numeric', month: '2-digit', day: '2-digit' })

@@ -24,6 +24,7 @@ import { useLocalState } from '../lib/storage.js'
 import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
 import { directionsUrl, embedMapUrl, fetchTravelTime, hasGoogleMapsKey } from '../lib/googleMaps.js'
 import { describeWeather, fetchWeather, geocode } from '../lib/weather.js'
+import { parseLocalDate } from '../lib/dates.js'
 import {
   getDevices as spotifyGetDevices,
   hasSpotifyClientId,
@@ -767,7 +768,7 @@ function CalendarModule() {
   }
   const fmtTime = (t) => {
     if (!t) return ''
-    const d = new Date(`${today}T${t}`)
+    const d = parseLocalDate(`${today}T${t}`)
     return Number.isNaN(d.getTime()) ? t : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   }
   // Household members assigned to an event (skips any that no longer exist).
@@ -923,7 +924,7 @@ function TrafficModule({ settings }) {
 // their own shared state key so the list syncs across devices like everything else.
 const fmtShopDate = (date) => {
   if (!date) return ''
-  const d = new Date(`${date}T00:00`)
+  const d = parseLocalDate(date)
   return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
@@ -960,7 +961,7 @@ function ShoppingModule() {
     if (done) return 'text-gray-500'
     if (date < today) return 'text-loss'
     if (date === today) return 'text-loss'
-    const diff = (new Date(`${date}T00:00`) - new Date(`${today}T00:00`)) / 86_400_000
+    const diff = (parseLocalDate(date) - parseLocalDate(today)) / 86_400_000
     return diff <= 3 ? 'text-[#BD9541]' : 'text-gray-400'
   }
 
@@ -1208,7 +1209,7 @@ function WeatherModule({ settings }) {
                 <div className="text-[11px] font-medium text-gray-400">
                   {i === 0
                     ? 'Today'
-                    : new Date(`${day.date}T00:00`).toLocaleDateString([], { weekday: 'short' })}
+                    : parseLocalDate(day.date).toLocaleDateString([], { weekday: 'short' })}
                 </div>
                 <DayIcon className="h-5 w-5" style={{ color: WX_COLOR[kind] || '#8B949E' }} />
                 <div className="text-xs leading-tight">
@@ -2066,17 +2067,24 @@ export default function Dashboard() {
     )
   }
 
-  const grid = (
+  const grid = editing ? (
+    // While customizing, a real grid keeps drag-and-drop reordering predictable.
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-      {visible.map((m) =>
-        editing ? (
-          <SortableModule key={m.id} id={m.id}>
-            {(handle) => renderCard(m, handle)}
-          </SortableModule>
-        ) : (
-          <div key={m.id}>{renderCard(m, null)}</div>
-        ),
-      )}
+      {visible.map((m) => (
+        <SortableModule key={m.id} id={m.id}>
+          {(handle) => renderCard(m, handle)}
+        </SortableModule>
+      ))}
+    </div>
+  ) : (
+    // Normal view: a balanced two-column masonry so modules of different
+    // heights pack tightly with no zig-zag gaps between them.
+    <div className="gap-6 lg:columns-2">
+      {visible.map((m) => (
+        <div key={m.id} className="mb-6 break-inside-avoid">
+          {renderCard(m, null)}
+        </div>
+      ))}
     </div>
   )
 
