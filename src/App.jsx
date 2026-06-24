@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Sidebar, { MobileTopBar } from './components/Sidebar.jsx'
-import VirtualKeyboard from './components/VirtualKeyboard.jsx'
+// In-app on-screen keyboard — disabled for now while running on iPad (the
+// device provides its own native keyboard). Re-mount <VirtualKeyboard /> below
+// to bring it back for a kiosk display with no native keyboard.
+// import VirtualKeyboard from './components/VirtualKeyboard.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import SmartHome from './pages/SmartHome.jsx'
@@ -51,9 +54,10 @@ export default function App() {
           </ErrorBoundary>
         </main>
       </div>
+      {/* In-app on-screen keyboard disabled for now (iPad uses its native one):
       <ErrorBoundary fallback={null}>
         <VirtualKeyboard />
-      </ErrorBoundary>
+      </ErrorBoundary> */}
       {/* App-wide alarm engine: rings + popup over everything, on any page. */}
       <ErrorBoundary fallback={null}>
         <AlarmManager />
