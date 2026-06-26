@@ -2,15 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
   PointerSensor,
-  closestCenter,
+  closestCorners,
+  useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
 import {
   SortableContext,
   arrayMove,
-  rectSortingStrategy,
   useSortable,
+  verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
@@ -125,7 +126,9 @@ const newInstance = (type) => ({
 
 const defaultDashboard = () => ({ modules: SINGLETONS.map((t) => ({ ...newInstance(t), id: t })) })
 
-// Sanitize a module instance into the current shape.
+// Sanitize a module instance into the current shape. `column` (0 = left,
+// 1 = right) places the module in one of the two independent dashboard columns;
+// it's normalized later for any module that lacks a valid value.
 function cleanModule(m) {
   if (!m || !MODULE_TYPES[m.type]) return null
   return {
@@ -133,7 +136,17 @@ function cleanModule(m) {
     type: m.type,
     enabled: m.enabled !== false,
     settings: { ...defaultSettings(m.type), ...(m.settings || {}) },
+    column: m.column === 0 || m.column === 1 ? m.column : undefined,
   }
+}
+
+// Assign a column to any module missing one. Legacy configs (no columns) get an
+// alternating split, reproducing the prior left/right row-major arrangement.
+function normalizeColumns(modules) {
+  return modules.map((m, i) => ({
+    ...m,
+    column: m.column === 0 || m.column === 1 ? m.column : i % 2,
+  }))
 }
 
 // Guarantee every singleton type is present at least once (so it can always be
@@ -151,7 +164,7 @@ function migrateDashboard(stored) {
   if (!stored || typeof stored !== 'object') return defaultDashboard()
   if (Array.isArray(stored.modules)) {
     const modules = stored.modules.map(cleanModule).filter(Boolean)
-    return { modules: ensureSingletons(modules) }
+    return { modules: normalizeColumns(ensureSingletons(modules)) }
   }
   // Original shape: a fixed list of singleton modules keyed by type.
   const order = Array.isArray(stored.order) ? stored.order.filter((t) => SINGLETONS.includes(t)) : []
@@ -162,7 +175,7 @@ function migrateDashboard(stored) {
     enabled: stored.enabled?.[t] !== false,
     settings: { ...defaultSettings(t), ...(stored.settings?.[t] || {}) },
   }))
-  return { modules }
+  return { modules: normalizeColumns(modules) }
 }
 
 const moduleTitle = (m) => {
@@ -1946,6 +1959,42 @@ function SortableModule({ id, className, children }) {
   )
 }
 
+// A whole dashboard column as a drop target, so a module can be dropped into an
+// empty column or below the last card.
+function DroppableColumn({ id, children }) {
+  const { setNodeRef } = useDroppable({ id })
+  return (
+    <div ref={setNodeRef} className="min-h-[120px] min-w-0 flex-1 space-y-6">
+      {children}
+    </div>
+  )
+}
+
+// --- Two-column model helpers ------------------------------------------------
+// Each module carries a `column` (0 = left, 1 = right); within a column its
+// order is its order in the flat modules array. The columns are independent, so
+// dragging slots a module into an exact position in whichever column it lands.
+const moduleColumn = (m) => (m.column === 1 ? 1 : 0)
+const columnIdLists = (mods) => [
+  mods.filter((m) => moduleColumn(m) === 0).map((m) => m.id),
+  mods.filter((m) => moduleColumn(m) === 1).map((m) => m.id),
+]
+// Rebuild the flat array (left column first, then right) from two id lists.
+const rebuildModules = (mods, leftIds, rightIds) => {
+  const byId = new Map(mods.map((m) => [m.id, m]))
+  return [
+    ...leftIds.map((id) => ({ ...byId.get(id), column: 0 })),
+    ...rightIds.map((id) => ({ ...byId.get(id), column: 1 })),
+  ]
+}
+// Column index for a drag id, which may be a module id or a column container id.
+const columnOfDragId = (mods, dragId) => {
+  if (dragId === 'col-0') return 0
+  if (dragId === 'col-1') return 1
+  const m = mods.find((x) => x.id === dragId)
+  return m ? moduleColumn(m) : null
+}
+
 // Module types that can be added multiple times from the Add Module screen.
 const ADDABLE = [
   { type: 'traffic', Icon: CarIcon, label: 'Traffic route', desc: 'Live drive time with current traffic' },
@@ -2021,7 +2070,10 @@ export default function Dashboard() {
 
   const addInstance = (type) => {
     const inst = newInstance(type)
-    setModules((ms) => [...ms, inst])
+    setModules((ms) => {
+      const [left, right] = columnIdLists(ms)
+      return [...ms, { ...inst, column: left.length <= right.length ? 0 : 1 }]
+    })
     setAdding(false)
     if (MODULE_TYPES[type].configurable) setConfigFor(inst.id) // jump straight into setup
   }
@@ -2030,12 +2082,39 @@ export default function Dashboard() {
     setAdding(false)
   }
 
-  const onDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return
+  // Live-move a module into the other column as it's dragged over it, so the two
+  // columns behave as independent lists (within-column reordering is handled by
+  // the sortable strategy and committed in onDragEnd).
+  const onDragOver = ({ active, over }) => {
+    if (!over) return
     setModules((ms) => {
-      const from = ms.findIndex((m) => m.id === active.id)
-      const to = ms.findIndex((m) => m.id === over.id)
-      return from === -1 || to === -1 ? ms : arrayMove(ms, from, to)
+      const activeCol = columnOfDragId(ms, active.id)
+      const overCol = columnOfDragId(ms, over.id)
+      if (activeCol == null || overCol == null || activeCol === overCol) return ms
+      const cols = columnIdLists(ms)
+      cols[activeCol] = cols[activeCol].filter((id) => id !== active.id)
+      const overIsContainer = over.id === 'col-0' || over.id === 'col-1'
+      const overIdx = overIsContainer ? cols[overCol].length : cols[overCol].indexOf(over.id)
+      const at = overIdx < 0 ? cols[overCol].length : overIdx
+      cols[overCol] = [...cols[overCol].slice(0, at), active.id, ...cols[overCol].slice(at)]
+      return rebuildModules(ms, cols[0], cols[1])
+    })
+  }
+
+  const onDragEnd = ({ active, over }) => {
+    if (!over) return
+    setModules((ms) => {
+      const activeCol = columnOfDragId(ms, active.id)
+      const overCol = columnOfDragId(ms, over.id)
+      if (activeCol == null || overCol == null || activeCol !== overCol) return ms
+      const cols = columnIdLists(ms)
+      const arr = cols[activeCol]
+      const from = arr.indexOf(active.id)
+      const overIsContainer = over.id === 'col-0' || over.id === 'col-1'
+      const to = overIsContainer ? arr.length - 1 : arr.indexOf(over.id)
+      if (from === -1 || to === -1 || from === to) return ms
+      cols[activeCol] = arrayMove(arr, from, to)
+      return rebuildModules(ms, cols[0], cols[1])
     })
   }
 
@@ -2067,21 +2146,48 @@ export default function Dashboard() {
     )
   }
 
-  // Both the live view and Customize mode use the same balanced two-column
-  // masonry so what you arrange while customizing matches the real dashboard.
-  const grid = (
-    <div className="gap-6 lg:columns-2">
-      {visible.map((m) =>
-        editing ? (
-          <SortableModule key={m.id} id={m.id} className="mb-6 break-inside-avoid">
-            {(handle) => renderCard(m, handle)}
-          </SortableModule>
-        ) : (
-          <div key={m.id} className="mb-6 break-inside-avoid">
-            {renderCard(m, null)}
-          </div>
-        ),
-      )}
+  // Two independent columns. Each is its own ordered list, so a module slots
+  // into the exact position in whichever column it's dragged to (no waterfall
+  // from one column into the next). The live view and Customize mode share the
+  // same layout, so what you arrange is what you get.
+  const moduleById = new Map(visible.map((m) => [m.id, m]))
+  const columns = columnIdLists(visible)
+
+  const columnContent = (ids, interactive) =>
+    ids.map((id) =>
+      interactive ? (
+        <SortableModule key={id} id={id}>
+          {(handle) => renderCard(moduleById.get(id), handle)}
+        </SortableModule>
+      ) : (
+        <div key={id}>{renderCard(moduleById.get(id), null)}</div>
+      ),
+    )
+
+  const grid = editing ? (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+    >
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        {[0, 1].map((col) => (
+          <DroppableColumn key={col} id={`col-${col}`}>
+            <SortableContext items={columns[col]} strategy={verticalListSortingStrategy}>
+              {columnContent(columns[col], true)}
+            </SortableContext>
+          </DroppableColumn>
+        ))}
+      </div>
+    </DndContext>
+  ) : (
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      {[0, 1].map((col) => (
+        <div key={col} className="min-w-0 flex-1 space-y-6">
+          {columnContent(columns[col], false)}
+        </div>
+      ))}
     </div>
   )
 
@@ -2114,12 +2220,6 @@ export default function Dashboard() {
         <Card className="text-center text-gray-500">
           All modules are hidden. Tap <span className="text-accent">Customize</span> to add some.
         </Card>
-      ) : editing ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={modules.map((m) => m.id)} strategy={rectSortingStrategy}>
-            {grid}
-          </SortableContext>
-        </DndContext>
       ) : (
         grid
       )}
