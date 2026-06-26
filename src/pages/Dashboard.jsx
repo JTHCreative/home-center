@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   closestCorners,
   useDroppable,
@@ -1949,8 +1950,9 @@ function SortableModule({ id, className, children }) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : undefined,
-    opacity: isDragging ? 0.85 : 1,
+    // Hide the original while dragging — the DragOverlay renders the moving card,
+    // and this slot stays as the drop placeholder.
+    opacity: isDragging ? 0 : 1,
   }
   return (
     <div ref={setNodeRef} style={style} className={className}>
@@ -2057,6 +2059,8 @@ export default function Dashboard() {
   const [editing, setEditing] = useState(false)
   const [configFor, setConfigFor] = useState(null) // instance id
   const [adding, setAdding] = useState(false)
+  const [dragId, setDragId] = useState(null) // module being dragged (for the overlay)
+  const [dragWidth, setDragWidth] = useState(null) // its width, so the overlay matches
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -2082,6 +2086,15 @@ export default function Dashboard() {
     setAdding(false)
   }
 
+  const onDragStart = ({ active }) => {
+    setDragId(active.id)
+    setDragWidth(active.rect?.current?.initial?.width ?? null)
+  }
+  const clearDrag = () => {
+    setDragId(null)
+    setDragWidth(null)
+  }
+
   // Live-move a module into the other column as it's dragged over it, so the two
   // columns behave as independent lists (within-column reordering is handled by
   // the sortable strategy and committed in onDragEnd).
@@ -2102,6 +2115,7 @@ export default function Dashboard() {
   }
 
   const onDragEnd = ({ active, over }) => {
+    clearDrag()
     if (!over) return
     setModules((ms) => {
       const activeCol = columnOfDragId(ms, active.id)
@@ -2168,8 +2182,10 @@ export default function Dashboard() {
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
+      onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
+      onDragCancel={clearDrag}
     >
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         {[0, 1].map((col) => (
@@ -2180,6 +2196,11 @@ export default function Dashboard() {
           </DroppableColumn>
         ))}
       </div>
+      <DragOverlay>
+        {dragId ? (
+          <div style={{ width: dragWidth ?? undefined }}>{renderCard(moduleById.get(dragId), null)}</div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   ) : (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
