@@ -826,7 +826,7 @@ function CalendarModule() {
   )
 }
 
-function TrafficModule({ settings }) {
+export function TrafficModule({ settings, fullHeight = false }) {
   const { origin, destination, via } = settings
   const stops = (via || []).map((v) => v?.trim()).filter(Boolean)
   const windows = normalizeWindows(settings.windows)
@@ -861,7 +861,7 @@ function TrafficModule({ settings }) {
   const mapUrl = embedMapUrl(origin, destination, via)
 
   return (
-    <div>
+    <div className={fullHeight ? 'flex h-full flex-col' : undefined}>
       <div className="mb-3 flex items-start gap-2 text-sm text-gray-300">
         <CarIcon className="h-5 w-5 flex-shrink-0 text-accent" />
         <span className="min-w-0">
@@ -901,7 +901,12 @@ function TrafficModule({ settings }) {
       )}
 
       {mapUrl ? (
-        <div className="mt-3 overflow-hidden rounded-lg border border-white/10">
+        <div
+          className={[
+            'mt-3 overflow-hidden rounded-lg border border-white/10',
+            fullHeight ? 'min-h-0 flex-1' : '',
+          ].join(' ')}
+        >
           {/* Remount (reload) the embed whenever the Routes poll succeeds, so the
               map refreshes its traffic-aware route on the same commute-window
               cadence as the drive-time number. Maps Embed loads are free. */}
@@ -909,7 +914,7 @@ function TrafficModule({ settings }) {
             key={updatedAt ? updatedAt.getTime() : 'map'}
             title="Commute map"
             src={mapUrl}
-            className="block h-48 w-full"
+            className={fullHeight ? 'block h-full w-full' : 'block h-48 w-full'}
             style={{ border: 0 }}
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
@@ -1742,7 +1747,7 @@ function TimeField({ value, onChange }) {
   )
 }
 
-function TrafficConfig({ settings, onChange }) {
+export function TrafficConfig({ settings, onChange }) {
   const via = settings.via || []
   const setVia = (next) => onChange({ via: next })
   // Use the raw saved windows while editing (so a half-finished window doesn't
