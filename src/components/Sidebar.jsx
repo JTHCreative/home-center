@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { AlarmIcon, ChevronLeft, GearIcon, MenuIcon } from './Icons.jsx'
+import { AlarmIcon, GearIcon, MenuIcon } from './Icons.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { pageById, reconcileMenu } from '../lib/menu.js'
 
@@ -83,7 +83,7 @@ export function MobileTopBar({ onMenu }) {
   )
 }
 
-export default function Sidebar({ mobileOpen = false, onClose, collapsed = false, onCollapse }) {
+export default function Sidebar({ mobileOpen = false, onClose, collapsed = false }) {
   const now = useClock()
   const navigate = useNavigate()
   // Menu order/contents are configured on the Settings page (shared via storage).
@@ -114,20 +114,11 @@ export default function Sidebar({ mobileOpen = false, onClose, collapsed = false
       >
         {/* Clock + date, always visible at the top */}
         <div className="border-b border-border px-6 py-6">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center">
             <div className="font-mono text-3xl font-bold tracking-tight text-white">{fmtTime(now)}</div>
             <div className="flex flex-1 justify-center">
               <AlarmButton active={hasActiveAlarm} onNavigate={() => navigate('/alarms')} />
             </div>
-            {/* Collapse the sidebar (md+ only; phones use the drawer backdrop). */}
-            <button
-              type="button"
-              onClick={onCollapse}
-              aria-label="Hide sidebar"
-              className="hidden rounded-lg bg-white/5 p-1.5 text-gray-300 active:scale-95 md:inline-flex"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
           </div>
           <div className="mt-1 text-sm text-gray-400">{fmtDate(now)}</div>
         </div>

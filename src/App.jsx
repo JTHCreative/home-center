@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Sidebar, { MobileTopBar } from './components/Sidebar.jsx'
-import { MenuIcon } from './components/Icons.jsx'
+import { ChevronLeft, ChevronRight } from './components/Icons.jsx'
 import { readStored, writeStored } from './lib/storage.js'
 // In-app on-screen keyboard — disabled for now while running on iPad (the
 // device provides its own native keyboard). Re-mount <VirtualKeyboard /> below
@@ -36,35 +36,31 @@ export default function App() {
   return (
     <div className="flex h-full w-full overflow-hidden bg-bg">
       <ErrorBoundary fallback={null}>
-        <Sidebar
-          mobileOpen={navOpen}
-          onClose={() => setNavOpen(false)}
-          collapsed={collapsed}
-          onCollapse={() => setCollapsed(true)}
-        />
+        <Sidebar mobileOpen={navOpen} onClose={() => setNavOpen(false)} collapsed={collapsed} />
       </ErrorBoundary>
-      {/* Floating button to re-open the sidebar once it's collapsed (md+ only). */}
-      {collapsed && (
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          aria-label="Show sidebar"
-          className="fixed left-3 top-3 z-50 hidden rounded-xl border border-border bg-surface/90 p-2.5 text-gray-200 shadow-glow backdrop-blur active:scale-95 md:flex"
-        >
-          <MenuIcon className="h-6 w-6" />
-        </button>
-      )}
+      {/* Hide/show the sidebar via an edge tab (md+ only; phones use the drawer).
+          The tab sits on the sidebar's right edge when open, and at the screen
+          edge when collapsed — same size/shape, just a flipped chevron. */}
+      <button
+        type="button"
+        onClick={() => setCollapsed(!collapsed)}
+        aria-label={collapsed ? 'Show sidebar' : 'Hide sidebar'}
+        className={[
+          'fixed top-1/2 z-50 hidden h-16 w-6 -translate-y-1/2 items-center justify-center',
+          'rounded-r-xl border border-l-0 border-border bg-surface text-gray-300 shadow-lg',
+          'transition-[left] duration-200 active:scale-95 md:flex',
+          collapsed ? 'left-0' : 'left-64',
+        ].join(' ')}
+      >
+        {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+      </button>
       {/* Content column: a mobile top bar (phones only) above the scrolling page. */}
       <div className="flex min-w-0 flex-1 flex-col">
         <ErrorBoundary fallback={null}>
           <MobileTopBar onMenu={() => setNavOpen(true)} />
         </ErrorBoundary>
         <main
-          className={[
-            'scroll-area flex-1 p-4 pb-[calc(1rem+var(--kb,0px))] transition-[padding] duration-200 md:p-8 md:pb-[calc(2rem+var(--kb,0px))]',
-            // Clear the floating "show sidebar" button when collapsed (md+).
-            collapsed ? 'md:pl-20' : '',
-          ].join(' ')}
+          className="scroll-area flex-1 p-4 pb-[calc(1rem+var(--kb,0px))] transition-[padding] duration-200 md:p-8 md:pb-[calc(2rem+var(--kb,0px))]"
         >
           {/* A page crash shows a recovery card instead of blanking the kiosk;
               keying by path clears it when the user navigates elsewhere. */}
