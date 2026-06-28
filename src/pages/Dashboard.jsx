@@ -431,7 +431,9 @@ function MealsModule() {
   const day = dayNameNow()
 
   return (
-    <div className="space-y-2">
+    // A container so the slot label can hide itself when the module is narrow
+    // (e.g. in a two-column dashboard on an iPad), freeing space for the name.
+    <div className="space-y-2 [container-type:inline-size]">
       {SLOTS.map((slot) => {
         const theme = SLOT_THEME[slot]
         const SlotIcon = theme.Icon
@@ -449,8 +451,11 @@ function MealsModule() {
             className="flex items-center gap-3 rounded-xl px-3 py-2.5"
             style={{ backgroundColor: `${theme.color}14`, borderLeft: `4px solid ${theme.color}` }}
           >
-            <SlotIcon className="h-6 w-6 flex-shrink-0" style={{ color: theme.color }} />
-            <span className="w-20 flex-shrink-0 text-sm font-semibold" style={{ color: theme.color }}>
+            <SlotIcon className="h-6 w-6 flex-shrink-0" style={{ color: theme.color }} title={slot} />
+            <span
+              className="meal-slot-name w-20 flex-shrink-0 text-sm font-semibold"
+              style={{ color: theme.color }}
+            >
               {slot}
             </span>
             {meal ? (

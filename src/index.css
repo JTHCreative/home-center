@@ -131,4 +131,13 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* Today's Meals: when the module is narrow (e.g. a two-column dashboard on an
+     iPad), drop the Breakfast/Lunch/Dinner text label — the icon still conveys
+     the slot — so the meal name has room instead of being truncated. */
+  @container (max-width: 28rem) {
+    .meal-slot-name {
+      display: none;
+    }
+  }
 }
