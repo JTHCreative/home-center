@@ -1,5 +1,6 @@
 import {
   CalendarIcon,
+  CarIcon,
   ChartIcon,
   GoalIcon,
   GridIcon,
@@ -18,6 +19,7 @@ export const PAGE_CATALOG = [
   { id: 'calendar', to: '/calendar', label: 'Calendar', Icon: CalendarIcon },
   { id: 'meals', to: '/meals', label: 'Meals', Icon: MealIcon },
   { id: 'goals', to: '/goals', label: 'Goals', Icon: GoalIcon },
+  { id: 'traffic', to: '/traffic', label: 'Traffic', Icon: CarIcon },
 ]
 
 export const pageById = Object.fromEntries(PAGE_CATALOG.map((p) => [p.id, p]))

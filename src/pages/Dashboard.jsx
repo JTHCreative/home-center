@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   DndContext,
   DragOverlay,
@@ -49,6 +50,7 @@ import {
   CarIcon,
   CastIcon,
   CheckIcon,
+  ChevronRight,
   CloudIcon,
   CloudLightningIcon,
   CloudRainIcon,
@@ -125,7 +127,7 @@ const newInstance = (type) => ({
   settings: defaultSettings(type),
 })
 
-const defaultDashboard = () => ({ modules: SINGLETONS.map((t) => ({ ...newInstance(t), id: t })) })
+export const defaultDashboard = () => ({ modules: SINGLETONS.map((t) => ({ ...newInstance(t), id: t })) })
 
 // Sanitize a module instance into the current shape. `column` (0 = left,
 // 1 = right) places the module in one of the two independent dashboard columns;
@@ -161,7 +163,7 @@ function ensureSingletons(modules) {
 
 // Fold older/partial configs into the instance model. Handles both the new
 // `{ modules }` shape and the original `{ order, enabled, settings }` shape.
-function migrateDashboard(stored) {
+export function migrateDashboard(stored) {
   if (!stored || typeof stored !== 'object') return defaultDashboard()
   if (Array.isArray(stored.modules)) {
     const modules = stored.modules.map(cleanModule).filter(Boolean)
@@ -431,7 +433,9 @@ function MealsModule() {
   const day = dayNameNow()
 
   return (
-    <div className="space-y-2">
+    // A container so the slot label can hide itself when the module is narrow
+    // (e.g. in a two-column dashboard on an iPad), freeing space for the name.
+    <div className="space-y-2 [container-type:inline-size]">
       {SLOTS.map((slot) => {
         const theme = SLOT_THEME[slot]
         const SlotIcon = theme.Icon
@@ -449,8 +453,11 @@ function MealsModule() {
             className="flex items-center gap-3 rounded-xl px-3 py-2.5"
             style={{ backgroundColor: `${theme.color}14`, borderLeft: `4px solid ${theme.color}` }}
           >
-            <SlotIcon className="h-6 w-6 flex-shrink-0" style={{ color: theme.color }} />
-            <span className="w-20 flex-shrink-0 text-sm font-semibold" style={{ color: theme.color }}>
+            <SlotIcon className="h-6 w-6 flex-shrink-0" style={{ color: theme.color }} title={slot} />
+            <span
+              className="meal-slot-name w-20 flex-shrink-0 text-sm font-semibold"
+              style={{ color: theme.color }}
+            >
               {slot}
             </span>
             {meal ? (
@@ -821,7 +828,7 @@ function CalendarModule() {
   )
 }
 
-function TrafficModule({ settings }) {
+export function TrafficModule({ settings, fullHeight = false }) {
   const { origin, destination, via } = settings
   const stops = (via || []).map((v) => v?.trim()).filter(Boolean)
   const windows = normalizeWindows(settings.windows)
@@ -856,7 +863,7 @@ function TrafficModule({ settings }) {
   const mapUrl = embedMapUrl(origin, destination, via)
 
   return (
-    <div>
+    <div className={fullHeight ? 'flex h-full flex-col' : undefined}>
       <div className="mb-3 flex items-start gap-2 text-sm text-gray-300">
         <CarIcon className="h-5 w-5 flex-shrink-0 text-accent" />
         <span className="min-w-0">
@@ -883,6 +890,7 @@ function TrafficModule({ settings }) {
               href={directionsUrl(origin, destination, via)}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="mt-1 inline-block text-xs font-semibold text-accent underline decoration-dotted underline-offset-2"
             >
               Open in Maps
@@ -896,7 +904,12 @@ function TrafficModule({ settings }) {
       )}
 
       {mapUrl ? (
-        <div className="mt-3 overflow-hidden rounded-lg border border-white/10">
+        <div
+          className={[
+            'mt-3 overflow-hidden rounded-lg border border-white/10',
+            fullHeight ? 'min-h-0 flex-1' : '',
+          ].join(' ')}
+        >
           {/* Remount (reload) the embed whenever the Routes poll succeeds, so the
               map refreshes its traffic-aware route on the same commute-window
               cadence as the drive-time number. Maps Embed loads are free. */}
@@ -904,7 +917,7 @@ function TrafficModule({ settings }) {
             key={updatedAt ? updatedAt.getTime() : 'map'}
             title="Commute map"
             src={mapUrl}
-            className="block h-48 w-full"
+            className={fullHeight ? 'block h-full w-full' : 'block h-48 w-full'}
             style={{ border: 0 }}
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
@@ -1737,7 +1750,7 @@ function TimeField({ value, onChange }) {
   )
 }
 
-function TrafficConfig({ settings, onChange }) {
+export function TrafficConfig({ settings, onChange }) {
   const via = settings.via || []
   const setVia = (next) => onChange({ via: next })
   // Use the raw saved windows while editing (so a half-finished window doesn't
@@ -1901,10 +1914,19 @@ function ModuleCard({
   onToggle,
   onConfigure,
   onRemove,
+  onOpen,
   children,
 }) {
+  // Tappable (to open a full page) only outside customize mode.
+  const tappable = !!onOpen && !editing
   return (
-    <Card className={editing && !enabled ? 'opacity-60' : ''}>
+    <Card
+      className={[
+        editing && !enabled ? 'opacity-60' : '',
+        tappable ? 'cursor-pointer transition-colors hover:border-accent/40' : '',
+      ].join(' ')}
+      onClick={tappable ? onOpen : undefined}
+    >
       <div className="mb-4 flex items-center gap-3 border-b border-border pb-3">
         {editing && (
           <button
@@ -1918,6 +1940,7 @@ function ModuleCard({
           </button>
         )}
         <h2 className="flex-1 truncate text-lg font-bold text-white">{title}</h2>
+        {tappable && <ChevronRight className="h-5 w-5 flex-shrink-0 text-gray-500" aria-hidden="true" />}
         {editing && hasConfig && (
           <button
             type="button"
@@ -2055,6 +2078,7 @@ function AddModuleModal({ open, onClose, modules, onShow, onAdd }) {
 // =============================================================================
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [cfg, setCfg] = useLocalState('dashboard', defaultDashboard(), migrateDashboard)
   const [editing, setEditing] = useState(false)
   const [configFor, setConfigFor] = useState(null) // instance id
@@ -2143,6 +2167,10 @@ export default function Dashboard() {
     ) : (
       <p className="text-sm text-gray-500">Hidden — toggle to show this on your dashboard.</p>
     )
+    // The Traffic module opens its full page when tapped (works even if the
+    // Traffic page isn't in the menu); `m` identifies which route to show.
+    const onOpen =
+      m.type === 'traffic' && m.enabled ? () => navigate(`/traffic?m=${m.id}`) : undefined
     return (
       <ModuleCard
         title={moduleTitle(m)}
@@ -2154,6 +2182,7 @@ export default function Dashboard() {
         onToggle={(on) => setEnabled(m.id, on)}
         onConfigure={() => setConfigFor(m.id)}
         onRemove={() => removeModule(m.id)}
+        onOpen={onOpen}
       >
         {body}
       </ModuleCard>

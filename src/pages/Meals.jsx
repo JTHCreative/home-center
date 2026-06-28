@@ -1621,6 +1621,11 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categorie
   const toggleFilterCat = (id) =>
     setFilterCats((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
   if (!draft) return null
+  const categoryById = Object.fromEntries(categories.map((c) => [c.id, c]))
+  // Saved providers per meal = the household members who have it assigned (who
+  // makes / orders it), shown on each card as a preview before you pick it.
+  const membersForMeal = {}
+  for (const mem of members) for (const id of mem.meals || []) (membersForMeal[id] ||= []).push(mem)
   const q = search.trim().toLowerCase()
   let allTabMeals = meals.filter((m) => mealType(m) === tab)
   if (q) allTabMeals = allTabMeals.filter((m) => m.name.toLowerCase().includes(q))
@@ -1767,6 +1772,8 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categorie
             {tabMeals.map((m) => {
               const takeout = mealType(m) === 'takeout'
               const on = draft.mealId === m.id
+              const category = m.categoryId ? categoryById[m.categoryId] : null
+              const providers = membersForMeal[m.id] || []
               return (
                 <button
                   key={m.id}
@@ -1778,12 +1785,31 @@ function SlotModal({ draft, setDraft, onClose, onSave, meals, members, categorie
                   ].join(' ')}
                   style={on ? { backgroundColor: `${takeout ? TAKEOUT_COLOR : '#61A2E0'}22`, outline: `2px solid ${takeout ? TAKEOUT_COLOR : '#61A2E0'}` } : undefined}
                 >
-                  <div className="font-medium text-white">{m.name}</div>
-                  <div
-                    className="font-mono text-[10px] uppercase"
-                    style={{ color: takeout ? TAKEOUT_COLOR : 'rgb(var(--c-accent))' }}
-                  >
-                    {takeout ? 'Takeout' : 'Recipe'}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 truncate font-medium text-white">{m.name}</div>
+                    {providers.length > 0 && (
+                      <div className="flex flex-shrink-0 items-center gap-1">
+                        {providers.map((mem) => (
+                          <MemberBadge key={mem.id} member={mem} size={18} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className="font-mono text-[10px] uppercase"
+                      style={{ color: takeout ? TAKEOUT_COLOR : 'rgb(var(--c-accent))' }}
+                    >
+                      {takeout ? 'Takeout' : 'Recipe'}
+                    </span>
+                    {category && (
+                      <span
+                        className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                        style={{ backgroundColor: `${category.color}22`, color: category.color }}
+                      >
+                        {category.name}
+                      </span>
+                    )}
                   </div>
                 </button>
               )
