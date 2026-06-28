@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   DndContext,
   DragOverlay,
@@ -49,6 +50,7 @@ import {
   CarIcon,
   CastIcon,
   CheckIcon,
+  ChevronRight,
   CloudIcon,
   CloudLightningIcon,
   CloudRainIcon,
@@ -125,7 +127,7 @@ const newInstance = (type) => ({
   settings: defaultSettings(type),
 })
 
-const defaultDashboard = () => ({ modules: SINGLETONS.map((t) => ({ ...newInstance(t), id: t })) })
+export const defaultDashboard = () => ({ modules: SINGLETONS.map((t) => ({ ...newInstance(t), id: t })) })
 
 // Sanitize a module instance into the current shape. `column` (0 = left,
 // 1 = right) places the module in one of the two independent dashboard columns;
@@ -161,7 +163,7 @@ function ensureSingletons(modules) {
 
 // Fold older/partial configs into the instance model. Handles both the new
 // `{ modules }` shape and the original `{ order, enabled, settings }` shape.
-function migrateDashboard(stored) {
+export function migrateDashboard(stored) {
   if (!stored || typeof stored !== 'object') return defaultDashboard()
   if (Array.isArray(stored.modules)) {
     const modules = stored.modules.map(cleanModule).filter(Boolean)
@@ -888,6 +890,7 @@ export function TrafficModule({ settings, fullHeight = false }) {
               href={directionsUrl(origin, destination, via)}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="mt-1 inline-block text-xs font-semibold text-accent underline decoration-dotted underline-offset-2"
             >
               Open in Maps
@@ -1911,10 +1914,19 @@ function ModuleCard({
   onToggle,
   onConfigure,
   onRemove,
+  onOpen,
   children,
 }) {
+  // Tappable (to open a full page) only outside customize mode.
+  const tappable = !!onOpen && !editing
   return (
-    <Card className={editing && !enabled ? 'opacity-60' : ''}>
+    <Card
+      className={[
+        editing && !enabled ? 'opacity-60' : '',
+        tappable ? 'cursor-pointer transition-colors hover:border-accent/40' : '',
+      ].join(' ')}
+      onClick={tappable ? onOpen : undefined}
+    >
       <div className="mb-4 flex items-center gap-3 border-b border-border pb-3">
         {editing && (
           <button
@@ -1928,6 +1940,7 @@ function ModuleCard({
           </button>
         )}
         <h2 className="flex-1 truncate text-lg font-bold text-white">{title}</h2>
+        {tappable && <ChevronRight className="h-5 w-5 flex-shrink-0 text-gray-500" aria-hidden="true" />}
         {editing && hasConfig && (
           <button
             type="button"
@@ -2065,6 +2078,7 @@ function AddModuleModal({ open, onClose, modules, onShow, onAdd }) {
 // =============================================================================
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [cfg, setCfg] = useLocalState('dashboard', defaultDashboard(), migrateDashboard)
   const [editing, setEditing] = useState(false)
   const [configFor, setConfigFor] = useState(null) // instance id
@@ -2153,6 +2167,10 @@ export default function Dashboard() {
     ) : (
       <p className="text-sm text-gray-500">Hidden — toggle to show this on your dashboard.</p>
     )
+    // The Traffic module opens its full page when tapped (works even if the
+    // Traffic page isn't in the menu); `m` identifies which route to show.
+    const onOpen =
+      m.type === 'traffic' && m.enabled ? () => navigate(`/traffic?m=${m.id}`) : undefined
     return (
       <ModuleCard
         title={moduleTitle(m)}
@@ -2164,6 +2182,7 @@ export default function Dashboard() {
         onToggle={(on) => setEnabled(m.id, on)}
         onConfigure={() => setConfigFor(m.id)}
         onRemove={() => removeModule(m.id)}
+        onOpen={onOpen}
       >
         {body}
       </ModuleCard>
