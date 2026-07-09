@@ -313,6 +313,19 @@ export function StarIcon(props) {
   )
 }
 
+// Trophy — habits / rewards.
+export function TrophyIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M6 2h12v7a6 6 0 0 1-12 0V2z" />
+      <path d="M12 15v4" />
+      <path d="M8 22h8M9 19h6" />
+    </svg>
+  )
+}
+
 export function GripIcon(props) {
   return (
     <svg {...base} {...props} fill="currentColor" stroke="none">

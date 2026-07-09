@@ -16,7 +16,8 @@ import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
-import { MemberBadge } from '../components/Member.jsx'
+import Toggle from '../components/Toggle.jsx'
+import { MemberBadge, MemberPicker } from '../components/Member.jsx'
 import { useLocalState } from '../lib/storage.js'
 import {
   CheckIcon,
@@ -24,6 +25,7 @@ import {
   ChevronRight,
   GripIcon,
   PlusIcon,
+  StarIcon,
   TrashIcon,
 } from '../components/Icons.jsx'
 import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
@@ -110,6 +112,10 @@ const newItem = () => ({
   target: 7,
   note: '',
   children: [],
+  // Habit tracking: habits also appear on the Habits page, where each check
+  // earns the assigned member(s) a point. No members = everyone on that page.
+  habit: false,
+  habitMembers: [],
 })
 
 export default function Goals() {
@@ -198,13 +204,17 @@ export default function Goals() {
   // --- Item ops -------------------------------------------------------------
   const saveItem = () => {
     if (!itemDraft.item.title.trim()) return
+    const children = (itemDraft.item.children || [])
+      .map((c) => ({ id: c.id, title: c.title.trim() }))
+      .filter((c) => c.title)
     const item = {
       ...itemDraft.item,
       title: itemDraft.item.title.trim(),
       target: Math.max(1, Number(itemDraft.item.target) || 1),
-      children: (itemDraft.item.children || [])
-        .map((c) => ({ id: c.id, title: c.title.trim() }))
-        .filter((c) => c.title),
+      children,
+      // Checklists (with sub-items) can't be habits — points are per check.
+      habit: children.length === 0 && !!itemDraft.item.habit,
+      habitMembers: itemDraft.item.habitMembers || [],
     }
     setSections((list) =>
       list.map((s) => {
@@ -348,7 +358,7 @@ export default function Goals() {
       </div>
 
       <SectionModal draft={sectionDraft} setDraft={setSectionDraft} onClose={() => setSectionDraft(null)} onSave={saveSection} />
-      <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} />
+      <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} members={members} />
     </div>
   )
 }
@@ -486,6 +496,9 @@ function GoalItem({ item, color, wp, onToggle, onToggleBox, onToggleChild, onEdi
           <span className={complete ? 'truncate text-gray-500 line-through' : 'truncate text-gray-100'}>
             {item.title}
           </span>
+          {item.habit && (
+            <StarIcon className="h-3.5 w-3.5 flex-shrink-0 text-accent" title="Habit" />
+          )}
           {!isGroup && item.type === 'tally' && (
             <span className="font-mono text-xs text-gray-500">
               {tallyDone}/{item.target}
@@ -613,12 +626,19 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
   )
 }
 
-function ItemModal({ draft, setDraft, onClose, onSave }) {
+function ItemModal({ draft, setDraft, onClose, onSave, members }) {
   if (!draft) return null
   const item = draft.item
   const set = (patch) => setDraft({ ...draft, item: { ...item, ...patch } })
   const children = item.children || []
   const hasChildren = children.length > 0
+  const habitMembers = item.habitMembers || []
+  const toggleHabitMember = (id) =>
+    set({
+      habitMembers: habitMembers.includes(id)
+        ? habitMembers.filter((m) => m !== id)
+        : [...habitMembers, id],
+    })
 
   const addChild = () =>
     set({ children: [...children, { id: crypto.randomUUID(), title: '' }] })
@@ -701,6 +721,40 @@ function ItemModal({ draft, setDraft, onClose, onSave }) {
                 onChange={(e) => set({ note: e.target.value })}
               />
             </div>
+
+            {/* Habit: also track this goal on the Habits page, where each check
+                earns a point toward the reward shop. Not available for
+                checklists (points are per check, not per sub-item). */}
+            {!hasChildren && (
+              <div className="rounded-xl border border-border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <StarIcon className="h-4 w-4 text-accent" />
+                    <span className="text-sm font-semibold text-gray-200">Track as Habit</span>
+                  </div>
+                  <Toggle
+                    checked={!!item.habit}
+                    onChange={(v) => set({ habit: v })}
+                    label="Track as Habit"
+                  />
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Shows on the Habits page — every check earns a point.
+                </p>
+                {item.habit && (
+                  <div className="mt-3">
+                    <label className="mb-2 block text-xs text-gray-500">
+                      Whose habit? <span className="text-gray-600">(none = everyone)</span>
+                    </label>
+                    <MemberPicker
+                      members={members || []}
+                      selected={habitMembers}
+                      onToggle={toggleHabitMember}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Sub-items / checklist */}

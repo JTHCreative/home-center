@@ -6,6 +6,7 @@ import {
   GridIcon,
   HomeIcon,
   MealIcon,
+  TrophyIcon,
 } from '../components/Icons.jsx'
 
 // Catalog of every page that can live in the sidebar menu. Add future pages
@@ -19,6 +20,7 @@ export const PAGE_CATALOG = [
   { id: 'calendar', to: '/calendar', label: 'Calendar', Icon: CalendarIcon },
   { id: 'meals', to: '/meals', label: 'Meals', Icon: MealIcon },
   { id: 'goals', to: '/goals', label: 'Goals', Icon: GoalIcon },
+  { id: 'habits', to: '/habits', label: 'Habits', Icon: TrophyIcon },
   { id: 'traffic', to: '/traffic', label: 'Traffic', Icon: CarIcon },
 ]
 
