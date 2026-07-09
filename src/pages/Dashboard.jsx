@@ -65,6 +65,7 @@ import {
   SkipBackIcon,
   SkipForwardIcon,
   SpotifyIcon,
+  StarIcon,
   SunIcon,
   SunriseIcon,
   TrashIcon,
@@ -80,6 +81,7 @@ import {
   SEED_MEMBERS,
 } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
+import { balanceOf, habitItemsOf, habitsFor, weekPoints, weekTarget } from '../lib/habits.js'
 import { MemberBadge } from '../components/Member.jsx'
 
 // --- Module registry ---------------------------------------------------------
@@ -94,12 +96,13 @@ const MODULE_TYPES = {
   smarthome: { title: 'Smart Home', configurable: true, multi: false },
   stocks: { title: 'Investments', configurable: true, multi: false },
   goals: { title: 'Goals', configurable: true, multi: false },
+  habits: { title: 'Habits', configurable: false, multi: false },
   calendar: { title: "Today's Events", configurable: false, multi: false },
   traffic: { title: 'Traffic', configurable: true, multi: true },
   spotify: { title: 'Spotify', configurable: true, multi: true },
 }
 // Order in which singleton instances seed a fresh dashboard / get backfilled.
-const SINGLETONS = ['meals', 'shopping', 'smarthome', 'stocks', 'goals', 'calendar']
+const SINGLETONS = ['meals', 'shopping', 'smarthome', 'stocks', 'goals', 'habits', 'calendar']
 
 function defaultSettings(type) {
   switch (type) {
@@ -759,6 +762,55 @@ function GoalsModule({ sectionId }) {
         })}
       </ul>
     </div>
+  )
+}
+
+// Per-member habit counter: this week's checks out of what's possible, plus
+// each member's spendable point balance. Tap the card to open the Habits page.
+function HabitsModule() {
+  const [sections] = useLocalState('goals-sections', GOALS_SEED, migrateColors)
+  const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors)
+  const [roster] = useLocalState('habits-roster', [])
+  const [progress] = useLocalState('habits-progress', {})
+  const [purchases] = useLocalState('habits-purchases', [])
+
+  const wp = progress[weekKeyNow()] || {}
+  const habitItems = useMemo(() => habitItemsOf(sections), [sections])
+  const rosterMembers = useMemo(
+    () => roster.map((id) => members.find((m) => m.id === id)).filter(Boolean),
+    [roster, members],
+  )
+
+  if (rosterMembers.length === 0) {
+    return (
+      <p className="text-sm text-gray-500">
+        No one&apos;s on the Habits board yet — open the Habits page to add members.
+      </p>
+    )
+  }
+
+  return (
+    <ul className="space-y-1">
+      {rosterMembers.map((m) => {
+        const theirHabits = habitsFor(habitItems, m.id)
+        const done = weekPoints(wp, m.id)
+        const target = weekTarget(theirHabits)
+        return (
+          <li key={m.id} className="flex items-center gap-3 py-2">
+            <MemberBadge member={m} size={26} />
+            <span className="min-w-0 flex-1 truncate font-semibold" style={{ color: m.color }}>
+              {m.name}
+            </span>
+            <span className="flex-shrink-0 font-mono text-xs text-gray-400">
+              {target > 0 ? `${done}/${target} this week` : 'No habits yet'}
+            </span>
+            <span className="flex flex-shrink-0 items-center gap-1 rounded-lg bg-accent/15 px-2 py-1 font-mono text-sm font-bold text-accent">
+              <StarIcon className="h-3.5 w-3.5" /> {balanceOf(progress, purchases, m.id)}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -1475,6 +1527,8 @@ function ModuleBody({ module }) {
       return <StocksModule watchlistId={settings.watchlistId} />
     case 'goals':
       return <GoalsModule sectionId={settings.sectionId} />
+    case 'habits':
+      return <HabitsModule />
     case 'calendar':
       return <CalendarModule />
     case 'traffic':
@@ -2167,10 +2221,15 @@ export default function Dashboard() {
     ) : (
       <p className="text-sm text-gray-500">Hidden — toggle to show this on your dashboard.</p>
     )
-    // The Traffic module opens its full page when tapped (works even if the
-    // Traffic page isn't in the menu); `m` identifies which route to show.
-    const onOpen =
-      m.type === 'traffic' && m.enabled ? () => navigate(`/traffic?m=${m.id}`) : undefined
+    // Some modules open their full page when tapped (works even if that page
+    // isn't in the menu); Traffic's `m` identifies which route to show.
+    const onOpen = !m.enabled
+      ? undefined
+      : m.type === 'traffic'
+        ? () => navigate(`/traffic?m=${m.id}`)
+        : m.type === 'habits'
+          ? () => navigate('/habits')
+          : undefined
     return (
       <ModuleCard
         title={moduleTitle(m)}

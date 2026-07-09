@@ -6,6 +6,14 @@ import { useLocalState } from '../lib/storage.js'
 import { migrateColors } from '../lib/colors.js'
 import { GOALS_SEED, SEED_MEMBERS } from '../lib/seeds.js'
 import {
+  balanceOf as balanceIn,
+  entryPoints,
+  habitItemsOf,
+  habitsFor as habitsIn,
+  totalEarned,
+  weekPoints,
+} from '../lib/habits.js'
+import {
   CheckIcon,
   ChevronLeft,
   ChevronRight,
@@ -43,22 +51,6 @@ const REWARDS_SEED = [
   { id: 'rw-dessert', title: 'Dessert of your choice', cost: 3 },
 ]
 
-// Points held in one habit entry: 1 for a done checkbox, 1 per filled tally
-// box. Unchecking removes the point automatically since scores are computed
-// from the stored checks, never accumulated separately.
-const entryPoints = (e) =>
-  (e?.done ? 1 : 0) + (Array.isArray(e?.checks) ? e.checks.filter(Boolean).length : 0)
-
-// Sum every point a member has earned in a progress map (all weeks). Entries
-// for habits that were later deleted or un-flagged still count — points, once
-// earned, stay earned.
-const totalEarned = (progress, memberId) =>
-  Object.values(progress || {}).reduce((sum, week) => {
-    const mem = week?.[memberId]
-    if (!mem) return sum
-    return sum + Object.values(mem).reduce((s, e) => s + entryPoints(e), 0)
-  }, 0)
-
 export default function Habits() {
   const [sections] = useLocalState('goals-sections', GOALS_SEED, migrateColors) // read-only, shared with Goals
   const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors) // read-only, shared household
@@ -84,25 +76,13 @@ export default function Habits() {
   const offRoster = members.filter((m) => !roster.includes(m.id))
 
   // Habit items configured on the Goals page, carrying their list's color.
-  const habitItems = useMemo(
-    () =>
-      sections.flatMap((s) =>
-        (s.items || []).filter((it) => it.habit).map((it) => ({ ...it, listColor: s.color })),
-      ),
-    [sections],
-  )
-  // A habit with no assigned members belongs to everyone on the board.
-  const habitsFor = (memberId) =>
-    habitItems.filter(
-      (it) => (it.habitMembers || []).length === 0 || it.habitMembers.includes(memberId),
-    )
+  const habitItems = useMemo(() => habitItemsOf(sections), [sections])
+  const habitsFor = (memberId) => habitsIn(habitItems, memberId)
 
-  // Lifetime score = every point earned across all weeks, minus shop spending.
-  const spentBy = (memberId) =>
-    purchases.reduce((sum, p) => (p.memberId === memberId ? sum + p.cost : sum), 0)
-  const balanceOf = (memberId) => totalEarned(progress, memberId) - spentBy(memberId)
-  const weekPointsOf = (memberId) =>
-    Object.values(wp[memberId] || {}).reduce((s, e) => s + entryPoints(e), 0)
+  // Spendable balance = lifetime points earned across all weeks, minus shop
+  // spending. Lifetime earned is shown separately (it never goes down).
+  const balanceOf = (memberId) => balanceIn(progress, purchases, memberId)
+  const weekPointsOf = (memberId) => weekPoints(wp, memberId)
 
   // --- Progress mutations (per member, per habit, for the selected week) -----
   const editEntry = (memberId, itemId, fn) =>
@@ -239,6 +219,7 @@ export default function Habits() {
             habits={habitsFor(member.id)}
             entries={wp[member.id] || {}}
             balance={balanceOf(member.id)}
+            lifetime={totalEarned(progress, member.id)}
             weekPoints={weekPointsOf(member.id)}
             onToggleCheckbox={(itemId) => toggleCheckbox(member.id, itemId)}
             onToggleTally={(itemId, index, target) => toggleTally(member.id, itemId, index, target)}
@@ -460,7 +441,9 @@ export default function Habits() {
 }
 
 // One member's board: score header + their habit list for the selected week.
-function MemberCard({ member, habits, entries, balance, weekPoints, onToggleCheckbox, onToggleTally, onRemove }) {
+// The big chip is the member's spendable balance (earned minus redeemed); the
+// small subline tracks this week's checks and their lifetime total earned.
+function MemberCard({ member, habits, entries, balance, lifetime, weekPoints, onToggleCheckbox, onToggleTally, onRemove }) {
   return (
     <Card>
       <div className="mb-4 flex items-center gap-3 border-b border-border pb-3">
@@ -469,8 +452,9 @@ function MemberCard({ member, habits, entries, balance, weekPoints, onToggleChec
           <h2 className="truncate text-lg font-bold" style={{ color: member.color }}>
             {member.name}
           </h2>
-          <div className="font-mono text-xs text-gray-500">
-            {weekPoints > 0 ? `+${weekPoints} this week` : 'No points this week yet'}
+          <div className="truncate font-mono text-xs text-gray-500">
+            {weekPoints > 0 ? `+${weekPoints} this week` : 'None this week yet'}
+            <span className="text-gray-600"> · {lifetime}★ lifetime</span>
           </div>
         </div>
         <div
@@ -478,7 +462,7 @@ function MemberCard({ member, habits, entries, balance, weekPoints, onToggleChec
             'flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-lg font-bold',
             balance < 0 ? 'bg-loss/15 text-loss' : 'bg-accent/15 text-accent',
           ].join(' ')}
-          title="Total points (all-time earned minus rewards redeemed)"
+          title="Spendable points (lifetime earned minus rewards redeemed)"
         >
           <StarIcon className="h-5 w-5" /> {balance}
         </div>
