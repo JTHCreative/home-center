@@ -11,6 +11,7 @@ import {
   arrayMove,
   rectSortingStrategy,
   useSortable,
+  verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
@@ -21,6 +22,7 @@ import { MemberBadge, MemberPicker } from '../components/Member.jsx'
 import { useLocalState } from '../lib/storage.js'
 import {
   CheckIcon,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   GripIcon,
@@ -127,6 +129,10 @@ export default function Goals() {
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
+  const [fullSectionId, setFullSectionId] = useState(null) // section opened full screen
+
+  // Derived so live edits/toggles show while the full-screen view is open.
+  const fullSection = sections.find((s) => s.id === fullSectionId) || null
 
   const weekKey = iso(weekStart)
   const wp = progress[weekKey] || EMPTY_WEEK
@@ -234,6 +240,15 @@ export default function Goals() {
         s.id === sectionId ? { ...s, items: s.items.filter((it) => it.id !== itemId) } : s,
       ),
     )
+  const reorderItems = (sectionId, activeId, overId) =>
+    setSections((list) =>
+      list.map((s) => {
+        if (s.id !== sectionId) return s
+        const from = s.items.findIndex((it) => it.id === activeId)
+        const to = s.items.findIndex((it) => it.id === overId)
+        return from === -1 || to === -1 ? s : { ...s, items: arrayMove(s.items, from, to) }
+      }),
+    )
 
   // Week label, e.g. "Jun 8 – Jun 14"
   const weekEnd = addDays(weekStart, 6)
@@ -306,8 +321,10 @@ export default function Goals() {
                 onToggleTally={toggleTally}
                 onToggleChild={toggleChild}
                 onRemoveItem={(itemId) => removeItem(section.id, itemId)}
+                onReorderItems={(activeId, overId) => reorderItems(section.id, activeId, overId)}
                 onEditSection={() => setSectionDraft({ ...section })}
                 onRemoveSection={() => removeSection(section.id)}
+                onOpenFull={() => setFullSectionId(section.id)}
               />
             ))}
           </SortableContext>
@@ -357,6 +374,59 @@ export default function Goals() {
         </Card>
       </div>
 
+      {/* Full-screen view of one list — opened by tapping the list's title.
+          Rendered before the edit modals so those stack on top of it. */}
+      {fullSection && (
+        <Modal
+          open
+          size="full"
+          onClose={() => setFullSectionId(null)}
+          title={
+            <span className="flex min-w-0 items-center gap-3">
+              <span
+                className="h-3 w-3 flex-shrink-0 rounded-full"
+                style={{ backgroundColor: fullSection.color }}
+              />
+              <span className="truncate" style={{ color: fullSection.color }}>
+                {fullSection.title}
+              </span>
+              <span className="flex-shrink-0 font-mono text-xs font-normal text-gray-500">
+                {relLabel}
+              </span>
+            </span>
+          }
+          headerExtra={
+            <ProgressRing
+              value={sectionCompletion(fullSection, wp)}
+              size={40}
+              color={fullSection.color}
+            />
+          }
+        >
+          <div className="mx-auto max-w-3xl">
+            <ItemList
+              section={fullSection}
+              wp={wp}
+              onEditItem={(it) => setItemDraft({ sectionId: fullSection.id, item: { ...it } })}
+              onToggleCheckbox={toggleCheckbox}
+              onToggleTally={toggleTally}
+              onToggleChild={toggleChild}
+              onRemoveItem={(itemId) => removeItem(fullSection.id, itemId)}
+              onReorderItems={(activeId, overId) => reorderItems(fullSection.id, activeId, overId)}
+            />
+            <div className="mt-4 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => setItemDraft({ sectionId: fullSection.id, item: newItem() })}
+                className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-sm font-semibold text-gray-300 active:scale-95"
+              >
+                <PlusIcon className="h-4 w-4" /> Item
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <SectionModal draft={sectionDraft} setDraft={setSectionDraft} onClose={() => setSectionDraft(null)} onSave={saveSection} />
       <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} members={members} />
     </div>
@@ -382,7 +452,7 @@ function SortableSection({ section, ...props }) {
   )
 }
 
-function SectionCard({ section, wp, dragHandleProps, onAddItem, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onEditSection, onRemoveSection }) {
+function SectionCard({ section, wp, dragHandleProps, onAddItem, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems, onEditSection, onRemoveSection, onOpenFull }) {
   const pct = sectionCompletion(section, wp)
 
   return (
@@ -398,30 +468,34 @@ function SectionCard({ section, wp, dragHandleProps, onAddItem, onEditItem, onTo
           <GripIcon className="h-5 w-5" />
         </button>
         <span className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: section.color }} />
-        <h2 className="flex-1 truncate text-lg font-bold" style={{ color: section.color }}>
-          {section.title}
-        </h2>
+        {/* Tap the title to open this list full screen. Wraps instead of
+            truncating so the name is always fully visible on small screens. */}
+        <button
+          type="button"
+          onClick={onOpenFull}
+          title={`Open ${section.title} full screen`}
+          className="min-w-0 flex-1 text-left active:opacity-70"
+        >
+          <h2
+            className="break-words text-base font-bold leading-tight sm:text-lg"
+            style={{ color: section.color }}
+          >
+            {section.title}
+          </h2>
+        </button>
         <ProgressRing value={pct} size={44} color={section.color} />
       </div>
 
-      <ul className="space-y-1">
-        {section.items.length === 0 && (
-          <li className="px-1 py-2 text-sm text-gray-500">No items yet.</li>
-        )}
-        {section.items.map((it) => (
-          <GoalItem
-            key={it.id}
-            item={it}
-            color={section.color}
-            wp={wp}
-            onToggle={() => onToggleCheckbox(it.id)}
-            onToggleBox={(index) => onToggleTally(it.id, index, it.target)}
-            onToggleChild={(childId) => onToggleChild(childId)}
-            onEdit={() => onEditItem(it)}
-            onRemove={() => onRemoveItem(it.id)}
-          />
-        ))}
-      </ul>
+      <ItemList
+        section={section}
+        wp={wp}
+        onEditItem={onEditItem}
+        onToggleCheckbox={onToggleCheckbox}
+        onToggleTally={onToggleTally}
+        onToggleChild={onToggleChild}
+        onRemoveItem={onRemoveItem}
+        onReorderItems={onReorderItems}
+      />
 
       <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
         <button
@@ -452,26 +526,96 @@ function SectionCard({ section, wp, dragHandleProps, onAddItem, onEditItem, onTo
   )
 }
 
-function GoalItem({ item, color, wp, onToggle, onToggleBox, onToggleChild, onEdit, onRemove }) {
+// Sortable list of one section's goal items — used by both the section card
+// and the full-screen view. Drag an item's grip to re-arrange within the list.
+function ItemList({ section, wp, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems }) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const onDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    onReorderItems(active.id, over.id)
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={section.items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
+        <ul className="space-y-1">
+          {section.items.length === 0 && (
+            <li className="px-1 py-2 text-sm text-gray-500">No items yet.</li>
+          )}
+          {section.items.map((it) => (
+            <SortableGoalItem
+              key={it.id}
+              item={it}
+              color={section.color}
+              wp={wp}
+              onToggle={() => onToggleCheckbox(it.id)}
+              onToggleBox={(index) => onToggleTally(it.id, index, it.target)}
+              onToggleChild={(childId) => onToggleChild(childId)}
+              onEdit={() => onEditItem(it)}
+              onRemove={() => onRemoveItem(it.id)}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+// Sortable wrapper for a goal item: renders the row's <li>, applies the drag
+// transform, and hands the handle props down so only the grip starts a drag.
+function SortableGoalItem({ item, ...props }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 40 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  }
+  return (
+    <li ref={setNodeRef} style={style} className="relative rounded-lg px-1 py-1.5">
+      <GoalItem item={item} dragHandleProps={{ ...attributes, ...listeners }} {...props} />
+    </li>
+  )
+}
+
+function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onToggleChild, onEdit, onRemove }) {
   const kids = item.children || []
   const isGroup = kids.length > 0
+  const isTally = !isGroup && item.type === 'tally'
   const complete = itemCompletion(item, wp) >= 1
   const doneCount = kids.filter((c) => wp.children[c.id]).length
   const checks = wp.items[item.id]?.checks || []
   const done = wp.items[item.id]?.done
   const tallyDone = checks.slice(0, item.target).filter(Boolean).length
+  // Multi-part items (tally boxes / checklists) fold their parts onto a row
+  // beneath the title, toggled by the chevron, so the title keeps the full
+  // row width. Checklists start open (matches the old always-visible layout).
+  const [open, setOpen] = useState(isGroup)
 
   return (
-    <li className="rounded-lg px-1 py-1.5">
-      <div className="flex items-center gap-3">
-        {isGroup ? (
+    <div>
+      <div className="flex items-center gap-2.5">
+        <button
+          type="button"
+          {...dragHandleProps}
+          aria-label={`Reorder ${item.title}`}
+          style={{ touchAction: 'none' }}
+          className="-ml-1 flex-shrink-0 cursor-grab rounded p-0.5 text-gray-700 active:cursor-grabbing active:text-gray-300"
+        >
+          <GripIcon className="h-4 w-4" />
+        </button>
+
+        {isGroup || isTally ? (
+          // Read-only progress badge — checks happen on the row beneath.
           <span
-            className="flex h-7 min-w-[2.75rem] flex-shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold"
+            className="flex h-7 min-w-[2.75rem] flex-shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-xs font-bold"
             style={{ backgroundColor: `${color}22`, color }}
           >
-            {doneCount}/{kids.length}
+            {isGroup ? `${doneCount}/${kids.length}` : `${tallyDone}/${item.target}`}
           </span>
-        ) : item.type === 'checkbox' ? (
+        ) : (
           <button
             type="button"
             onClick={onToggle}
@@ -484,28 +628,35 @@ function GoalItem({ item, color, wp, onToggle, onToggleBox, onToggleChild, onEdi
           >
             {done && <CheckIcon className="h-5 w-5" />}
           </button>
-        ) : (
-          <TallyBoxes checks={checks} target={item.target} color={color} onToggle={onToggleBox} />
         )}
 
-        <button
-          type="button"
-          onClick={onEdit}
-          className="flex flex-1 items-center gap-2 truncate text-left active:opacity-70"
-        >
-          <span className={complete ? 'truncate text-gray-500 line-through' : 'truncate text-gray-100'}>
+        {/* Title wraps instead of truncating so it stays fully visible. */}
+        <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left active:opacity-70">
+          <span
+            className={[
+              'break-words text-sm sm:text-base',
+              complete ? 'text-gray-500 line-through' : 'text-gray-100',
+            ].join(' ')}
+          >
             {item.title}
           </span>
           {item.habit && (
-            <StarIcon className="h-3.5 w-3.5 flex-shrink-0 text-accent" title="Habit" />
+            <StarIcon className="ml-1.5 inline-block h-3.5 w-3.5 text-accent" title="Habit" />
           )}
-          {!isGroup && item.type === 'tally' && (
-            <span className="font-mono text-xs text-gray-500">
-              {tallyDone}/{item.target}
-            </span>
-          )}
-          {item.note && <span className="font-mono text-xs text-gray-500">· {item.note}</span>}
+          {item.note && <span className="ml-1.5 font-mono text-xs text-gray-500">· {item.note}</span>}
         </button>
+
+        {(isGroup || isTally) && (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-label={`${open ? 'Collapse' : 'Expand'} ${item.title}`}
+            aria-expanded={open}
+            className="flex-shrink-0 rounded-md bg-white/5 p-1.5 text-gray-400 active:scale-95"
+          >
+            <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+        )}
 
         <button
           type="button"
@@ -517,9 +668,16 @@ function GoalItem({ item, color, wp, onToggle, onToggleBox, onToggleChild, onEdi
         </button>
       </div>
 
+      {/* Tally boxes, on their own row so the title never gets squeezed */}
+      {isTally && open && (
+        <div className="ml-9 mt-2">
+          <TallyBoxes checks={checks} target={item.target} color={color} onToggle={onToggleBox} />
+        </div>
+      )}
+
       {/* Sub-items */}
-      {isGroup && (
-        <ul className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
+      {isGroup && open && (
+        <ul className="ml-9 mt-1 space-y-1 border-l border-border pl-3">
           {kids.map((c) => {
             const cdone = !!wp.children[c.id]
             return (
@@ -544,7 +702,7 @@ function GoalItem({ item, color, wp, onToggle, onToggleBox, onToggleChild, onEdi
           })}
         </ul>
       )}
-    </li>
+    </div>
   )
 }
 

@@ -5,7 +5,8 @@ import { CloseIcon } from './Icons.jsx'
 // scrollbar), and the body uses the full space above the on-screen keyboard.
 export default function Modal({ open, onClose, title, children, footer, headerExtra, size = 'wide' }) {
   if (!open) return null
-  const maxWidth = size === 'narrow' ? 'max-w-lg' : 'max-w-3xl'
+  // 'full' fills (nearly) the whole screen — used for the Goals list view.
+  const maxWidth = size === 'narrow' ? 'max-w-lg' : size === 'full' ? 'max-w-none' : 'max-w-3xl'
   return (
     <div
       // Top-aligned so the on-screen keyboard at the bottom doesn't cover fields.
@@ -14,7 +15,7 @@ export default function Modal({ open, onClose, title, children, footer, headerEx
     >
       <div
         // Shrink to the space above the keyboard; the body (not the buttons) scrolls.
-        className={`flex w-full ${maxWidth} flex-col rounded-2xl border border-border bg-surface shadow-glow`}
+        className={`flex w-full ${maxWidth} ${size === 'full' ? 'h-full' : ''} flex-col rounded-2xl border border-border bg-surface shadow-glow`}
         style={{ maxHeight: 'calc(97vh - var(--kb, 0px))' }}
         onClick={(e) => e.stopPropagation()}
       >
