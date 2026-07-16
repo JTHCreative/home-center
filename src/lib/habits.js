@@ -5,8 +5,22 @@
 // Points held in one habit entry: 1 for a done checkbox, 1 per filled tally
 // box. Unchecking removes the point automatically since scores are computed
 // from the stored checks, never accumulated separately.
-export const entryPoints = (e) =>
-  (e?.done ? 1 : 0) + (Array.isArray(e?.checks) ? e.checks.filter(Boolean).length : 0)
+//
+// Shared habits mirror their displayed state (done/checks) to every sharing
+// member, but only the member who actually tapped earns the point — the
+// `earned` field (boolean for checkboxes, per-box array for tallies) carries
+// that attribution. Entries written before `earned` existed score from the
+// displayed state, so old points are preserved.
+export const entryPoints = (e) => {
+  if (!e) return 0
+  const donePts = e.done ? (typeof e.earned === 'boolean' ? (e.earned ? 1 : 0) : 1) : 0
+  const boxPts = Array.isArray(e.earned)
+    ? e.earned.filter(Boolean).length
+    : Array.isArray(e.checks)
+      ? e.checks.filter(Boolean).length
+      : 0
+  return donePts + boxPts
+}
 
 // Every point a member has earned across all weeks of a progress map
 // (weekKey -> memberId -> itemId -> entry). Entries for habits that were later

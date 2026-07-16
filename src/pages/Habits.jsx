@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import { MemberBadge } from '../components/Member.jsx'
+import TallyBoxes from '../components/TallyBoxes.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { migrateColors } from '../lib/colors.js'
 import { GOALS_SEED, SEED_MEMBERS } from '../lib/seeds.js'
@@ -15,6 +16,7 @@ import {
 } from '../lib/habits.js'
 import {
   CheckIcon,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CloseIcon,
@@ -84,23 +86,46 @@ export default function Habits() {
   const balanceOf = (memberId) => balanceIn(progress, purchases, memberId)
   const weekPointsOf = (memberId) => weekPoints(wp, memberId)
 
-  // --- Progress mutations (per member, per habit, for the selected week) -----
-  const editEntry = (memberId, itemId, fn) =>
+  // --- Progress mutations (per habit, for the selected week) -----------------
+  // A habit is shared by its assigned members (no assignment = everyone on the
+  // board). One member's check mirrors the displayed state (done/checks) to
+  // every sharer's list — and re-syncs any that drifted — but only the acting
+  // member is marked `earned`, so the point goes to whoever actually did it.
+  // Unchecking clears the display and the earned credit for the whole group.
+  const sharedWith = (itemId) => {
+    const assigned = habitItems.find((it) => it.id === itemId)?.habitMembers || []
+    return assigned.length === 0 ? roster : assigned
+  }
+  const toggleCheckbox = (memberId, itemId) =>
     setProgress((p) => {
       const week = p[weekKey] || {}
-      const mem = week[memberId] || {}
-      return {
-        ...p,
-        [weekKey]: { ...week, [memberId]: { ...mem, [itemId]: fn(mem[itemId] || {}) } },
+      const done = !week[memberId]?.[itemId]?.done
+      const next = { ...week }
+      for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
+        const e = next[mid]?.[itemId] || {}
+        next[mid] = { ...(next[mid] || {}), [itemId]: { ...e, done, earned: done && mid === memberId } }
       }
+      return { ...p, [weekKey]: next }
     })
-  const toggleCheckbox = (memberId, itemId) =>
-    editEntry(memberId, itemId, (e) => ({ ...e, done: !e.done }))
   const toggleTally = (memberId, itemId, index, target) =>
-    editEntry(memberId, itemId, (e) => {
-      const checks = Array.from({ length: target }, (_, i) => e.checks?.[i] || false)
-      checks[index] = !checks[index]
-      return { ...e, checks }
+    setProgress((p) => {
+      const week = p[weekKey] || {}
+      const actor = week[memberId]?.[itemId] || {}
+      const on = !actor.checks?.[index]
+      const next = { ...week }
+      for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
+        const e = next[mid]?.[itemId] || {}
+        const checks = Array.from({ length: target }, (_, i) =>
+          i === index ? on : actor.checks?.[i] || false,
+        )
+        // Entries from before attribution existed earned their own checks.
+        const base = Array.isArray(e.earned) ? e.earned : e.checks || []
+        const earned = Array.from({ length: target }, (_, i) =>
+          i === index ? on && mid === memberId : !!base[i] && checks[i],
+        )
+        next[mid] = { ...(next[mid] || {}), [itemId]: { ...e, checks, earned } }
+      }
+      return { ...p, [weekKey]: next }
     })
 
   // --- Roster ops (history is kept when a member is removed from the board) --
@@ -500,40 +525,32 @@ function MemberCard({ member, habits, entries, balance, lifetime, weekPoints, on
   )
 }
 
-// A single habit line: the same checkbox / tally-box interaction as Goals,
-// plus the points this habit has earned in the selected week.
+// A single habit line: the same interaction as the Goals page — checkbox for
+// simple habits; for tally habits a read-only count badge with a chevron that
+// folds the tally boxes onto a row beneath. Titles wrap instead of truncating.
+// The accent chip shows the points this habit has earned in the selected week.
 function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
+  // `points` is what THIS member earned; the badge and strikethrough follow
+  // the displayed state, which a shared habit mirrors across all sharers.
   const points = entryPoints(entry)
   const isTally = item.type === 'tally'
   const checks = entry.checks || []
+  const filled = checks.slice(0, item.target).filter(Boolean).length
   const done = !!entry.done
-  const complete = isTally ? points >= item.target && item.target > 0 : done
+  const complete = isTally ? filled >= item.target && item.target > 0 : done
+  const [open, setOpen] = useState(false)
 
   return (
     <li className="rounded-lg px-1 py-1.5">
       <div className="flex items-center gap-3">
         {isTally ? (
-          <div className="flex flex-shrink-0 flex-wrap gap-1.5">
-            {Array.from({ length: item.target }, (_, i) => {
-              const filled = !!checks[i]
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => onToggleBox(i)}
-                  aria-label={`Toggle box ${i + 1}`}
-                  className="flex h-7 w-7 items-center justify-center rounded border-2 active:scale-90"
-                  style={
-                    filled
-                      ? { backgroundColor: color, borderColor: color, color: '#0D1117' }
-                      : { borderColor: '#30363D' }
-                  }
-                >
-                  {filled && <CheckIcon className="h-4 w-4" />}
-                </button>
-              )
-            })}
-          </div>
+          // Read-only progress badge — checks happen on the row beneath.
+          <span
+            className="flex h-7 min-w-[2.75rem] flex-shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-xs font-bold"
+            style={{ backgroundColor: `${color}22`, color }}
+          >
+            {filled}/{item.target}
+          </span>
         ) : (
           <button
             type="button"
@@ -549,26 +566,51 @@ function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
           </button>
         )}
 
-        <div className="flex flex-1 items-center gap-2 truncate">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {/* Dot in the source list's color ties the habit back to Goals. */}
           <span
             className="h-2 w-2 flex-shrink-0 rounded-full"
             style={{ backgroundColor: item.listColor }}
           />
-          <span className={complete ? 'truncate text-gray-500 line-through' : 'truncate text-gray-100'}>
+          <span
+            className={[
+              'min-w-0 break-words text-sm sm:text-base',
+              complete ? 'text-gray-500 line-through' : 'text-gray-100',
+            ].join(' ')}
+          >
             {item.title}
           </span>
-          {isTally && (
-            <span className="font-mono text-xs text-gray-500">
-              {points}/{item.target}
-            </span>
-          )}
         </div>
 
         {points > 0 && (
           <span className="flex-shrink-0 font-mono text-xs font-bold text-accent">+{points}★</span>
         )}
+
+        {isTally && (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-label={`${open ? 'Collapse' : 'Expand'} ${item.title}`}
+            aria-expanded={open}
+            className="flex-shrink-0 rounded-md bg-white/5 p-1.5 text-gray-400 active:scale-95"
+          >
+            <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+        )}
       </div>
+
+      {/* Tally boxes, on their own row so long habit names keep full width */}
+      {isTally && open && (
+        <div className="ml-10 mt-2">
+          <TallyBoxes
+            checks={checks}
+            target={item.target}
+            color={color}
+            onToggle={onToggleBox}
+            daily={!!item.daily}
+          />
+        </div>
+      )}
     </li>
   )
 }
