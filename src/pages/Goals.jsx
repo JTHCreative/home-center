@@ -17,6 +17,7 @@ import { CSS } from '@dnd-kit/utilities'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
+import TallyBoxes from '../components/TallyBoxes.jsx'
 import Toggle from '../components/Toggle.jsx'
 import { MemberBadge, MemberPicker } from '../components/Member.jsx'
 import { useLocalState } from '../lib/storage.js'
@@ -702,33 +703,6 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
           })}
         </ul>
       )}
-    </div>
-  )
-}
-
-// Row of tappable boxes. Each box toggles independently and shows a check mark.
-function TallyBoxes({ checks, target, color, onToggle }) {
-  return (
-    <div className="flex flex-shrink-0 flex-wrap gap-1.5">
-      {Array.from({ length: target }, (_, i) => {
-        const filled = !!checks[i]
-        return (
-          <button
-            key={i}
-            type="button"
-            onClick={() => onToggle(i)}
-            aria-label={`Toggle box ${i + 1}`}
-            className="flex h-7 w-7 items-center justify-center rounded border-2 active:scale-90"
-            style={
-              filled
-                ? { backgroundColor: color, borderColor: color, color: '#0D1117' }
-                : { borderColor: '#30363D' }
-            }
-          >
-            {filled && <CheckIcon className="h-4 w-4" />}
-          </button>
-        )
-      })}
     </div>
   )
 }

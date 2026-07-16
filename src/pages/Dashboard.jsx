@@ -23,6 +23,7 @@ import DatePicker from '../components/DatePicker.jsx'
 import Toggle from '../components/Toggle.jsx'
 import Slider from '../components/Slider.jsx'
 import ProgressRing from '../components/ProgressRing.jsx'
+import TallyBoxes from '../components/TallyBoxes.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { fetchQuotes, hasFinnhubKey } from '../lib/finnhub.js'
 import { directionsUrl, embedMapUrl, fetchTravelTime, hasGoogleMapsKey } from '../lib/googleMaps.js'
@@ -50,6 +51,7 @@ import {
   CarIcon,
   CastIcon,
   CheckIcon,
+  ChevronDown,
   ChevronRight,
   CloudIcon,
   CloudLightningIcon,
@@ -667,6 +669,13 @@ function GoalsModule({ sectionId }) {
       const item = w.items[itemId] || {}
       return { ...w, items: { ...w.items, [itemId]: { ...item, done: !item.done } } }
     })
+  const toggleTally = (itemId, index, target) =>
+    editWeek((w) => {
+      const item = w.items[itemId] || {}
+      const checks = Array.from({ length: target }, (_, i) => item.checks?.[i] || false)
+      checks[index] = !checks[index]
+      return { ...w, items: { ...w.items, [itemId]: { ...item, checks } } }
+    })
   const toggleChild = (childId) =>
     editWeek((w) => ({ ...w, children: { ...w.children, [childId]: !w.children[childId] } }))
 
@@ -684,84 +693,117 @@ function GoalsModule({ sectionId }) {
       </div>
       <ul className="scroll-area max-h-72 space-y-1 overflow-y-auto pr-1">
         {section.items.length === 0 && <li className="py-2 text-sm text-gray-500">No items yet.</li>}
-        {section.items.map((it) => {
-          const kids = it.children || []
-          const isGroup = kids.length > 0
-          const complete = itemCompletion(it, wp) >= 1
-          const done = wp.items[it.id]?.done
-          return (
-            <li key={it.id} className="rounded-lg px-1 py-1">
-              <div className="flex items-center gap-3">
-                {isGroup ? (
-                  <span
-                    className="flex h-6 min-w-[2.5rem] flex-shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold"
-                    style={{ backgroundColor: `${color}22`, color }}
-                  >
-                    {kids.filter((c) => wp.children[c.id]).length}/{kids.length}
-                  </span>
-                ) : it.type === 'tally' ? (
-                  <span
-                    className="flex h-6 min-w-[2.5rem] flex-shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold"
-                    style={{ backgroundColor: `${color}22`, color }}
-                  >
-                    {(wp.items[it.id]?.checks || []).slice(0, it.target).filter(Boolean).length}/{it.target}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => toggleCheckbox(it.id)}
-                    aria-label={`Toggle ${it.title}`}
-                    className={[
-                      'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
-                      done ? 'text-bg' : 'border-border',
-                    ].join(' ')}
-                    style={done ? { backgroundColor: color, borderColor: color } : undefined}
-                  >
-                    {done && <CheckIcon className="h-4 w-4" />}
-                  </button>
-                )}
-                <span
-                  className={
-                    complete ? 'flex-1 truncate text-gray-500 line-through' : 'flex-1 truncate text-gray-100'
-                  }
-                >
-                  {it.title}
-                </span>
-                {it.note && <span className="font-mono text-[11px] text-gray-500">{it.note}</span>}
-              </div>
-              {isGroup && (
-                <ul className="ml-7 mt-1 space-y-1 border-l border-border pl-3">
-                  {kids.map((c) => {
-                    const cdone = !!wp.children[c.id]
-                    return (
-                      <li key={c.id} className="flex items-center gap-2.5">
-                        <button
-                          type="button"
-                          onClick={() => toggleChild(c.id)}
-                          aria-label={`Toggle ${c.title}`}
-                          className={[
-                            'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 active:scale-95',
-                            cdone ? 'text-bg' : 'border-border',
-                          ].join(' ')}
-                          style={cdone ? { backgroundColor: color, borderColor: color } : undefined}
-                        >
-                          {cdone && <CheckIcon className="h-3.5 w-3.5" />}
-                        </button>
-                        <span
-                          className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}
-                        >
-                          {c.title}
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </li>
-          )
-        })}
+        {section.items.map((it) => (
+          <DashGoalRow
+            key={it.id}
+            item={it}
+            color={color}
+            wp={wp}
+            onToggle={() => toggleCheckbox(it.id)}
+            onToggleBox={(index) => toggleTally(it.id, index, it.target)}
+            onToggleChild={toggleChild}
+          />
+        ))}
       </ul>
     </div>
+  )
+}
+
+// One goal row in the dashboard module — same interaction as the Goals page:
+// read-only count badge for multi-part items, a chevron that folds the tally
+// boxes / sub-items onto a row beneath, and titles that wrap instead of
+// truncating. Checklists start open (their old always-visible layout).
+function DashGoalRow({ item, color, wp, onToggle, onToggleBox, onToggleChild }) {
+  const kids = item.children || []
+  const isGroup = kids.length > 0
+  const isTally = !isGroup && item.type === 'tally'
+  const complete = itemCompletion(item, wp) >= 1
+  const done = wp.items[item.id]?.done
+  const checks = wp.items[item.id]?.checks || []
+  const tallyDone = checks.slice(0, item.target).filter(Boolean).length
+  const [open, setOpen] = useState(isGroup)
+
+  return (
+    <li className="rounded-lg px-1 py-1">
+      <div className="flex items-center gap-3">
+        {isGroup || isTally ? (
+          <span
+            className="flex h-6 min-w-[2.5rem] flex-shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-xs font-bold"
+            style={{ backgroundColor: `${color}22`, color }}
+          >
+            {isGroup ? `${kids.filter((c) => wp.children[c.id]).length}/${kids.length}` : `${tallyDone}/${item.target}`}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={`Toggle ${item.title}`}
+            className={[
+              'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
+              done ? 'text-bg' : 'border-border',
+            ].join(' ')}
+            style={done ? { backgroundColor: color, borderColor: color } : undefined}
+          >
+            {done && <CheckIcon className="h-4 w-4" />}
+          </button>
+        )}
+        <span
+          className={[
+            'min-w-0 flex-1 break-words',
+            complete ? 'text-gray-500 line-through' : 'text-gray-100',
+          ].join(' ')}
+        >
+          {item.title}
+          {item.note && (
+            <span className="ml-1.5 font-mono text-[11px] text-gray-500">· {item.note}</span>
+          )}
+        </span>
+        {(isGroup || isTally) && (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-label={`${open ? 'Collapse' : 'Expand'} ${item.title}`}
+            aria-expanded={open}
+            className="flex-shrink-0 rounded-md bg-white/5 p-1.5 text-gray-400 active:scale-95"
+          >
+            <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+        )}
+      </div>
+      {isTally && open && (
+        <div className="ml-7 mt-2">
+          <TallyBoxes checks={checks} target={item.target} color={color} onToggle={onToggleBox} />
+        </div>
+      )}
+      {isGroup && open && (
+        <ul className="ml-7 mt-1 space-y-1 border-l border-border pl-3">
+          {kids.map((c) => {
+            const cdone = !!wp.children[c.id]
+            return (
+              <li key={c.id} className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => onToggleChild(c.id)}
+                  aria-label={`Toggle ${c.title}`}
+                  className={[
+                    'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 active:scale-95',
+                    cdone ? 'text-bg' : 'border-border',
+                  ].join(' ')}
+                  style={cdone ? { backgroundColor: color, borderColor: color } : undefined}
+                >
+                  {cdone && <CheckIcon className="h-3.5 w-3.5" />}
+                </button>
+                <span
+                  className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}
+                >
+                  {c.title}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </li>
   )
 }
 
