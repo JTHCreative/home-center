@@ -86,15 +86,25 @@ export default function Habits() {
   const balanceOf = (memberId) => balanceIn(progress, purchases, memberId)
   const weekPointsOf = (memberId) => weekPoints(wp, memberId)
 
-  // --- Progress mutations (per member, per habit, for the selected week) -----
+  // --- Progress mutations (per habit, for the selected week) -----------------
+  // A habit is shared by its assigned members (no assignment = everyone on the
+  // board), so one member's check is mirrored to every sharer: the acting
+  // member's entry is computed first, then written for the whole group. That
+  // keeps all lists in sync — and re-syncs any that drifted — for checks and
+  // unchecks alike.
+  const sharedWith = (itemId) => {
+    const assigned = habitItems.find((it) => it.id === itemId)?.habitMembers || []
+    return assigned.length === 0 ? roster : assigned
+  }
   const editEntry = (memberId, itemId, fn) =>
     setProgress((p) => {
       const week = p[weekKey] || {}
-      const mem = week[memberId] || {}
-      return {
-        ...p,
-        [weekKey]: { ...week, [memberId]: { ...mem, [itemId]: fn(mem[itemId] || {}) } },
+      const entry = fn(week[memberId]?.[itemId] || {})
+      const next = { ...week }
+      for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
+        next[mid] = { ...(next[mid] || {}), [itemId]: entry }
       }
+      return { ...p, [weekKey]: next }
     })
   const toggleCheckbox = (memberId, itemId) =>
     editEntry(memberId, itemId, (e) => ({ ...e, done: !e.done }))
