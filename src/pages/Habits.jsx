@@ -830,6 +830,18 @@ function MemberCard({ member, habits, entries, balance, lifetime, weekPoints, on
   )
 }
 
+// The habit row's name area: a button (tap to expand) for tally habits, a
+// plain div for checkbox habits, with the same layout either way.
+function NameArea({ asButton, onClick, label, children }) {
+  const className = 'flex min-w-0 flex-1 items-center gap-2 text-left'
+  if (!asButton) return <div className={className}>{children}</div>
+  return (
+    <button type="button" onClick={onClick} aria-label={label} className={`${className} active:opacity-70`}>
+      {children}
+    </button>
+  )
+}
+
 // A single habit line: the same interaction as the Goals page — checkbox for
 // simple habits; for tally habits a read-only count badge with a chevron that
 // folds the tally boxes onto a row beneath. Titles wrap instead of truncating.
@@ -871,7 +883,12 @@ function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
           </button>
         )}
 
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        {/* For tally habits the name is a tap target too — same as the chevron. */}
+        <NameArea
+          asButton={isTally}
+          onClick={() => setOpen((o) => !o)}
+          label={`${open ? 'Collapse' : 'Expand'} ${item.title}`}
+        >
           {/* Dot in the source list's color ties the habit back to Goals. */}
           <span
             className="h-2 w-2 flex-shrink-0 rounded-full"
@@ -885,7 +902,7 @@ function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
           >
             {item.title}
           </span>
-        </div>
+        </NameArea>
 
         {points > 0 && (
           <span className="flex-shrink-0 font-mono text-xs font-bold text-accent">+{points}★</span>
