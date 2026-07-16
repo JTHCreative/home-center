@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   GripIcon,
   PlusIcon,
   StarIcon,
@@ -113,6 +114,8 @@ const newItem = () => ({
   title: '',
   type: 'checkbox',
   target: 7,
+  // Daily goal: locked to 7 tally boxes, one per day of the week (Su–Sa).
+  daily: false,
   note: '',
   children: [],
   // Habit tracking: habits also appear on the Habits page, where each check
@@ -214,10 +217,14 @@ export default function Goals() {
     const children = (itemDraft.item.children || [])
       .map((c) => ({ id: c.id, title: c.title.trim() }))
       .filter((c) => c.title)
+    const daily =
+      children.length === 0 && itemDraft.item.type === 'tally' && !!itemDraft.item.daily
     const item = {
       ...itemDraft.item,
       title: itemDraft.item.title.trim(),
-      target: Math.max(1, Number(itemDraft.item.target) || 1),
+      daily,
+      // A daily goal is always one box per day of the week.
+      target: daily ? 7 : Math.max(1, Number(itemDraft.item.target) || 1),
       children,
       // Checklists (with sub-items) can't be habits — points are per check.
       habit: children.length === 0 && !!itemDraft.item.habit,
@@ -672,7 +679,13 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
       {/* Tally boxes, on their own row so the title never gets squeezed */}
       {isTally && open && (
         <div className="ml-9 mt-2">
-          <TallyBoxes checks={checks} target={item.target} color={color} onToggle={onToggleBox} />
+          <TallyBoxes
+            checks={checks}
+            target={item.target}
+            color={color}
+            onToggle={onToggleBox}
+            daily={!!item.daily}
+          />
         </div>
       )}
 
@@ -833,14 +846,52 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
             {!hasChildren && item.type === 'tally' && (
               <div>
                 <label className="mb-1 block text-xs text-gray-500">Number of boxes</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  className={fieldClass}
-                  value={item.target}
-                  onChange={(e) => set({ target: e.target.value })}
-                />
+                <div className="flex items-center gap-4">
+                  {/* Compact stepper — a daily goal is locked to 7 boxes. */}
+                  <div
+                    className={[
+                      'flex flex-shrink-0 items-center rounded-xl border border-border bg-bg p-1',
+                      item.daily ? 'opacity-50' : '',
+                    ].join(' ')}
+                  >
+                    <button
+                      type="button"
+                      disabled={!!item.daily}
+                      onClick={() => set({ target: Math.max(1, (Number(item.target) || 1) - 1) })}
+                      aria-label="Fewer boxes"
+                      className="rounded-lg p-2.5 text-gray-300 active:scale-95 active:bg-white/5"
+                    >
+                      <ChevronDown className="h-5 w-5" />
+                    </button>
+                    <span className="w-10 text-center font-mono text-lg font-bold text-white">
+                      {item.daily ? 7 : Math.max(1, Number(item.target) || 1)}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!!item.daily}
+                      onClick={() => set({ target: Math.min(31, (Number(item.target) || 1) + 1) })}
+                      aria-label="More boxes"
+                      className="rounded-lg p-2.5 text-gray-300 active:scale-95 active:bg-white/5"
+                    >
+                      <ChevronUp className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="block text-sm font-semibold text-gray-200">
+                        Make Daily Goal
+                      </span>
+                      <span className="block text-xs text-gray-500">
+                        7 boxes, one per day (Su–Sa)
+                      </span>
+                    </div>
+                    <Toggle
+                      checked={!!item.daily}
+                      onChange={(v) => set(v ? { daily: true, target: 7 } : { daily: false })}
+                      label="Make Daily Goal"
+                    />
+                  </div>
+                </div>
               </div>
             )}
 

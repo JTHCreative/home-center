@@ -772,7 +772,13 @@ function DashGoalRow({ item, color, wp, onToggle, onToggleBox, onToggleChild }) 
       </div>
       {isTally && open && (
         <div className="ml-7 mt-2">
-          <TallyBoxes checks={checks} target={item.target} color={color} onToggle={onToggleBox} />
+          <TallyBoxes
+            checks={checks}
+            target={item.target}
+            color={color}
+            onToggle={onToggleBox}
+            daily={!!item.daily}
+          />
         </div>
       )}
       {isGroup && open && (

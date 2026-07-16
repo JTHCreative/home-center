@@ -576,7 +576,13 @@ function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
       {/* Tally boxes, on their own row so long habit names keep full width */}
       {isTally && open && (
         <div className="ml-10 mt-2">
-          <TallyBoxes checks={checks} target={item.target} color={color} onToggle={onToggleBox} />
+          <TallyBoxes
+            checks={checks}
+            target={item.target}
+            color={color}
+            onToggle={onToggleBox}
+            daily={!!item.daily}
+          />
         </div>
       )}
     </li>
