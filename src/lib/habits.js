@@ -36,9 +36,23 @@ export const totalEarned = (progress, memberId) =>
 export const totalSpent = (purchases, memberId) =>
   (purchases || []).reduce((sum, p) => (p.memberId === memberId ? sum + p.cost : sum), 0)
 
-// Spendable balance: lifetime earned minus shop spending.
-export const balanceOf = (progress, purchases, memberId) =>
-  totalEarned(progress, memberId) - totalSpent(purchases, memberId)
+// Points a member has moved from their personal stash into point pools.
+export const totalContributed = (pools, memberId) =>
+  (pools || []).reduce(
+    (sum, pool) =>
+      sum +
+      (pool.contributions || []).reduce((s, c) => (c.memberId === memberId ? s + c.amount : s), 0),
+    0,
+  )
+
+// Points remaining in a pool: contributions minus rewards redeemed from it.
+export const poolBalance = (pool, purchases) =>
+  (pool?.contributions || []).reduce((s, c) => s + c.amount, 0) -
+  (purchases || []).reduce((s, p) => (p.poolId === pool?.id ? s + p.cost : s), 0)
+
+// Spendable balance: lifetime earned minus shop spending minus pool contributions.
+export const balanceOf = (progress, purchases, memberId, pools = []) =>
+  totalEarned(progress, memberId) - totalSpent(purchases, memberId) - totalContributed(pools, memberId)
 
 // Points a member has earned in one week's slice of the progress map.
 export const weekPoints = (weekProgress, memberId) =>

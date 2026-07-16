@@ -821,6 +821,7 @@ function HabitsModule() {
   const [roster] = useLocalState('habits-roster', [])
   const [progress] = useLocalState('habits-progress', {})
   const [purchases] = useLocalState('habits-purchases', [])
+  const [pools] = useLocalState('habits-pools', [])
 
   const wp = progress[weekKeyNow()] || {}
   const habitItems = useMemo(() => habitItemsOf(sections), [sections])
@@ -853,7 +854,7 @@ function HabitsModule() {
               {target > 0 ? `${done}/${target} this week` : 'No habits yet'}
             </span>
             <span className="flex flex-shrink-0 items-center gap-1 rounded-lg bg-accent/15 px-2 py-1 font-mono text-sm font-bold text-accent">
-              <StarIcon className="h-3.5 w-3.5" /> {balanceOf(progress, purchases, m.id)}
+              <StarIcon className="h-3.5 w-3.5" /> {balanceOf(progress, purchases, m.id, pools)}
             </span>
           </li>
         )
