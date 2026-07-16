@@ -88,31 +88,44 @@ export default function Habits() {
 
   // --- Progress mutations (per habit, for the selected week) -----------------
   // A habit is shared by its assigned members (no assignment = everyone on the
-  // board), so one member's check is mirrored to every sharer: the acting
-  // member's entry is computed first, then written for the whole group. That
-  // keeps all lists in sync — and re-syncs any that drifted — for checks and
-  // unchecks alike.
+  // board). One member's check mirrors the displayed state (done/checks) to
+  // every sharer's list — and re-syncs any that drifted — but only the acting
+  // member is marked `earned`, so the point goes to whoever actually did it.
+  // Unchecking clears the display and the earned credit for the whole group.
   const sharedWith = (itemId) => {
     const assigned = habitItems.find((it) => it.id === itemId)?.habitMembers || []
     return assigned.length === 0 ? roster : assigned
   }
-  const editEntry = (memberId, itemId, fn) =>
+  const toggleCheckbox = (memberId, itemId) =>
     setProgress((p) => {
       const week = p[weekKey] || {}
-      const entry = fn(week[memberId]?.[itemId] || {})
+      const done = !week[memberId]?.[itemId]?.done
       const next = { ...week }
       for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
-        next[mid] = { ...(next[mid] || {}), [itemId]: entry }
+        const e = next[mid]?.[itemId] || {}
+        next[mid] = { ...(next[mid] || {}), [itemId]: { ...e, done, earned: done && mid === memberId } }
       }
       return { ...p, [weekKey]: next }
     })
-  const toggleCheckbox = (memberId, itemId) =>
-    editEntry(memberId, itemId, (e) => ({ ...e, done: !e.done }))
   const toggleTally = (memberId, itemId, index, target) =>
-    editEntry(memberId, itemId, (e) => {
-      const checks = Array.from({ length: target }, (_, i) => e.checks?.[i] || false)
-      checks[index] = !checks[index]
-      return { ...e, checks }
+    setProgress((p) => {
+      const week = p[weekKey] || {}
+      const actor = week[memberId]?.[itemId] || {}
+      const on = !actor.checks?.[index]
+      const next = { ...week }
+      for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
+        const e = next[mid]?.[itemId] || {}
+        const checks = Array.from({ length: target }, (_, i) =>
+          i === index ? on : actor.checks?.[i] || false,
+        )
+        // Entries from before attribution existed earned their own checks.
+        const base = Array.isArray(e.earned) ? e.earned : e.checks || []
+        const earned = Array.from({ length: target }, (_, i) =>
+          i === index ? on && mid === memberId : !!base[i] && checks[i],
+        )
+        next[mid] = { ...(next[mid] || {}), [itemId]: { ...e, checks, earned } }
+      }
+      return { ...p, [weekKey]: next }
     })
 
   // --- Roster ops (history is kept when a member is removed from the board) --
@@ -517,11 +530,14 @@ function MemberCard({ member, habits, entries, balance, lifetime, weekPoints, on
 // folds the tally boxes onto a row beneath. Titles wrap instead of truncating.
 // The accent chip shows the points this habit has earned in the selected week.
 function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
+  // `points` is what THIS member earned; the badge and strikethrough follow
+  // the displayed state, which a shared habit mirrors across all sharers.
   const points = entryPoints(entry)
   const isTally = item.type === 'tally'
   const checks = entry.checks || []
+  const filled = checks.slice(0, item.target).filter(Boolean).length
   const done = !!entry.done
-  const complete = isTally ? points >= item.target && item.target > 0 : done
+  const complete = isTally ? filled >= item.target && item.target > 0 : done
   const [open, setOpen] = useState(false)
 
   return (
@@ -533,7 +549,7 @@ function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
             className="flex h-7 min-w-[2.75rem] flex-shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-xs font-bold"
             style={{ backgroundColor: `${color}22`, color }}
           >
-            {points}/{item.target}
+            {filled}/{item.target}
           </span>
         ) : (
           <button
