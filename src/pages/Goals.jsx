@@ -34,7 +34,8 @@ import {
 } from '../components/Icons.jsx'
 import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
-import { applyGoalToHabits } from '../lib/habits.js'
+import { applyGoalToHabits, habitSharers } from '../lib/habits.js'
+import WhoDidItModal from '../components/WhoDidIt.jsx'
 
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
@@ -137,6 +138,7 @@ export default function Goals() {
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
   const [fullSectionId, setFullSectionId] = useState(null) // section opened full screen
+  const [whoDidIt, setWhoDidIt] = useState(null) // { itemId, change, title, sharers } — point picker
 
   // Derived so live edits/toggles show while the full-screen view is open.
   const fullSection = sections.find((s) => s.id === fullSectionId) || null
@@ -178,7 +180,9 @@ export default function Goals() {
       return { ...p, [weekKey]: fn(cur) }
     })
   // Checking a habit-flagged goal also mirrors into the Habits page for the
-  // same week (and vice versa, from Habits.jsx).
+  // same week (and vice versa, from Habits.jsx). When a shared habit is
+  // checked here, the actor is unknown — a "Who did it?" picker follows so
+  // the point lands with the right member (dismiss = no one).
   const syncHabit = (itemId, change) => {
     const item = sections.flatMap((s) => s.items).find((it) => it.id === itemId)
     if (!item?.habit) return
@@ -186,6 +190,25 @@ export default function Goals() {
       ...p,
       [weekKey]: applyGoalToHabits(p[weekKey], item, habitsRoster, change),
     }))
+    const sharers = habitSharers(item, habitsRoster)
+    const checkedOn = change.kind === 'checkbox' ? change.done : change.on
+    if (checkedOn && sharers.length > 1) {
+      setWhoDidIt({ itemId, change, title: item.title, sharers })
+    }
+  }
+  // Re-apply the same change with the picked member as the point earner.
+  const creditHabit = (memberId) => {
+    const item = sections.flatMap((s) => s.items).find((it) => it.id === whoDidIt.itemId)
+    if (item?.habit) {
+      setHabitsProgress((p) => ({
+        ...p,
+        [weekKey]: applyGoalToHabits(p[weekKey], item, habitsRoster, {
+          ...whoDidIt.change,
+          credit: memberId,
+        }),
+      }))
+    }
+    setWhoDidIt(null)
   }
   const toggleCheckbox = (itemId) => {
     const done = !wp.items[itemId]?.done
@@ -455,6 +478,17 @@ export default function Goals() {
 
       <SectionModal draft={sectionDraft} setDraft={setSectionDraft} onClose={() => setSectionDraft(null)} onSave={saveSection} />
       <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} members={members} />
+
+      {/* Rendered last so it stacks above the full-screen list view. */}
+      <WhoDidItModal
+        open={!!whoDidIt}
+        title={whoDidIt?.title}
+        members={(whoDidIt?.sharers || [])
+          .map((id) => (Array.isArray(members) ? members : []).find((m) => m.id === id))
+          .filter(Boolean)}
+        onPick={creditHabit}
+        onClose={() => setWhoDidIt(null)}
+      />
     </div>
   )
 }

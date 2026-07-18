@@ -80,23 +80,25 @@ export const habitSharers = (item, roster) =>
   (item?.habitMembers || []).length > 0 ? item.habitMembers : roster || []
 
 // Push a Goals-page change into one week of habits progress. The displayed
-// state (done/checks) mirrors to every sharer; the point (earned) goes to the
-// habit's single member when that's unambiguous, and to no one when the habit
-// is shared — the Goals page doesn't know who did it.
-// change: { kind: 'checkbox', done } | { kind: 'tally', checks, index, on }
+// state (done/checks) mirrors to every sharer. The point (earned) goes to
+// change.credit when set (the member picked in the "Who did it?" dialog),
+// else to the habit's single member when that's unambiguous, else to no one.
+// change: { kind: 'checkbox', done } | { kind: 'tally', checks, index, on },
+// optionally with credit: memberId.
 export const applyGoalToHabits = (weekSlice, item, roster, change) => {
   const sharers = habitSharers(item, roster)
-  const sole = sharers.length === 1 ? sharers[0] : null
+  const credit =
+    'credit' in change ? change.credit : sharers.length === 1 ? sharers[0] : null
   const next = { ...(weekSlice || {}) }
   for (const mid of sharers) {
     const e = next[mid]?.[item.id] || {}
     let patch
     if (change.kind === 'checkbox') {
-      patch = { done: change.done, earned: change.done && mid === sole }
+      patch = { done: change.done, earned: change.done && mid === credit }
     } else {
       const base = Array.isArray(e.earned) ? e.earned : e.checks || []
       const earned = change.checks.map((c, i) =>
-        i === change.index ? change.on && mid === sole : !!base[i] && !!c,
+        i === change.index ? change.on && mid === credit : !!base[i] && !!c,
       )
       patch = { checks: change.checks, earned }
     }
