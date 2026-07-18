@@ -11,6 +11,7 @@ import {
   entryPoints,
   habitItemsOf,
   habitsFor as habitsIn,
+  poolBalance,
   totalEarned,
   weekPoints,
 } from '../lib/habits.js'
@@ -19,12 +20,14 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   CloseIcon,
   GiftIcon,
   PencilIcon,
   PlusIcon,
   StarIcon,
   TrashIcon,
+  UsersIcon,
 } from '../components/Icons.jsx'
 
 // --- Date helpers (same Sunday-start week scheme as Goals) -------------------
@@ -59,11 +62,18 @@ export default function Habits() {
   const [roster, setRoster] = useLocalState('habits-roster', []) // member ids shown on this page
   const [progress, setProgress] = useLocalState('habits-progress', {}) // weekKey -> memberId -> itemId -> { done | checks }
   const [rewards, setRewards] = useLocalState('habits-rewards', REWARDS_SEED)
-  const [purchases, setPurchases] = useLocalState('habits-purchases', []) // [{ id, memberId, title, cost, date }]
+  const [, setGoalsProgress] = useLocalState('goals-progress', {}) // write-through: habit checks mirror onto the Goals page
+  // Purchases carry either memberId (personal redemption) or poolId (redeemed
+  // together from a point pool).
+  const [purchases, setPurchases] = useLocalState('habits-purchases', [])
+  // Point pools: shared stashes members chip into and redeem from together.
+  const [pools, setPools] = useLocalState('habits-pools', []) // [{ id, title, contributions: [{ id, memberId, amount, date }] }]
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [addOpen, setAddOpen] = useState(false)
   const [rewardDraft, setRewardDraft] = useState(null) // reward being added/edited
   const [redeeming, setRedeeming] = useState(null) // reward being redeemed
+  const [poolDraft, setPoolDraft] = useState(null) // new pool being named
+  const [chipIn, setChipIn] = useState(null) // { poolId, memberId, amount }
 
   const weekKey = iso(weekStart)
   const wp = progress[weekKey] || {}
@@ -82,8 +92,9 @@ export default function Habits() {
   const habitsFor = (memberId) => habitsIn(habitItems, memberId)
 
   // Spendable balance = lifetime points earned across all weeks, minus shop
-  // spending. Lifetime earned is shown separately (it never goes down).
-  const balanceOf = (memberId) => balanceIn(progress, purchases, memberId)
+  // spending, minus points chipped into pools. Lifetime earned is shown
+  // separately (it never goes down).
+  const balanceOf = (memberId) => balanceIn(progress, purchases, memberId, pools)
   const weekPointsOf = (memberId) => weekPoints(wp, memberId)
 
   // --- Progress mutations (per habit, for the selected week) -----------------
@@ -96,10 +107,20 @@ export default function Habits() {
     const assigned = habitItems.find((it) => it.id === itemId)?.habitMembers || []
     return assigned.length === 0 ? roster : assigned
   }
-  const toggleCheckbox = (memberId, itemId) =>
+  // Every habit is a goal item, so its displayed state also mirrors onto the
+  // Goals page (and dashboard module) for the same week — and vice versa.
+  const writeGoalEntry = (itemId, patch) =>
+    setGoalsProgress((gp) => {
+      const wk = gp[weekKey] || { items: {}, children: {} }
+      return {
+        ...gp,
+        [weekKey]: { ...wk, items: { ...wk.items, [itemId]: { ...wk.items[itemId], ...patch } } },
+      }
+    })
+  const toggleCheckbox = (memberId, itemId) => {
+    const done = !wp[memberId]?.[itemId]?.done
     setProgress((p) => {
       const week = p[weekKey] || {}
-      const done = !week[memberId]?.[itemId]?.done
       const next = { ...week }
       for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
         const e = next[mid]?.[itemId] || {}
@@ -107,17 +128,19 @@ export default function Habits() {
       }
       return { ...p, [weekKey]: next }
     })
-  const toggleTally = (memberId, itemId, index, target) =>
+    writeGoalEntry(itemId, { done })
+  }
+  const toggleTally = (memberId, itemId, index, target) => {
+    const actor = wp[memberId]?.[itemId] || {}
+    const on = !actor.checks?.[index]
+    const checks = Array.from({ length: target }, (_, i) =>
+      i === index ? on : actor.checks?.[i] || false,
+    )
     setProgress((p) => {
       const week = p[weekKey] || {}
-      const actor = week[memberId]?.[itemId] || {}
-      const on = !actor.checks?.[index]
       const next = { ...week }
       for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
         const e = next[mid]?.[itemId] || {}
-        const checks = Array.from({ length: target }, (_, i) =>
-          i === index ? on : actor.checks?.[i] || false,
-        )
         // Entries from before attribution existed earned their own checks.
         const base = Array.isArray(e.earned) ? e.earned : e.checks || []
         const earned = Array.from({ length: target }, (_, i) =>
@@ -127,6 +150,8 @@ export default function Habits() {
       }
       return { ...p, [weekKey]: next }
     })
+    writeGoalEntry(itemId, { checks })
+  }
 
   // --- Roster ops (history is kept when a member is removed from the board) --
   const addToRoster = (id) => setRoster((r) => (r.includes(id) ? r : [...r, id]))
@@ -150,12 +175,13 @@ export default function Habits() {
     setRewards((list) => list.filter((r) => r.id !== id))
     setRewardDraft(null)
   }
-  const redeem = (reward, memberId) => {
+  // Redeem for one member ({ memberId }) or together from a pool ({ poolId }).
+  const redeem = (reward, target) => {
     setPurchases((list) => [
       ...list,
       {
         id: crypto.randomUUID(),
-        memberId,
+        ...target,
         title: reward.title,
         cost: reward.cost,
         date: iso(new Date()),
@@ -163,8 +189,42 @@ export default function Habits() {
     ])
     setRedeeming(null)
   }
-  // Undo a redemption — refunds the points.
+  // Undo a redemption — refunds the points (to the member or the pool).
   const removePurchase = (id) => setPurchases((list) => list.filter((p) => p.id !== id))
+
+  // --- Pool ops ---------------------------------------------------------------
+  const savePool = () => {
+    if (!poolDraft.title.trim()) return
+    setPools((list) => [
+      ...list,
+      { id: poolDraft.id, title: poolDraft.title.trim(), contributions: [] },
+    ])
+    setPoolDraft(null)
+  }
+  // Deleting a pool hands every contribution back to its member, so it's only
+  // offered (see below) while nothing has been redeemed from the pool.
+  const removePool = (id) => setPools((list) => list.filter((p) => p.id !== id))
+  const saveChipIn = () => {
+    const amount = Math.min(
+      Math.max(1, Number(chipIn.amount) || 0),
+      Math.max(0, balanceOf(chipIn.memberId)),
+    )
+    if (amount < 1) return
+    setPools((list) =>
+      list.map((p) =>
+        p.id === chipIn.poolId
+          ? {
+              ...p,
+              contributions: [
+                ...(p.contributions || []),
+                { id: crypto.randomUUID(), memberId: chipIn.memberId, amount, date: iso(new Date()) },
+              ],
+            }
+          : p,
+      ),
+    )
+    setChipIn(null)
+  }
 
   // Week label, e.g. "Jun 8 – Jun 14" (mirrors the Goals navigator).
   const weekEnd = addDays(weekStart, 6)
@@ -305,14 +365,25 @@ export default function Habits() {
               <ul className="space-y-1">
                 {recentPurchases.map((p) => {
                   const member = members.find((m) => m.id === p.memberId)
+                  const pool = pools.find((pl) => pl.id === p.poolId)
                   return (
                     <li key={p.id} className="flex items-center gap-3 py-1.5">
                       {member ? (
                         <MemberBadge member={member} size={22} />
+                      ) : pool ? (
+                        <span
+                          title={pool.title}
+                          className="flex h-[22px] w-[22px] flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent"
+                        >
+                          <UsersIcon className="h-3.5 w-3.5" />
+                        </span>
                       ) : (
                         <span className="h-[22px] w-[22px] flex-shrink-0 rounded-full bg-white/10" />
                       )}
-                      <span className="flex-1 truncate text-sm text-gray-300">{p.title}</span>
+                      <span className="flex-1 truncate text-sm text-gray-300">
+                        {p.title}
+                        {pool && <span className="text-gray-500"> · {pool.title}</span>}
+                      </span>
                       <span className="font-mono text-xs text-loss">-{p.cost}★</span>
                       <span className="w-14 flex-shrink-0 text-right font-mono text-xs text-gray-500">
                         {p.date?.slice(5).replace('-', '/')}
@@ -331,6 +402,95 @@ export default function Habits() {
                 })}
               </ul>
             </div>
+          )}
+        </Card>
+
+        {/* Point pools — shared stashes members chip into and redeem together. */}
+        <Card className="lg:col-span-2">
+          <div className="mb-4 flex items-center gap-3 border-b border-border pb-3">
+            <UsersIcon className="h-5 w-5 text-accent" />
+            <h2 className="flex-1 text-lg font-bold text-white">Point Pools</h2>
+            <button
+              type="button"
+              onClick={() => setPoolDraft({ id: crypto.randomUUID(), title: '' })}
+              className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-sm font-semibold text-gray-300 active:scale-95"
+            >
+              <PlusIcon className="h-4 w-4" /> Pool
+            </button>
+          </div>
+
+          {pools.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              No pools yet — create one to save up for a shared reward together.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {pools.map((pool) => {
+                const bal = poolBalance(pool, purchases)
+                const hasRedemptions = purchases.some((p) => p.poolId === pool.id)
+                // Per-member totals, in household order, for the breakdown chips.
+                const shares = members
+                  .map((m) => ({
+                    member: m,
+                    amount: (pool.contributions || []).reduce(
+                      (s, c) => (c.memberId === m.id ? s + c.amount : s),
+                      0,
+                    ),
+                  }))
+                  .filter((s) => s.amount > 0)
+                return (
+                  <li key={pool.id} className="rounded-xl bg-white/5 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5 rounded-lg bg-accent/15 px-2.5 py-1 font-mono text-sm font-bold text-accent">
+                        <StarIcon className="h-4 w-4" /> {bal}
+                      </span>
+                      <span className="min-w-0 flex-1 break-words font-semibold text-gray-100">
+                        {pool.title}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setChipIn({ poolId: pool.id, memberId: rosterMembers[0]?.id, amount: 1 })
+                        }
+                        disabled={rosterMembers.length === 0}
+                        className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-sm font-semibold text-gray-300 active:scale-95 disabled:opacity-50"
+                      >
+                        <PlusIcon className="h-4 w-4" /> Chip In
+                      </button>
+                      {/* Deleting refunds every contribution, so it's only
+                          offered before anything has been redeemed. */}
+                      {!hasRedemptions && (
+                        <button
+                          type="button"
+                          onClick={() => removePool(pool.id)}
+                          aria-label={`Delete ${pool.title}`}
+                          title="Delete pool (refunds all contributions)"
+                          className="rounded p-1.5 text-gray-600 active:scale-95 active:text-loss"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    {shares.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {shares.map(({ member, amount }) => (
+                          <span
+                            key={member.id}
+                            className="flex items-center gap-1.5 rounded-lg bg-white/5 px-2 py-1 text-xs text-gray-300"
+                          >
+                            <MemberBadge member={member} size={18} />
+                            <span className="font-semibold" style={{ color: member.color }}>
+                              {member.name}
+                            </span>
+                            <span className="font-mono text-gray-400">{amount}★</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
           )}
         </Card>
       </div>
@@ -442,7 +602,7 @@ export default function Habits() {
                   key={m.id}
                   type="button"
                   disabled={!canAfford}
-                  onClick={() => redeem(redeeming, m.id)}
+                  onClick={() => redeem(redeeming, { memberId: m.id })}
                   className={[
                     'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left active:scale-[0.98]',
                     canAfford ? 'bg-white/5' : 'cursor-not-allowed bg-white/[0.02] opacity-50',
@@ -458,6 +618,166 @@ export default function Habits() {
                 </button>
               )
             })}
+          </div>
+
+          {/* Or redeem together from a point pool */}
+          {pools.length > 0 && (
+            <>
+              <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Pools
+              </h3>
+              <div className="space-y-2">
+                {pools.map((pool) => {
+                  const bal = poolBalance(pool, purchases)
+                  const canAfford = bal >= redeeming.cost
+                  return (
+                    <button
+                      key={pool.id}
+                      type="button"
+                      disabled={!canAfford}
+                      onClick={() => redeem(redeeming, { poolId: pool.id })}
+                      className={[
+                        'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left active:scale-[0.98]',
+                        canAfford ? 'bg-white/5' : 'cursor-not-allowed bg-white/[0.02] opacity-50',
+                      ].join(' ')}
+                    >
+                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+                        <UsersIcon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-semibold text-gray-100">
+                        {pool.title}
+                      </span>
+                      <span className="font-mono text-sm text-gray-400">
+                        {bal}★ {!canAfford && '· not enough'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
+
+      {/* Name a new point pool */}
+      {poolDraft && (
+        <Modal
+          open={!!poolDraft}
+          onClose={() => setPoolDraft(null)}
+          title="New Pool"
+          size="narrow"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setPoolDraft(null)}>
+                Cancel
+              </Button>
+              <Button onClick={savePool}>Create</Button>
+            </>
+          }
+        >
+          <label className="mb-2 block text-xs text-gray-500">Pool name</label>
+          <input
+            autoFocus
+            className={fieldClass}
+            placeholder="e.g. Disneyland Fund"
+            value={poolDraft.title}
+            onChange={(e) => setPoolDraft({ ...poolDraft, title: e.target.value })}
+          />
+        </Modal>
+      )}
+
+      {/* Chip points from a member's stash into a pool */}
+      {chipIn && (
+        <Modal
+          open={!!chipIn}
+          onClose={() => setChipIn(null)}
+          title={`Chip In: ${pools.find((p) => p.id === chipIn.poolId)?.title || ''}`}
+          size="narrow"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setChipIn(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={saveChipIn}
+                disabled={
+                  !chipIn.memberId ||
+                  balanceOf(chipIn.memberId) < 1 ||
+                  Math.max(1, Number(chipIn.amount) || 0) > balanceOf(chipIn.memberId)
+                }
+              >
+                Add Points
+              </Button>
+            </>
+          }
+        >
+          <label className="mb-2 block text-xs text-gray-500">Who&apos;s chipping in?</label>
+          <div className="mb-5 space-y-2">
+            {rosterMembers.map((m) => {
+              const balance = balanceOf(m.id)
+              const selected = chipIn.memberId === m.id
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setChipIn({ ...chipIn, memberId: m.id, amount: 1 })}
+                  className={[
+                    'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left active:scale-[0.98]',
+                    selected ? 'bg-accent/15 shadow-glow' : 'bg-white/5',
+                  ].join(' ')}
+                >
+                  <MemberBadge member={m} size={28} />
+                  <span className="flex-1 font-semibold" style={{ color: m.color }}>
+                    {m.name}
+                  </span>
+                  <span className="font-mono text-sm text-gray-400">{balance}★ available</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <label className="mb-2 block text-xs text-gray-500">Points to add</label>
+          <div className="flex items-center gap-3">
+            <div className="flex flex-shrink-0 items-center rounded-xl border border-border bg-bg p-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setChipIn({ ...chipIn, amount: Math.max(1, (Number(chipIn.amount) || 1) - 1) })
+                }
+                aria-label="Fewer points"
+                className="rounded-lg p-2.5 text-gray-300 active:scale-95 active:bg-white/5"
+              >
+                <ChevronDown className="h-5 w-5" />
+              </button>
+              <span className="w-10 text-center font-mono text-lg font-bold text-white">
+                {Math.max(1, Number(chipIn.amount) || 1)}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setChipIn({
+                    ...chipIn,
+                    amount: Math.min(
+                      Math.max(1, balanceOf(chipIn.memberId)),
+                      (Number(chipIn.amount) || 1) + 1,
+                    ),
+                  })
+                }
+                aria-label="More points"
+                className="rounded-lg p-2.5 text-gray-300 active:scale-95 active:bg-white/5"
+              >
+                <ChevronUp className="h-5 w-5" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setChipIn({ ...chipIn, amount: Math.max(1, balanceOf(chipIn.memberId)) })
+              }
+              className="rounded-lg bg-white/5 px-3 py-2 text-sm font-semibold text-gray-300 active:scale-95"
+            >
+              All ({Math.max(0, balanceOf(chipIn.memberId))}★)
+            </button>
           </div>
         </Modal>
       )}
@@ -525,6 +845,18 @@ function MemberCard({ member, habits, entries, balance, lifetime, weekPoints, on
   )
 }
 
+// The habit row's name area: a button (tap to expand) for tally habits, a
+// plain div for checkbox habits, with the same layout either way.
+function NameArea({ asButton, onClick, label, children }) {
+  const className = 'flex min-w-0 flex-1 items-center gap-2 text-left'
+  if (!asButton) return <div className={className}>{children}</div>
+  return (
+    <button type="button" onClick={onClick} aria-label={label} className={`${className} active:opacity-70`}>
+      {children}
+    </button>
+  )
+}
+
 // A single habit line: the same interaction as the Goals page — checkbox for
 // simple habits; for tally habits a read-only count badge with a chevron that
 // folds the tally boxes onto a row beneath. Titles wrap instead of truncating.
@@ -566,7 +898,12 @@ function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
           </button>
         )}
 
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        {/* For tally habits the name is a tap target too — same as the chevron. */}
+        <NameArea
+          asButton={isTally}
+          onClick={() => setOpen((o) => !o)}
+          label={`${open ? 'Collapse' : 'Expand'} ${item.title}`}
+        >
           {/* Dot in the source list's color ties the habit back to Goals. */}
           <span
             className="h-2 w-2 flex-shrink-0 rounded-full"
@@ -580,7 +917,7 @@ function HabitRow({ item, color, entry, onToggle, onToggleBox }) {
           >
             {item.title}
           </span>
-        </div>
+        </NameArea>
 
         {points > 0 && (
           <span className="flex-shrink-0 font-mono text-xs font-bold text-accent">+{points}★</span>

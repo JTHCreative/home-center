@@ -83,7 +83,8 @@ import {
   SEED_MEMBERS,
 } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
-import { balanceOf, habitItemsOf, habitsFor, weekPoints, weekTarget } from '../lib/habits.js'
+import { applyGoalToHabits, balanceOf, habitItemsOf, habitSharers, habitsFor, weekPoints, weekTarget } from '../lib/habits.js'
+import WhoDidItModal from '../components/WhoDidIt.jsx'
 import { MemberBadge } from '../components/Member.jsx'
 
 // --- Module registry ---------------------------------------------------------
@@ -659,23 +660,51 @@ function StocksModule({ watchlistId }) {
 function GoalsModule({ sectionId }) {
   const [sections] = useLocalState('goals-sections', GOALS_SEED, migrateColors)
   const [progress, setProgress] = useLocalState('goals-progress', {})
+  const [habitsRoster] = useLocalState('habits-roster', []) // read-only, for habit sync
+  const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors) // read-only, for point picker
+  const [, setHabitsProgress] = useLocalState('habits-progress', {}) // write-through: habit goals mirror into Habits
+  const [whoDidIt, setWhoDidIt] = useState(null) // { itemId, change, title, sharers }
   const section = sections.find((s) => s.id === sectionId) || sections[0]
   const wk = weekKeyNow()
   const wp = progress[wk] || EMPTY_WEEK
 
   const editWeek = (fn) => setProgress((p) => ({ ...p, [wk]: fn(p[wk] || EMPTY_WEEK) }))
-  const toggleCheckbox = (itemId) =>
-    editWeek((w) => {
-      const item = w.items[itemId] || {}
-      return { ...w, items: { ...w.items, [itemId]: { ...item, done: !item.done } } }
-    })
-  const toggleTally = (itemId, index, target) =>
-    editWeek((w) => {
-      const item = w.items[itemId] || {}
-      const checks = Array.from({ length: target }, (_, i) => item.checks?.[i] || false)
-      checks[index] = !checks[index]
-      return { ...w, items: { ...w.items, [itemId]: { ...item, checks } } }
-    })
+  // Habit-flagged goals mirror into the Habits page; checking a shared habit
+  // asks who earns the point (see Goals.jsx).
+  const syncHabit = (itemId, change) => {
+    const item = sections.flatMap((s) => s.items).find((it) => it.id === itemId)
+    if (!item?.habit) return
+    setHabitsProgress((p) => ({
+      ...p,
+      [wk]: applyGoalToHabits(p[wk], item, habitsRoster, change),
+    }))
+    const sharers = habitSharers(item, habitsRoster)
+    const checkedOn = change.kind === 'checkbox' ? change.done : change.on
+    if (checkedOn && sharers.length > 1) {
+      setWhoDidIt({ itemId, change, title: item.title, sharers })
+    }
+  }
+  const creditHabit = (memberId) => {
+    const item = sections.flatMap((s) => s.items).find((it) => it.id === whoDidIt.itemId)
+    if (item?.habit) {
+      setHabitsProgress((p) => ({
+        ...p,
+        [wk]: applyGoalToHabits(p[wk], item, habitsRoster, { ...whoDidIt.change, credit: memberId }),
+      }))
+    }
+    setWhoDidIt(null)
+  }
+  const toggleCheckbox = (itemId) => {
+    const done = !wp.items[itemId]?.done
+    editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: { ...w.items[itemId], done } } }))
+    syncHabit(itemId, { kind: 'checkbox', done })
+  }
+  const toggleTally = (itemId, index, target) => {
+    const cur = wp.items[itemId]?.checks || []
+    const checks = Array.from({ length: target }, (_, i) => (i === index ? !cur[i] : cur[i] || false))
+    editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: { ...w.items[itemId], checks } } }))
+    syncHabit(itemId, { kind: 'tally', checks, index, on: checks[index] })
+  }
   const toggleChild = (childId) =>
     editWeek((w) => ({ ...w, children: { ...w.children, [childId]: !w.children[childId] } }))
 
@@ -705,6 +734,16 @@ function GoalsModule({ sectionId }) {
           />
         ))}
       </ul>
+
+      <WhoDidItModal
+        open={!!whoDidIt}
+        title={whoDidIt?.title}
+        members={(whoDidIt?.sharers || [])
+          .map((id) => (Array.isArray(members) ? members : []).find((m) => m.id === id))
+          .filter(Boolean)}
+        onPick={creditHabit}
+        onClose={() => setWhoDidIt(null)}
+      />
     </div>
   )
 }
@@ -821,6 +860,7 @@ function HabitsModule() {
   const [roster] = useLocalState('habits-roster', [])
   const [progress] = useLocalState('habits-progress', {})
   const [purchases] = useLocalState('habits-purchases', [])
+  const [pools] = useLocalState('habits-pools', [])
 
   const wp = progress[weekKeyNow()] || {}
   const habitItems = useMemo(() => habitItemsOf(sections), [sections])
@@ -853,7 +893,7 @@ function HabitsModule() {
               {target > 0 ? `${done}/${target} this week` : 'No habits yet'}
             </span>
             <span className="flex flex-shrink-0 items-center gap-1 rounded-lg bg-accent/15 px-2 py-1 font-mono text-sm font-bold text-accent">
-              <StarIcon className="h-3.5 w-3.5" /> {balanceOf(progress, purchases, m.id)}
+              <StarIcon className="h-3.5 w-3.5" /> {balanceOf(progress, purchases, m.id, pools)}
             </span>
           </li>
         )
