@@ -70,6 +70,41 @@ export const habitsFor = (items, memberId) =>
     (it) => (it.habitMembers || []).length === 0 || it.habitMembers.includes(memberId),
   )
 
+// --- Goals <-> Habits sync ---------------------------------------------------
+// A goal flagged as a habit tracks the same act in two stores: goals-progress
+// (one shared entry per item) and habits-progress (per member). Checking on
+// either page mirrors into the other for the same week.
+
+// Members a habit belongs to (no assignment = everyone on the board).
+export const habitSharers = (item, roster) =>
+  (item?.habitMembers || []).length > 0 ? item.habitMembers : roster || []
+
+// Push a Goals-page change into one week of habits progress. The displayed
+// state (done/checks) mirrors to every sharer; the point (earned) goes to the
+// habit's single member when that's unambiguous, and to no one when the habit
+// is shared — the Goals page doesn't know who did it.
+// change: { kind: 'checkbox', done } | { kind: 'tally', checks, index, on }
+export const applyGoalToHabits = (weekSlice, item, roster, change) => {
+  const sharers = habitSharers(item, roster)
+  const sole = sharers.length === 1 ? sharers[0] : null
+  const next = { ...(weekSlice || {}) }
+  for (const mid of sharers) {
+    const e = next[mid]?.[item.id] || {}
+    let patch
+    if (change.kind === 'checkbox') {
+      patch = { done: change.done, earned: change.done && mid === sole }
+    } else {
+      const base = Array.isArray(e.earned) ? e.earned : e.checks || []
+      const earned = change.checks.map((c, i) =>
+        i === change.index ? change.on && mid === sole : !!base[i] && !!c,
+      )
+      patch = { checks: change.checks, earned }
+    }
+    next[mid] = { ...(next[mid] || {}), [item.id]: { ...e, ...patch } }
+  }
+  return next
+}
+
 // Maximum points a set of habits can earn in one week (1 per checkbox, the
 // target count per tally habit).
 export const weekTarget = (items) =>

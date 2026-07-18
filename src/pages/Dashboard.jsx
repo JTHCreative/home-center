@@ -83,7 +83,7 @@ import {
   SEED_MEMBERS,
 } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
-import { balanceOf, habitItemsOf, habitsFor, weekPoints, weekTarget } from '../lib/habits.js'
+import { applyGoalToHabits, balanceOf, habitItemsOf, habitsFor, weekPoints, weekTarget } from '../lib/habits.js'
 import { MemberBadge } from '../components/Member.jsx'
 
 // --- Module registry ---------------------------------------------------------
@@ -659,23 +659,33 @@ function StocksModule({ watchlistId }) {
 function GoalsModule({ sectionId }) {
   const [sections] = useLocalState('goals-sections', GOALS_SEED, migrateColors)
   const [progress, setProgress] = useLocalState('goals-progress', {})
+  const [habitsRoster] = useLocalState('habits-roster', []) // read-only, for habit sync
+  const [, setHabitsProgress] = useLocalState('habits-progress', {}) // write-through: habit goals mirror into Habits
   const section = sections.find((s) => s.id === sectionId) || sections[0]
   const wk = weekKeyNow()
   const wp = progress[wk] || EMPTY_WEEK
 
   const editWeek = (fn) => setProgress((p) => ({ ...p, [wk]: fn(p[wk] || EMPTY_WEEK) }))
-  const toggleCheckbox = (itemId) =>
-    editWeek((w) => {
-      const item = w.items[itemId] || {}
-      return { ...w, items: { ...w.items, [itemId]: { ...item, done: !item.done } } }
-    })
-  const toggleTally = (itemId, index, target) =>
-    editWeek((w) => {
-      const item = w.items[itemId] || {}
-      const checks = Array.from({ length: target }, (_, i) => item.checks?.[i] || false)
-      checks[index] = !checks[index]
-      return { ...w, items: { ...w.items, [itemId]: { ...item, checks } } }
-    })
+  // Habit-flagged goals mirror into the Habits page (see Goals.jsx).
+  const syncHabit = (itemId, change) => {
+    const item = sections.flatMap((s) => s.items).find((it) => it.id === itemId)
+    if (!item?.habit) return
+    setHabitsProgress((p) => ({
+      ...p,
+      [wk]: applyGoalToHabits(p[wk], item, habitsRoster, change),
+    }))
+  }
+  const toggleCheckbox = (itemId) => {
+    const done = !wp.items[itemId]?.done
+    editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: { ...w.items[itemId], done } } }))
+    syncHabit(itemId, { kind: 'checkbox', done })
+  }
+  const toggleTally = (itemId, index, target) => {
+    const cur = wp.items[itemId]?.checks || []
+    const checks = Array.from({ length: target }, (_, i) => (i === index ? !cur[i] : cur[i] || false))
+    editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: { ...w.items[itemId], checks } } }))
+    syncHabit(itemId, { kind: 'tally', checks, index, on: checks[index] })
+  }
   const toggleChild = (childId) =>
     editWeek((w) => ({ ...w, children: { ...w.children, [childId]: !w.children[childId] } }))
 

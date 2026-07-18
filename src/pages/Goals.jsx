@@ -34,6 +34,7 @@ import {
 } from '../components/Icons.jsx'
 import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
+import { applyGoalToHabits } from '../lib/habits.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
@@ -130,6 +131,8 @@ export default function Goals() {
   const [calendarEvents] = useLocalState('calendar-events', []) // read-only, shared with Calendar
   const [calendarCategories] = useLocalState('calendar-categories', [], migrateColors) // read-only, for colors
   const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors) // read-only, for event member circles
+  const [habitsRoster] = useLocalState('habits-roster', []) // read-only, for habit sync
+  const [, setHabitsProgress] = useLocalState('habits-progress', {}) // write-through: habit goals mirror into Habits
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
@@ -174,18 +177,33 @@ export default function Goals() {
       const cur = p[weekKey] || EMPTY_WEEK
       return { ...p, [weekKey]: fn(cur) }
     })
-  const toggleCheckbox = (itemId) =>
-    editWeek((wk) => {
-      const item = wk.items[itemId] || {}
-      return { ...wk, items: { ...wk.items, [itemId]: { ...item, done: !item.done } } }
-    })
-  const toggleTally = (itemId, index, target) =>
-    editWeek((wk) => {
-      const item = wk.items[itemId] || {}
-      const checks = Array.from({ length: target }, (_, i) => item.checks?.[i] || false)
-      checks[index] = !checks[index]
-      return { ...wk, items: { ...wk.items, [itemId]: { ...item, checks } } }
-    })
+  // Checking a habit-flagged goal also mirrors into the Habits page for the
+  // same week (and vice versa, from Habits.jsx).
+  const syncHabit = (itemId, change) => {
+    const item = sections.flatMap((s) => s.items).find((it) => it.id === itemId)
+    if (!item?.habit) return
+    setHabitsProgress((p) => ({
+      ...p,
+      [weekKey]: applyGoalToHabits(p[weekKey], item, habitsRoster, change),
+    }))
+  }
+  const toggleCheckbox = (itemId) => {
+    const done = !wp.items[itemId]?.done
+    editWeek((wk) => ({
+      ...wk,
+      items: { ...wk.items, [itemId]: { ...wk.items[itemId], done } },
+    }))
+    syncHabit(itemId, { kind: 'checkbox', done })
+  }
+  const toggleTally = (itemId, index, target) => {
+    const cur = wp.items[itemId]?.checks || []
+    const checks = Array.from({ length: target }, (_, i) => (i === index ? !cur[i] : cur[i] || false))
+    editWeek((wk) => ({
+      ...wk,
+      items: { ...wk.items, [itemId]: { ...wk.items[itemId], checks } },
+    }))
+    syncHabit(itemId, { kind: 'tally', checks, index, on: checks[index] })
+  }
   const toggleChild = (childId) =>
     editWeek((wk) => ({ ...wk, children: { ...wk.children, [childId]: !wk.children[childId] } }))
 

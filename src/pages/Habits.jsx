@@ -62,6 +62,7 @@ export default function Habits() {
   const [roster, setRoster] = useLocalState('habits-roster', []) // member ids shown on this page
   const [progress, setProgress] = useLocalState('habits-progress', {}) // weekKey -> memberId -> itemId -> { done | checks }
   const [rewards, setRewards] = useLocalState('habits-rewards', REWARDS_SEED)
+  const [, setGoalsProgress] = useLocalState('goals-progress', {}) // write-through: habit checks mirror onto the Goals page
   // Purchases carry either memberId (personal redemption) or poolId (redeemed
   // together from a point pool).
   const [purchases, setPurchases] = useLocalState('habits-purchases', [])
@@ -106,10 +107,20 @@ export default function Habits() {
     const assigned = habitItems.find((it) => it.id === itemId)?.habitMembers || []
     return assigned.length === 0 ? roster : assigned
   }
-  const toggleCheckbox = (memberId, itemId) =>
+  // Every habit is a goal item, so its displayed state also mirrors onto the
+  // Goals page (and dashboard module) for the same week — and vice versa.
+  const writeGoalEntry = (itemId, patch) =>
+    setGoalsProgress((gp) => {
+      const wk = gp[weekKey] || { items: {}, children: {} }
+      return {
+        ...gp,
+        [weekKey]: { ...wk, items: { ...wk.items, [itemId]: { ...wk.items[itemId], ...patch } } },
+      }
+    })
+  const toggleCheckbox = (memberId, itemId) => {
+    const done = !wp[memberId]?.[itemId]?.done
     setProgress((p) => {
       const week = p[weekKey] || {}
-      const done = !week[memberId]?.[itemId]?.done
       const next = { ...week }
       for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
         const e = next[mid]?.[itemId] || {}
@@ -117,17 +128,19 @@ export default function Habits() {
       }
       return { ...p, [weekKey]: next }
     })
-  const toggleTally = (memberId, itemId, index, target) =>
+    writeGoalEntry(itemId, { done })
+  }
+  const toggleTally = (memberId, itemId, index, target) => {
+    const actor = wp[memberId]?.[itemId] || {}
+    const on = !actor.checks?.[index]
+    const checks = Array.from({ length: target }, (_, i) =>
+      i === index ? on : actor.checks?.[i] || false,
+    )
     setProgress((p) => {
       const week = p[weekKey] || {}
-      const actor = week[memberId]?.[itemId] || {}
-      const on = !actor.checks?.[index]
       const next = { ...week }
       for (const mid of new Set([memberId, ...sharedWith(itemId)])) {
         const e = next[mid]?.[itemId] || {}
-        const checks = Array.from({ length: target }, (_, i) =>
-          i === index ? on : actor.checks?.[i] || false,
-        )
         // Entries from before attribution existed earned their own checks.
         const base = Array.isArray(e.earned) ? e.earned : e.checks || []
         const earned = Array.from({ length: target }, (_, i) =>
@@ -137,6 +150,8 @@ export default function Habits() {
       }
       return { ...p, [weekKey]: next }
     })
+    writeGoalEntry(itemId, { checks })
+  }
 
   // --- Roster ops (history is kept when a member is removed from the board) --
   const addToRoster = (id) => setRoster((r) => (r.includes(id) ? r : [...r, id]))
