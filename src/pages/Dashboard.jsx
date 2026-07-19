@@ -107,6 +107,16 @@ const MODULE_TYPES = {
 // Order in which singleton instances seed a fresh dashboard / get backfilled.
 const SINGLETONS = ['meals', 'shopping', 'smarthome', 'stocks', 'goals', 'habits', 'calendar']
 
+// Modules that open their full page when tapped (Traffic is handled separately
+// since its route carries the module id).
+const MODULE_ROUTES = {
+  meals: '/meals',
+  stocks: '/stocks',
+  goals: '/goals',
+  habits: '/habits',
+  calendar: '/calendar',
+}
+
 function defaultSettings(type) {
   switch (type) {
     case 'smarthome':
@@ -719,7 +729,12 @@ function GoalsModule({ sectionId }) {
         </h3>
         <ProgressRing value={sectionCompletion(section, wp, wk)} size={40} color={color} />
       </div>
-      <ul className="scroll-area max-h-72 space-y-1 overflow-y-auto pr-1">
+      {/* The list (and the point picker it can open) is interactive, so its
+          clicks must not bubble into the card's tap-to-open-Goals-page. */}
+      <ul
+        onClick={(e) => e.stopPropagation()}
+        className="scroll-area max-h-72 space-y-1 overflow-y-auto pr-1"
+      >
         {weekItems.length === 0 && <li className="py-2 text-sm text-gray-500">No goals this week.</li>}
         {weekItems.map((it) => (
           <DashGoalRow
@@ -734,15 +749,17 @@ function GoalsModule({ sectionId }) {
         ))}
       </ul>
 
-      <WhoDidItModal
-        open={!!whoDidIt}
-        title={whoDidIt?.title}
-        members={(whoDidIt?.sharers || [])
-          .map((id) => (Array.isArray(members) ? members : []).find((m) => m.id === id))
-          .filter(Boolean)}
-        onPick={creditHabit}
-        onClose={() => setWhoDidIt(null)}
-      />
+      <div onClick={(e) => e.stopPropagation()}>
+        <WhoDidItModal
+          open={!!whoDidIt}
+          title={whoDidIt?.title}
+          members={(whoDidIt?.sharers || [])
+            .map((id) => (Array.isArray(members) ? members : []).find((m) => m.id === id))
+            .filter(Boolean)}
+          onPick={creditHabit}
+          onClose={() => setWhoDidIt(null)}
+        />
+      </div>
     </div>
   )
 }
@@ -2314,8 +2331,8 @@ export default function Dashboard() {
       ? undefined
       : m.type === 'traffic'
         ? () => navigate(`/traffic?m=${m.id}`)
-        : m.type === 'habits'
-          ? () => navigate('/habits')
+        : MODULE_ROUTES[m.type]
+          ? () => navigate(MODULE_ROUTES[m.type])
           : undefined
     return (
       <ModuleCard
