@@ -477,17 +477,12 @@ function MealsModule() {
                   </span>
                 </span>
                 {providers.length > 0 && (
-                  <span className="flex-shrink-0 text-xs text-gray-400">
-                    Provided by{' '}
-                    {providers.map((m, i) => (
-                      <span key={m.id}>
-                        <span className="font-semibold" style={{ color: m.color }}>
-                          {m.name}
-                        </span>
-                        {i < providers.length - 1 ? ', ' : ''}
-                      </span>
+                  // Member circles — hover a badge for the member's name.
+                  <div className="flex flex-shrink-0 items-center -space-x-1.5">
+                    {providers.map((m) => (
+                      <MemberBadge key={m.id} member={m} size={22} />
                     ))}
-                  </span>
+                  </div>
                 )}
               </>
             ) : (
