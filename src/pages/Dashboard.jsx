@@ -83,7 +83,7 @@ import {
   SEED_MEMBERS,
 } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
-import { applyGoalToHabits, balanceOf, habitItemsOf, habitSharers, habitsFor, weekPoints, weekTarget } from '../lib/habits.js'
+import { applyGoalToHabits, balanceOf, habitItemsOf, habitSharers, habitsFor, itemInWeek, weekPoints, weekTarget } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
 import { MemberBadge } from '../components/Member.jsx'
 
@@ -417,10 +417,12 @@ function itemCompletion(item, wp) {
   }
   return wp.items[item.id]?.done ? 1 : 0
 }
-const sectionCompletion = (s, wp) =>
-  s.items.length === 0
+const sectionCompletion = (s, wp, weekKey) => {
+  const items = s.items.filter((it) => itemInWeek(it, weekKey))
+  return items.length === 0
     ? 0
-    : (s.items.reduce((sum, it) => sum + itemCompletion(it, wp), 0) / s.items.length) * 100
+    : (items.reduce((sum, it) => sum + itemCompletion(it, wp), 0) / items.length) * 100
+}
 
 // A stable key for a smart-home control reference.
 const ctrlKey = (c) => (c.kind === 'media' ? 'media' : `${c.kind}:${c.room || ''}:${c.id}`)
@@ -711,6 +713,8 @@ function GoalsModule({ sectionId }) {
   if (!section) return <p className="text-sm text-gray-500">No goals lists yet.</p>
 
   const color = section.color
+  // Only this week's goals: repeating items plus the week's one-offs.
+  const weekItems = section.items.filter((it) => itemInWeek(it, wk))
   return (
     <div>
       <div className="mb-3 flex items-center gap-3">
@@ -718,11 +722,11 @@ function GoalsModule({ sectionId }) {
         <h3 className="flex-1 truncate text-base font-bold" style={{ color }}>
           {section.title}
         </h3>
-        <ProgressRing value={sectionCompletion(section, wp)} size={40} color={color} />
+        <ProgressRing value={sectionCompletion(section, wp, wk)} size={40} color={color} />
       </div>
       <ul className="scroll-area max-h-72 space-y-1 overflow-y-auto pr-1">
-        {section.items.length === 0 && <li className="py-2 text-sm text-gray-500">No items yet.</li>}
-        {section.items.map((it) => (
+        {weekItems.length === 0 && <li className="py-2 text-sm text-gray-500">No goals this week.</li>}
+        {weekItems.map((it) => (
           <DashGoalRow
             key={it.id}
             item={it}

@@ -64,6 +64,13 @@ export const habitItemsOf = (sections) =>
     (s.items || []).filter((it) => it.habit).map((it) => ({ ...it, listColor: s.color })),
   )
 
+// Whether a goal item appears in a given week. Habit items always repeat;
+// items from before per-week goals existed (no `repeats` field) repeat too,
+// so nothing vanishes; otherwise a goal lives only in the week it was added
+// unless "Repeats weekly" is on.
+export const itemInWeek = (it, weekKey) =>
+  it.habit || it.repeats !== false || it.week === weekKey
+
 // A habit with no assigned members belongs to everyone on the Habits board.
 export const habitsFor = (items, memberId) =>
   (items || []).filter(
