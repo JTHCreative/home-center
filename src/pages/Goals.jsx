@@ -34,7 +34,7 @@ import {
 } from '../components/Icons.jsx'
 import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
-import { applyGoalToHabits, habitSharers } from '../lib/habits.js'
+import { applyGoalToHabits, habitSharers, itemInWeek } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
 
 // Section accent palette (tap to pick when creating/editing a section).
@@ -104,10 +104,13 @@ function itemCompletion(item, wp) {
   return wp.items[item.id]?.done ? 1 : 0
 }
 
-const sectionCompletion = (s, wp) =>
-  s.items.length === 0
+// Completion over the items visible in the selected week only.
+const sectionCompletion = (s, wp, weekKey) => {
+  const items = s.items.filter((it) => itemInWeek(it, weekKey))
+  return items.length === 0
     ? 0
-    : (s.items.reduce((sum, it) => sum + itemCompletion(it, wp), 0) / s.items.length) * 100
+    : (items.reduce((sum, it) => sum + itemCompletion(it, wp), 0) / items.length) * 100
+}
 
 const newSection = () => ({ id: crypto.randomUUID(), title: '', color: COLORS[1], items: [] })
 
@@ -118,6 +121,10 @@ const newItem = () => ({
   target: 7,
   // Daily goal: locked to 7 tally boxes, one per day of the week (Su–Sa).
   daily: false,
+  // Week binding: a goal lives in the week it was added (`week` is stamped on
+  // save) unless it repeats weekly. Habits always repeat.
+  repeats: false,
+  week: null,
   note: '',
   children: [],
   // Habit tracking: habits also appear on the Habits page, where each check
@@ -266,6 +273,11 @@ export default function Goals() {
       daily,
       // A daily goal is always one box per day of the week.
       target: daily ? 7 : Math.max(1, Number(itemDraft.item.target) || 1),
+      // Habits always repeat; items from before per-week goals (repeats
+      // undefined) stay repeating unless explicitly turned off.
+      repeats: itemDraft.item.habit ? true : itemDraft.item.repeats !== false,
+      // Stamp the item to the week being viewed when it was created.
+      week: itemDraft.item.week || weekKey,
       children,
       // Checklists (with sub-items) can't be habits — points are per check.
       habit: children.length === 0 && !!itemDraft.item.habit,
@@ -364,6 +376,7 @@ export default function Goals() {
                 key={section.id}
                 section={section}
                 wp={wp}
+                weekKey={weekKey}
                 onAddItem={() => setItemDraft({ sectionId: section.id, item: newItem() })}
                 onEditItem={(it) => setItemDraft({ sectionId: section.id, item: { ...it } })}
                 onToggleCheckbox={toggleCheckbox}
@@ -446,7 +459,7 @@ export default function Goals() {
           }
           headerExtra={
             <ProgressRing
-              value={sectionCompletion(fullSection, wp)}
+              value={sectionCompletion(fullSection, wp, weekKey)}
               size={40}
               color={fullSection.color}
             />
@@ -456,6 +469,7 @@ export default function Goals() {
             <ItemList
               section={fullSection}
               wp={wp}
+              weekKey={weekKey}
               onEditItem={(it) => setItemDraft({ sectionId: fullSection.id, item: { ...it } })}
               onToggleCheckbox={toggleCheckbox}
               onToggleTally={toggleTally}
@@ -512,8 +526,8 @@ function SortableSection({ section, ...props }) {
   )
 }
 
-function SectionCard({ section, wp, dragHandleProps, onAddItem, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems, onEditSection, onRemoveSection, onOpenFull }) {
-  const pct = sectionCompletion(section, wp)
+function SectionCard({ section, wp, weekKey, dragHandleProps, onAddItem, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems, onEditSection, onRemoveSection, onOpenFull }) {
+  const pct = sectionCompletion(section, wp, weekKey)
 
   return (
     <Card>
@@ -549,6 +563,7 @@ function SectionCard({ section, wp, dragHandleProps, onAddItem, onEditItem, onTo
       <ItemList
         section={section}
         wp={wp}
+        weekKey={weekKey}
         onEditItem={onEditItem}
         onToggleCheckbox={onToggleCheckbox}
         onToggleTally={onToggleTally}
@@ -588,21 +603,23 @@ function SectionCard({ section, wp, dragHandleProps, onAddItem, onEditItem, onTo
 
 // Sortable list of one section's goal items — used by both the section card
 // and the full-screen view. Drag an item's grip to re-arrange within the list.
-function ItemList({ section, wp, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems }) {
+function ItemList({ section, wp, weekKey, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
     onReorderItems(active.id, over.id)
   }
+  // Only the selected week's goals: repeating items plus that week's one-offs.
+  const items = section.items.filter((it) => itemInWeek(it, weekKey))
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-      <SortableContext items={section.items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
         <ul className="space-y-1">
-          {section.items.length === 0 && (
-            <li className="px-1 py-2 text-sm text-gray-500">No items yet.</li>
+          {items.length === 0 && (
+            <li className="px-1 py-2 text-sm text-gray-500">No goals this week.</li>
           )}
-          {section.items.map((it) => (
+          {items.map((it) => (
             <SortableGoalItem
               key={it.id}
               item={it}
@@ -946,6 +963,24 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
                 </div>
               </div>
             )}
+
+            {/* Week binding: off = the goal lives only in the week it was
+                added; on = it appears every week. Habits always repeat. */}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-4">
+              <div className="min-w-0">
+                <span className="block text-sm font-semibold text-gray-200">Repeats weekly</span>
+                <span className="block text-xs text-gray-500">
+                  {item.habit
+                    ? 'Habits repeat every week'
+                    : 'Off — shows only in the week it was added'}
+                </span>
+              </div>
+              <Toggle
+                checked={item.habit ? true : item.repeats !== false}
+                onChange={(v) => set({ repeats: v })}
+                label="Repeats weekly"
+              />
+            </div>
 
             <div>
               <label className="mb-1 block text-xs text-gray-500">Note (optional)</label>

@@ -83,7 +83,7 @@ import {
   SEED_MEMBERS,
 } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
-import { applyGoalToHabits, balanceOf, habitItemsOf, habitSharers, habitsFor, weekPoints, weekTarget } from '../lib/habits.js'
+import { applyGoalToHabits, balanceOf, habitItemsOf, habitSharers, habitsFor, itemInWeek, weekPoints, weekTarget } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
 import { MemberBadge } from '../components/Member.jsx'
 
@@ -106,6 +106,16 @@ const MODULE_TYPES = {
 }
 // Order in which singleton instances seed a fresh dashboard / get backfilled.
 const SINGLETONS = ['meals', 'shopping', 'smarthome', 'stocks', 'goals', 'habits', 'calendar']
+
+// Modules that open their full page when tapped (Traffic is handled separately
+// since its route carries the module id).
+const MODULE_ROUTES = {
+  meals: '/meals',
+  stocks: '/stocks',
+  goals: '/goals',
+  habits: '/habits',
+  calendar: '/calendar',
+}
 
 function defaultSettings(type) {
   switch (type) {
@@ -417,10 +427,12 @@ function itemCompletion(item, wp) {
   }
   return wp.items[item.id]?.done ? 1 : 0
 }
-const sectionCompletion = (s, wp) =>
-  s.items.length === 0
+const sectionCompletion = (s, wp, weekKey) => {
+  const items = s.items.filter((it) => itemInWeek(it, weekKey))
+  return items.length === 0
     ? 0
-    : (s.items.reduce((sum, it) => sum + itemCompletion(it, wp), 0) / s.items.length) * 100
+    : (items.reduce((sum, it) => sum + itemCompletion(it, wp), 0) / items.length) * 100
+}
 
 // A stable key for a smart-home control reference.
 const ctrlKey = (c) => (c.kind === 'media' ? 'media' : `${c.kind}:${c.room || ''}:${c.id}`)
@@ -475,17 +487,12 @@ function MealsModule() {
                   </span>
                 </span>
                 {providers.length > 0 && (
-                  <span className="flex-shrink-0 text-xs text-gray-400">
-                    Provided by{' '}
-                    {providers.map((m, i) => (
-                      <span key={m.id}>
-                        <span className="font-semibold" style={{ color: m.color }}>
-                          {m.name}
-                        </span>
-                        {i < providers.length - 1 ? ', ' : ''}
-                      </span>
+                  // Member circles — hover a badge for the member's name.
+                  <div className="flex flex-shrink-0 items-center -space-x-1.5">
+                    {providers.map((m) => (
+                      <MemberBadge key={m.id} member={m} size={22} />
                     ))}
-                  </span>
+                  </div>
                 )}
               </>
             ) : (
@@ -711,6 +718,8 @@ function GoalsModule({ sectionId }) {
   if (!section) return <p className="text-sm text-gray-500">No goals lists yet.</p>
 
   const color = section.color
+  // Only this week's goals: repeating items plus the week's one-offs.
+  const weekItems = section.items.filter((it) => itemInWeek(it, wk))
   return (
     <div>
       <div className="mb-3 flex items-center gap-3">
@@ -718,11 +727,16 @@ function GoalsModule({ sectionId }) {
         <h3 className="flex-1 truncate text-base font-bold" style={{ color }}>
           {section.title}
         </h3>
-        <ProgressRing value={sectionCompletion(section, wp)} size={40} color={color} />
+        <ProgressRing value={sectionCompletion(section, wp, wk)} size={40} color={color} />
       </div>
-      <ul className="scroll-area max-h-72 space-y-1 overflow-y-auto pr-1">
-        {section.items.length === 0 && <li className="py-2 text-sm text-gray-500">No items yet.</li>}
-        {section.items.map((it) => (
+      {/* The list (and the point picker it can open) is interactive, so its
+          clicks must not bubble into the card's tap-to-open-Goals-page. */}
+      <ul
+        onClick={(e) => e.stopPropagation()}
+        className="scroll-area max-h-72 space-y-1 overflow-y-auto pr-1"
+      >
+        {weekItems.length === 0 && <li className="py-2 text-sm text-gray-500">No goals this week.</li>}
+        {weekItems.map((it) => (
           <DashGoalRow
             key={it.id}
             item={it}
@@ -735,15 +749,17 @@ function GoalsModule({ sectionId }) {
         ))}
       </ul>
 
-      <WhoDidItModal
-        open={!!whoDidIt}
-        title={whoDidIt?.title}
-        members={(whoDidIt?.sharers || [])
-          .map((id) => (Array.isArray(members) ? members : []).find((m) => m.id === id))
-          .filter(Boolean)}
-        onPick={creditHabit}
-        onClose={() => setWhoDidIt(null)}
-      />
+      <div onClick={(e) => e.stopPropagation()}>
+        <WhoDidItModal
+          open={!!whoDidIt}
+          title={whoDidIt?.title}
+          members={(whoDidIt?.sharers || [])
+            .map((id) => (Array.isArray(members) ? members : []).find((m) => m.id === id))
+            .filter(Boolean)}
+          onPick={creditHabit}
+          onClose={() => setWhoDidIt(null)}
+        />
+      </div>
     </div>
   )
 }
@@ -2315,8 +2331,8 @@ export default function Dashboard() {
       ? undefined
       : m.type === 'traffic'
         ? () => navigate(`/traffic?m=${m.id}`)
-        : m.type === 'habits'
-          ? () => navigate('/habits')
+        : MODULE_ROUTES[m.type]
+          ? () => navigate(MODULE_ROUTES[m.type])
           : undefined
     return (
       <ModuleCard
