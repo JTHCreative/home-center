@@ -20,5 +20,10 @@ module.exports = {
       files: ['*.config.js', '*.cjs', 'postcss.config.js', 'tailwind.config.js'],
       env: { node: true },
     },
+    {
+      // One-off maintenance scripts (Node, top-level await).
+      files: ['scripts/**'],
+      env: { node: true },
+    },
   ],
 }

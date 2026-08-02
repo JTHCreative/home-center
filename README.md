@@ -74,6 +74,36 @@ service cloud.firestore {
 > household dashboard on a trusted network; add Firebase Auth and tighten the
 > rules if you expose it publicly.
 
+## Importing goals from a photo
+
+Snap a photo of the goals whiteboard and have Claude Code fill in the Goals
+page: start a session, attach the photo, and run the `/goals-from-photo` skill
+(`.claude/skills/goals-from-photo/`). Claude transcribes the board, shows you a
+dry run, and on your OK merges it into Firestore — every screen picks it up live
+via `onSnapshot`, with no rebuild or deploy.
+
+Empty boxes after a goal are its tally count (`Run 1 Mile - [] [] []` → a 3-box
+tally); seven boxes make it a daily goal; no boxes is a plain checkbox; indented
+lines become a sub-item checklist.
+
+The merge is additive and safe to repeat — re-photographing a corrected board
+only adds what's new. Goals already showing that week keep their checks and
+their position, repeating goals and habits are matched rather than duplicated,
+and a goal whose box count changed is adjusted in place so its progress
+survives.
+
+The script underneath can be run directly:
+
+```bash
+node scripts/import-goals.mjs goals.json --dry-run   # preview
+node scripts/import-goals.mjs goals.json             # write
+node scripts/import-goals.mjs goals.json --week 2026-08-09
+```
+
+It reads/writes the same `appState/goals-sections` document the app uses, so it
+needs no credentials beyond the web config in `src/lib/firebase.js`. There's no
+undo — preview with `--dry-run` first.
+
 ## Tech stack
 
 Vite + React + Tailwind CSS, React Router for navigation, and Recharts for
@@ -202,4 +232,6 @@ src/
   lib/          firebase (Firestore init), storage (Firestore-backed state
                 hook with localStorage cache), finnhub (API client), and
                 seeds (default state shared by pages + the dashboard)
+scripts/        maintenance scripts run with Node against the live Firestore
+                state (import-goals — photo -> Goals page)
 ```
