@@ -86,11 +86,14 @@ Empty boxes after a goal are its tally count (`Run 1 Mile - [] [] []` → a 3-bo
 tally); seven boxes make it a daily goal; no boxes is a plain checkbox; indented
 lines become a sub-item checklist.
 
-The merge is additive and safe to repeat — re-photographing a corrected board
-only adds what's new. Goals already showing that week keep their checks and
-their position, repeating goals and habits are matched rather than duplicated,
-and a goal whose box count changed is adjusted in place so its progress
-survives.
+The merge only ever adds genuinely new goals, so re-photographing a corrected
+board is safe. A goal is matched by title anywhere in its list, whatever week it
+was stamped to — if it's on the board again, it's the same goal coming round
+again. One already showing that week keeps its checks and its position; one last
+seen in an earlier week is flipped to repeat weekly (keeping its id and history)
+rather than copied; and one whose box count changed is adjusted in place so its
+progress survives. Nothing is ever deleted — a goal you've finished for good
+comes off the board in the app.
 
 The script underneath can be run directly:
 

@@ -123,15 +123,18 @@ function toItem(raw, weekKey) {
 /**
  * mergeGoals — fold incoming goals into `sections` for `weekKey`.
  *
- * Rules, in order, per incoming goal:
- *  - matches a goal already visible in the target week -> skipped, untouched,
- *    so its checks and any habit/repeat flags survive;
- *  - matches but the box count changed (Gym [][] -> Gym [][][]) -> the existing
- *    goal's target is raised/lowered in place, keeping its progress;
- *  - no match -> appended, stamped to the target week.
- *
- * A goal that exists only in an *earlier* week isn't visible in the target
- * week, so it's added fresh (new id, new progress) rather than moved.
+ * A goal is matched by title anywhere in its section, whatever week it was
+ * stamped to: if it's on the board again, it's the same goal coming round
+ * again. Only genuinely new titles are ever added. Per incoming goal:
+ *  - already showing in the target week -> untouched, so its checks and its
+ *    habit/repeat flags survive;
+ *  - last seen in an earlier week -> flipped to repeat weekly, so it shows up
+ *    again without a second copy. Its id, and every week of checks behind it,
+ *    is kept. (Repeating goals show in every week, past ones included — that's
+ *    the app's own meaning of "Repeats weekly".)
+ *  - box count changed on the board (Gym [][] -> Gym [][][]) -> target raised
+ *    or lowered in place, keeping the checks;
+ *  - no match at all -> appended, stamped to the target week.
  *
  * Returns the new sections array plus a per-section report. Never mutates.
  */
@@ -145,35 +148,48 @@ export function mergeGoals(sections, incoming, weekKey) {
       report.unmatchedSections.push(key)
       continue
     }
-    const line = { title: section.title, added: [], skipped: [], retargeted: [] }
+    const line = { title: section.title, added: [], skipped: [], retargeted: [], recurring: [] }
 
     for (const raw of Array.isArray(goals) ? goals : []) {
       const item = toItem(raw, weekKey)
       if (!item) continue
 
-      const at = section.items.findIndex(
+      // Match anywhere in the section, not just the target week: a goal that
+      // resurfaces on the board is that goal coming round again, never a new
+      // one. Prefer a copy already showing this week if there is one.
+      const visible = section.items.findIndex(
         (it) => itemInWeek(it, weekKey) && norm(it.title) === norm(item.title),
       )
-      const existing = at === -1 ? null : section.items[at]
-      if (!existing) {
+      const at =
+        visible !== -1
+          ? visible
+          : section.items.findIndex((it) => norm(it.title) === norm(item.title))
+
+      if (at === -1) {
         section.items.push(item)
         line.added.push(item.title)
         continue
       }
 
-      // Same goal, different box count — adjust in place and keep the checks.
-      if (boxes(item) !== boxes(existing)) {
-        line.retargeted.push({ title: existing.title, from: boxes(existing), to: boxes(item) })
-        // Replaced, not mutated in place — the caller's objects stay untouched.
-        section.items[at] = {
-          ...existing,
-          type: item.type,
-          target: item.target,
-          daily: item.daily,
-        }
-      } else {
-        line.skipped.push(existing.title)
+      const existing = section.items[at]
+      const changes = {}
+
+      // Bound to an earlier week, so it wouldn't show up in this one. Seeing it
+      // on the board again makes it a weekly recurring goal — flip it to repeat
+      // rather than add a second copy, keeping its id and its checks.
+      if (!itemInWeek(existing, weekKey)) {
+        changes.repeats = true
+        line.recurring.push({ title: existing.title, since: existing.week })
       }
+      // Box count changed on the board — adjust, keeping the checks.
+      if (boxes(item) !== boxes(existing)) {
+        Object.assign(changes, { type: item.type, target: item.target, daily: item.daily })
+        line.retargeted.push({ title: existing.title, from: boxes(existing), to: boxes(item) })
+      }
+
+      // Replaced, not mutated in place — the caller's objects stay untouched.
+      if (Object.keys(changes).length) section.items[at] = { ...existing, ...changes }
+      else line.skipped.push(existing.title)
     }
     report.sections.push(line)
   }
@@ -186,16 +202,22 @@ export function formatReport(report, { dryRun } = {}) {
   for (const s of report.sections) {
     out.push(`\n  ${s.title}`)
     for (const t of s.added) out.push(`    + ${t}`)
+    for (const r of s.recurring) {
+      out.push(`    ^ ${r.title} (last seen week of ${r.since || '?'} — now repeats weekly)`)
+    }
     for (const r of s.retargeted) out.push(`    ~ ${r.title} (${r.from} -> ${r.to} boxes)`)
     for (const t of s.skipped) out.push(`    = ${t} (already there)`)
-    if (!s.added.length && !s.retargeted.length && !s.skipped.length) out.push('    (nothing)')
+    if (!s.added.length && !s.recurring.length && !s.retargeted.length && !s.skipped.length) {
+      out.push('    (nothing)')
+    }
   }
   for (const k of report.unmatchedSections) {
     out.push(`\n  !! no section matches "${k}" — skipped`)
   }
-  const added = report.sections.reduce((n, s) => n + s.added.length, 0)
-  const changed = report.sections.reduce((n, s) => n + s.retargeted.length, 0)
-  out.push(`\n${added} added, ${changed} adjusted.`)
+  const tally = (field) => report.sections.reduce((n, s) => n + s[field].length, 0)
+  out.push(
+    `\n${tally('added')} added, ${tally('recurring')} carried forward, ${tally('retargeted')} adjusted.`,
+  )
   return out.join('\n')
 }
 

@@ -69,10 +69,28 @@ check('target raised in place', gym.target === 4 && gym.id === j[1].id)
 check('no duplicate added', r4.sections[0].items.length === 3)
 check('retarget reported', r4.report.sections[0].retargeted[0].from === 3 && r4.report.sections[0].retargeted[0].to === 4)
 
-// --- 5. next week: last week's goals are not visible, so re-add fresh --------
+// --- 5. next week: a goal from a past week is carried forward, not re-added --
 const r5 = mergeGoals(withProgress, { "Justin's Goals": [{ title: 'Gym', target: 3 }] }, '2026-08-09')
-check('next week re-adds the goal', r5.sections[0].items.length === 4)
-check('new id for the new week', r5.sections[0].items[3].id !== j[1].id && r5.sections[0].items[3].week === '2026-08-09')
+check('next week adds no copy', r5.sections[0].items.length === 3, r5.sections[0].items.length)
+check('same item kept (checks survive)', r5.sections[0].items[1].id === j[1].id)
+check('flipped to repeat weekly', r5.sections[0].items[1].repeats === true)
+check('original week stamp untouched', r5.sections[0].items[1].week === WEEK)
+check('carried-forward reported', r5.report.sections[0].recurring[0].title === 'Gym' &&
+  r5.report.sections[0].recurring[0].since === WEEK)
+check('carry-forward does not mutate input', withProgress[0].items[1].repeats === false)
+
+// --- 5b. carried forward AND retargeted in one pass --------------------------
+const r5b = mergeGoals(withProgress, { "Justin's Goals": [{ title: 'Gym', target: 5 }] }, '2026-08-09')
+check('carry forward + retarget together', r5b.sections[0].items[1].repeats === true &&
+  r5b.sections[0].items[1].target === 5 && r5b.sections[0].items[1].id === j[1].id)
+check('both reported', r5b.report.sections[0].recurring.length === 1 &&
+  r5b.report.sections[0].retargeted.length === 1)
+check('not double counted as added', r5b.report.sections[0].added.length === 0)
+
+// --- 5c. already recurring: second import is a plain no-op -------------------
+const r5c = mergeGoals(r5.sections, { "Justin's Goals": [{ title: 'Gym', target: 3 }] }, '2026-08-16')
+check('idempotent once recurring', r5c.sections[0].items.length === 3 &&
+  r5c.report.sections[0].skipped.length === 1 && r5c.report.sections[0].recurring.length === 0)
 
 // --- 6. repeating / habit goals are visible every week -> never duplicated ---
 const withRepeat = base()
@@ -118,6 +136,14 @@ check('"Weekly Goals" key matches "Weekly" section', r8.sections[1].items.length
 check('habits/repeats skipped, nothing added to Justin', r8.sections[0].items.length === 3)
 check('legacy checkbox target=7 is NOT churned', r8.report.sections[0].retargeted.length === 0 &&
   r8.sections[0].items[2].target === 7)
+
+// A goal last seen in an earlier week comes back as recurring, not as a copy.
+const r8b = mergeGoals(live, { "Justin's Goals": ['Book Denver Car'] }, '2026-08-09')
+check('past-week goal not duplicated', r8b.sections[0].items.length === 3)
+check('past-week goal now recurring', r8b.sections[0].items[2].repeats === true &&
+  r8b.sections[0].items[2].id === 'p3')
+check('legacy target=7 survives the carry forward', r8b.sections[0].items[2].target === 7 &&
+  r8b.sections[0].items[2].type === 'checkbox' && r8b.report.sections[0].retargeted.length === 0)
 check('undefined-repeats item skipped', r8.sections[2].items.length === 1)
 check('checkbox -> tally still detected', (() => {
   const r = mergeGoals(live, { "Justin's Goals": [{ title: 'Book Denver Car', target: 3 }] }, WEEK)

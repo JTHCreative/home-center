@@ -66,17 +66,17 @@ if that list isn't in the photo.
 
 ## What the merge guarantees
 
-The import is additive and safe to repeat — re-photographing a corrected board
-only adds what's genuinely new:
+Only genuinely new goals are ever added. A goal is matched by title anywhere in
+its section, whatever week it was stamped to — if it's on the board again, it's
+the same goal coming round again:
 
-- A goal already showing in that week is **left untouched**, keeping its checks,
-  its habit flag, and its position.
-- Goals that repeat weekly (and habits) show in every week, so they're matched
-  and skipped rather than duplicated — that's what keeps the recurring list
-  stable week to week.
-- Only the box count changed? The existing goal is adjusted **in place**, so its
-  progress survives.
-- Anything unmatched is appended, stamped to that week (`repeats: false`).
+- Already showing in that week? **Left untouched**, keeping its checks, its
+  habit flag, and its position.
+- Last seen in an **earlier week**? It's a weekly recurring goal — flipped to
+  repeat so it shows up again, with no second copy. Its id and every week of
+  checks behind it are kept.
+- Only the box count changed? Adjusted **in place**, so progress survives.
+- No match at all? Appended, stamped to that week.
 
 Title matching is loose — case, punctuation, and a trailing `3x` are ignored —
 so a slightly different transcription won't create a duplicate.
@@ -87,9 +87,12 @@ so a slightly different transcription won't create a duplicate.
   changed. If that wasn't a real change on the board, you misread the boxes —
   fix the JSON rather than writing it. A goal you transcribe without boxes will
   downgrade an existing tally to a checkbox.
-- **A goal from an earlier week** that isn't visible in the target week is added
-  fresh (new id, new progress) rather than moved — expected, since goals are
-  bound to the week they were added.
+- **`^` lines** mean a goal from an earlier week is being made recurring. That's
+  the intended behavior, but a repeating goal shows in *every* week — past ones
+  included, unchecked — since that's what "Repeats weekly" means in the app. Say
+  so if the goal is a one-off the user only meant for this week.
+- **Leaving a goal out of the photo doesn't remove it.** The import never
+  deletes. A recurring goal that's done for good has to be removed in the app.
 - The script needs `node_modules` (`npm install` on a fresh container) and
   writes to the live household board. There is no undo — that's what the dry run
   is for.
