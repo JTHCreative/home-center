@@ -112,6 +112,32 @@ check('empty/blank titles dropped', mergeGoals(base(), { Weekly: ['', '  ', { ti
 
 check('findSection exact beats loose', findSection(base(), 'Weekly Goals').id === 's3')
 
+// --- 7b. section routing, incl. the board's own headings ---------------------
+// Live section titles: the catch-all list is "Weekly", not "Weekly Goals".
+const liveSecs = [
+  { id: 'j', title: "Justin's Goals", items: [] },
+  { id: 'w', title: 'Weekly', items: [] },
+  { id: 'k', title: "Kitty's Goals", items: [] },
+]
+const routes = {
+  // The board heads its lists "<name>'s Weekly Goals" — "Weekly" in the middle
+  // must not drag them into the Weekly section.
+  "Justin's Weekly Goals": 'j',
+  "Kitty's Weekly Goals": 'k',
+  'Weekly Goals': 'w',
+  Weekly: 'w',
+  "Justin's Goals": 'j',
+  Justin: 'j',
+  Kitty: 'k',
+  'justin s weekly goals!': 'j',
+}
+for (const [key, want] of Object.entries(routes)) {
+  const got = findSection(liveSecs, key)
+  check(`route "${key}" -> ${want}`, got?.id === want, got?.title)
+}
+check('unknown heading routes nowhere', findSection(liveSecs, 'Dog Goals') === null)
+check('goals-only heading is not a wildcard', findSection(liveSecs, 'Goals')?.id === 'w')
+
 // --- 8. real-world board shapes ---------------------------------------------
 // The live board's third section is titled "Weekly", not "Weekly Goals".
 const live = [

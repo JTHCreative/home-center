@@ -64,18 +64,39 @@ const norm = (s) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
 
+// "Goals" and "Weekly" are on nearly every heading on the board, so they say
+// nothing about which list is meant. Strip them and match on what's left: the
+// board's "Justin's Weekly Goals" and the app's "Justin's Goals" both reduce to
+// "justin", while the catch-all list reduces to nothing at all.
+const core = (s) =>
+  norm(s)
+    .split(' ')
+    .filter((w) => w && !['goal', 'goals', 'week', 'weekly'].includes(w))
+    .join(' ')
+
 /**
- * Resolve an incoming section key to an existing section: exact first, then
- * loose in both directions — the board is headed "Weekly" but the photo (or
- * Claude) may well call it "Weekly Goals", and vice versa.
+ * Resolve an incoming section key to an existing section: exact title first,
+ * then on the distinctive part of the name, then loosely within it. Matching
+ * the whole string loosely is what you want *not* to do — "Justin's Weekly
+ * Goals" contains "Weekly", and would land his entire list in the wrong one.
  */
 export function findSection(sections, key) {
   const want = norm(key)
   if (!want) return null
+  const wantCore = core(key)
   return (
     sections.find((s) => norm(s.title) === want) ||
-    sections.find((s) => norm(s.title).startsWith(want) || want.startsWith(norm(s.title))) ||
-    sections.find((s) => norm(s.title).includes(want) || want.includes(norm(s.title))) ||
+    sections.find((s) => core(s.title) === wantCore) ||
+    (wantCore &&
+      sections.find((s) => {
+        const c = core(s.title)
+        return c && (c.startsWith(wantCore) || wantCore.startsWith(c))
+      })) ||
+    (wantCore &&
+      sections.find((s) => {
+        const c = core(s.title)
+        return c && (c.includes(wantCore) || wantCore.includes(c))
+      })) ||
     null
   )
 }
