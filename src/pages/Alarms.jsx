@@ -4,6 +4,7 @@ import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Toggle from '../components/Toggle.jsx'
 import { PlusIcon, TrashIcon } from '../components/Icons.jsx'
 import { useLocalState } from '../lib/storage.js'
+import { useKeepAwake } from '../lib/wakeLock.js'
 import { ALARM_ICONS, ALARM_ICON_NAMES, DAYS, daysSummary, fmt12 } from '../lib/alarms.js'
 
 const newAlarm = () => ({
@@ -46,6 +47,8 @@ export default function Alarms() {
           </span>
         </Button>
       </PageHeader>
+
+      <KeepAwakeCard />
 
       {sorted.length === 0 ? (
         <Card className="text-sm text-gray-500">
@@ -115,6 +118,49 @@ export default function Alarms() {
         isExisting={draft && alarms.some((a) => a.id === draft.id)}
       />
     </div>
+  )
+}
+
+// Alarms only ring while the page is running, and a sleeping iPad runs nothing
+// — no web page can power the screen back on. So the fix is to stop the device
+// sleeping while Home Center is open (Screen Wake Lock), and to ring late if it
+// slept anyway.
+function KeepAwakeCard() {
+  const { on, setOn, status, supported } = useKeepAwake()
+
+  let note = 'Holding the screen on…'
+  if (!supported)
+    note =
+      "This browser can't hold the screen awake. Turn off the device's auto-lock instead — on iPad: Settings → Display & Brightness → Auto-Lock → Never."
+  else if (!on) note = 'The screen can sleep, and alarms only ring once it wakes.'
+  else if (status === 'active')
+    note = 'Auto-lock is held off while this page is open, so alarms ring on time.'
+  else if (status === 'blocked')
+    note = 'Paused while Home Center is in the background — tap the screen to hold it awake again.'
+
+  return (
+    <Card className="mb-4 flex items-center gap-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-base font-semibold text-white">
+          Keep this screen awake
+          {supported && on && (
+            <span
+              className={[
+                'h-2 w-2 flex-shrink-0 rounded-full',
+                status === 'active' ? 'bg-gain' : 'bg-gray-600',
+              ].join(' ')}
+              aria-hidden="true"
+            />
+          )}
+        </div>
+        <p className="mt-1 text-xs text-gray-500">{note}</p>
+      </div>
+      <Toggle
+        checked={supported && on}
+        label="Keep this screen awake"
+        onChange={(v) => supported && setOn(v)}
+      />
+    </Card>
   )
 }
 

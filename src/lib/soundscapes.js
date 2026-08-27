@@ -18,6 +18,12 @@ function getCtx() {
     const resume = () => ctx.state === 'suspended' && ctx.resume()
     window.addEventListener('pointerdown', resume)
     window.addEventListener('keydown', resume)
+    // iOS suspends the context while the screen is off or the app is in the
+    // background; resume it as soon as we're visible again so a ringing alarm
+    // (or a catching-up one) is actually audible.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') resume()
+    })
   }
   return ctx
 }
@@ -28,6 +34,19 @@ function noiseBuffer(c, seconds = 3) {
   const data = buf.getChannelData(0)
   for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1
   return buf
+}
+
+// Create/resume the audio context under a user gesture so later sounds (an
+// alarm at 6am, hours after the last tap) can start without one. Safari won't
+// let a page make noise unless the context was unlocked by a real interaction.
+export function primeAudio() {
+  const c = getCtx()
+  if (c.state === 'suspended') c.resume().catch(() => {})
+}
+
+/** Resume an already-created context (no-op before the first sound). */
+export function resumeAudio() {
+  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {})
 }
 
 export function setMasterVolume(v) {

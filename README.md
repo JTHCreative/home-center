@@ -45,6 +45,19 @@ touch targets and no hover-only interactions.
 - **Goals** — color-coded lists tracked by week (weeks start Sunday), browsable
   with a week navigator. Each goal is a checkbox, tally boxes, or a sub-item
   checklist. A completion summary ring sits atop each list.
+- **Alarms** — named, icon-tagged alarms for any days of the week, ringing a
+  gentle chime with a snooze/dismiss popup over whatever page is open. Because a
+  web page only runs while the screen is on, the page holds a **Screen Wake
+  Lock** (the "Keep this screen awake" toggle, on by default and stored
+  per-device) so the tablet doesn't auto-lock while Home Center is open — no
+  browser can power a sleeping device back on, so the fix is not letting it doze
+  off. If the screen does go dark anyway (manual lock, another app in front, iOS
+  discarding the tab), missed alarms ring the moment the page is visible again,
+  labeled "Missed while the screen was off"; anything older than 12 hours is
+  skipped. On an iPad, also set **Settings → Display & Brightness → Auto-Lock →
+  Never** as a belt-and-braces fallback, and keep Home Center in the foreground
+  (Guided Access works well) — the wake lock is only held while the page is
+  visible.
 
 All data (goals, meals, events, smart-home state, watchlists) is stored in
 **Cloud Firestore**, so it's shared live across every browser/device pointed at
