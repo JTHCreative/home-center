@@ -2,9 +2,15 @@ import { useState } from 'react'
 import Card, { PageHeader } from '../components/Card.jsx'
 import Modal, { Button, fieldClass } from '../components/Modal.jsx'
 import Toggle from '../components/Toggle.jsx'
-import { PlusIcon, TrashIcon } from '../components/Icons.jsx'
+import { PlusIcon, TabletIcon, TrashIcon } from '../components/Icons.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { useKeepAwake } from '../lib/wakeLock.js'
+import {
+  DEFAULT_SHORTCUT_NAME,
+  isAppleTouchDevice,
+  shortcutUrl,
+  useShortcutName,
+} from '../lib/iosClock.js'
 import { ALARM_ICONS, ALARM_ICON_NAMES, DAYS, daysSummary, fmt12 } from '../lib/alarms.js'
 
 const newAlarm = () => ({
@@ -19,6 +25,10 @@ const newAlarm = () => ({
 export default function Alarms() {
   const [alarms, setAlarms] = useLocalState('alarms', [])
   const [draft, setDraft] = useState(null)
+  // Handing alarms to the iPad's Clock app only makes sense on an iPad, so the
+  // Pi/desktop kiosk never sees the extra button or card.
+  const [onIpad] = useState(isAppleTouchDevice)
+  const [shortcutName, setShortcutName] = useShortcutName()
 
   const sorted = [...(alarms || [])].sort((a, b) => (a.time || '').localeCompare(b.time || ''))
 
@@ -49,6 +59,7 @@ export default function Alarms() {
       </PageHeader>
 
       <KeepAwakeCard />
+      {onIpad && <IpadClockCard name={shortcutName} setName={setShortcutName} />}
 
       {sorted.length === 0 ? (
         <Card className="text-sm text-gray-500">
@@ -90,6 +101,16 @@ export default function Alarms() {
                     <div className="text-xs text-gray-500">{daysSummary(a.days)}</div>
                   </div>
                 </button>
+                {onIpad && (
+                  <a
+                    href={shortcutUrl(shortcutName, a)}
+                    aria-label={`Add ${a.name} to the iPad Clock`}
+                    title="Add to the iPad's Clock app"
+                    className="rounded-lg bg-white/5 p-2.5 text-gray-300 active:scale-95"
+                  >
+                    <TabletIcon className="h-5 w-5" />
+                  </a>
+                )}
                 <Toggle
                   checked={!off}
                   label={`Enable ${a.name}`}
@@ -159,6 +180,34 @@ function KeepAwakeCard() {
         checked={supported && on}
         label="Keep this screen awake"
         onChange={(v) => supported && setOn(v)}
+      />
+    </Card>
+  )
+}
+
+// Only the Clock app can ring an alarm that wakes a sleeping iPad, and only
+// Shortcuts can create one — so this hands the alarm to a shortcut the user
+// builds once (see the README). Home Center's own chime stays as the backstop
+// for when the screen is already on.
+function IpadClockCard({ name, setName }) {
+  return (
+    <Card className="mb-4">
+      <div className="text-base font-semibold text-white">Add alarms to the iPad&rsquo;s Clock</div>
+      <p className="mt-1 text-xs text-gray-500">
+        Home Center can only ring while its screen is on. Tap the tablet button on an alarm to hand
+        it to a Shortcut that creates a real Clock alarm — that one wakes the iPad from sleep, rings
+        through the mute switch, and ignores Focus. Build the shortcut once on this iPad (README →
+        Alarms) and put its name here.
+      </p>
+      <label className="mt-3 block text-xs text-gray-500" htmlFor="shortcut-name">
+        Shortcut name
+      </label>
+      <input
+        id="shortcut-name"
+        className={`${fieldClass} mt-1`}
+        placeholder={DEFAULT_SHORTCUT_NAME}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
       />
     </Card>
   )

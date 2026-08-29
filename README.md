@@ -57,13 +57,65 @@ touch targets and no hover-only interactions.
   skipped. On an iPad, also set **Settings → Display & Brightness → Auto-Lock →
   Never** as a belt-and-braces fallback, and keep Home Center in the foreground
   (Guided Access works well) — the wake lock is only held while the page is
-  visible.
+  visible. To ring an alarm that wakes the iPad from a *dark* screen, hand it to
+  the Clock app — see [iPad alarms that wake the screen](#ipad-alarms-that-wake-the-screen).
 
 All data (goals, meals, events, smart-home state, watchlists) is stored in
 **Cloud Firestore**, so it's shared live across every browser/device pointed at
 the same Firebase project — edits on one screen show up on the others. A
 `localStorage` cache mirrors everything for instant loads and offline use, then
 syncs back when the connection returns.
+
+### iPad alarms that wake the screen
+
+Home Center's own chime only rings while its screen is on. A real Clock alarm
+lights a sleeping iPad, rings through the mute switch and ignores Focus modes —
+but no web page (and no third-party app) can create one: the Clock app's alarms
+are private, and EventKit only covers calendars and reminders. The Shortcuts app
+*can* create them, so the Alarms page hands an alarm to a shortcut you build
+once, via a `shortcuts://run-shortcut` link.
+
+On the iPad, each alarm row gets a tablet button; tapping it opens Shortcuts with
+that alarm as JSON text input:
+
+```json
+{
+  "time": "06:30",
+  "time12": "6:30 AM",
+  "hour": 6,
+  "minute": 30,
+  "label": "Wake Up",
+  "days": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  "repeat": "Weekdays",
+  "repeats": true
+}
+```
+
+**Building the shortcut** (once per iPad — action names shift slightly between
+iPadOS versions, so match the intent rather than the exact wording):
+
+1. Shortcuts → **+** → name it `Home Center Alarm`, and type that same name into
+   the **Shortcut name** field on the Alarms page (it's stored per-device, so
+   each iPad can use its own).
+2. **Get Dictionary from Input** — the input is the JSON above.
+3. **Get Dictionary Value** → key `time12` → **Get Dates from Input** (or the
+   *Date* action) to turn `6:30 AM` into a time. The `hour`/`minute` numbers are
+   there if you'd rather build the date arithmetically.
+4. **Get Dictionary Value** → key `label`.
+5. **Create Alarm** — set *Time* to the date from step 3 and *Label* to step 4.
+   Depending on your iPadOS version the *Repeat* field may not accept a variable;
+   if it doesn't, set the days you use most in the action itself (or branch on the
+   `days` / `repeat` values with **If** actions), and adjust in Clock afterwards.
+6. Optional: **Show Notification** with the label, so a tap gives visible
+   confirmation before Shortcuts hands you back to Safari.
+
+The first tap asks permission to run the shortcut from Safari — allow it. Home
+Center never edits or deletes Clock alarms afterwards (Shortcuts can't enumerate
+them), so changing an alarm's time here means re-tapping the button and removing
+the stale one in Clock.
+
+The tablet button and its card only appear on iPhone/iPad — the Pi and desktop
+kiosks never see them.
 
 ### Firestore setup
 
