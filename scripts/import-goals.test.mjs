@@ -112,6 +112,31 @@ check('empty/blank titles dropped', mergeGoals(base(), { Weekly: ['', '  ', { ti
 
 check('findSection exact beats loose', findSection(base(), 'Weekly Goals').id === 's3')
 
+// --- 6b. sub-items written under a goal that already exists ------------------
+const withKids = base()
+withKids[2].items.push(
+  { id: 'k1', title: 'Costco Run', type: 'checkbox', target: 1, repeats: false, week: WEEK,
+    children: [{ id: 'c1', title: 'body wash' }] },
+  { id: 'k2', title: 'Luna Teeth', type: 'tally', target: 7, repeats: true, week: PREV, children: [] },
+)
+const r6b = mergeGoals(withKids, {
+  Weekly: [
+    { title: 'Costco Run', children: ['body wash', 'chicken stock', 'Avocado'] },
+    { title: 'Luna Teeth', daily: true, children: ['nope'] },
+  ],
+}, WEEK)
+const cr = r6b.sections[2].items[0]
+check('no duplicate goal for sub-item change', r6b.sections[2].items.length === 2)
+check('only new sub-items appended', cr.children.length === 3 &&
+  cr.children[0].id === 'c1' && cr.children.map((c) => c.title).join() === 'body wash,chicken stock,Avocado')
+check('sub-items reported', r6b.report.sections[0].subitems[0].added.join() === 'chicken stock,Avocado')
+check('tally keeps its boxes, sub-items refused', r6b.sections[2].items[1].children.length === 0 &&
+  r6b.report.sections[0].subitems[1].skipped.join() === 'nope')
+check('refused sub-items do not downgrade the tally', r6b.sections[2].items[1].type === 'tally' &&
+  r6b.sections[2].items[1].target === 7 && r6b.report.sections[0].retargeted.length === 0)
+check('sub-item merge does not mutate input', withKids[2].items[0].children.length === 1)
+check('goal gaining only sub-items is not "already there"', r6b.report.sections[0].skipped.length === 1)
+
 // --- 7b. section routing, incl. the board's own headings ---------------------
 // Live section titles: the catch-all list is "Weekly", not "Weekly Goals".
 const liveSecs = [

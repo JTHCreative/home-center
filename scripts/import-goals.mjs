@@ -155,6 +155,9 @@ function toItem(raw, weekKey) {
  *    the app's own meaning of "Repeats weekly".)
  *  - box count changed on the board (Gym [][] -> Gym [][][]) -> target raised
  *    or lowered in place, keeping the checks;
+ *  - written with sub-items it doesn't have yet -> those are appended to it,
+ *    since a new sub-item is a new thing too (not for a tally, where sub-items
+ *    would take over the goal's completion and hide its boxes);
  *  - no match at all -> appended, stamped to the target week.
  *
  * Returns the new sections array plus a per-section report. Never mutates.
@@ -169,7 +172,14 @@ export function mergeGoals(sections, incoming, weekKey) {
       report.unmatchedSections.push(key)
       continue
     }
-    const line = { title: section.title, added: [], skipped: [], retargeted: [], recurring: [] }
+    const line = {
+      title: section.title,
+      added: [],
+      skipped: [],
+      retargeted: [],
+      recurring: [],
+      subitems: [],
+    }
 
     for (const raw of Array.isArray(goals) ? goals : []) {
       const item = toItem(raw, weekKey)
@@ -202,8 +212,27 @@ export function mergeGoals(sections, incoming, weekKey) {
         changes.repeats = true
         line.recurring.push({ title: existing.title, since: existing.week })
       }
+      // Sub-items and a tally are mutually exclusive in the app: sub-items take
+      // over a goal's completion and hide its boxes. Rather than quietly turn a
+      // tally into a checklist, leave it exactly as it is and say so — the goal
+      // was probably read off the board without its boxes.
+      const kids = item.children || []
+      const conflict = kids.length > 0 && existing.type === 'tally'
+
+      // A sub-item written under a goal that already exists is a new thing too,
+      // so append the ones that aren't on it yet.
+      const newKids = kids.filter(
+        (c) => !(existing.children || []).some((e) => norm(e.title) === norm(c.title)),
+      )
+      if (newKids.length && !conflict) {
+        changes.children = [...(existing.children || []), ...newKids]
+        line.subitems.push({ title: existing.title, added: newKids.map((k) => k.title) })
+      } else if (newKids.length) {
+        line.subitems.push({ title: existing.title, skipped: newKids.map((k) => k.title) })
+      }
+
       // Box count changed on the board — adjust, keeping the checks.
-      if (boxes(item) !== boxes(existing)) {
+      if (!conflict && boxes(item) !== boxes(existing)) {
         Object.assign(changes, { type: item.type, target: item.target, daily: item.daily })
         line.retargeted.push({ title: existing.title, from: boxes(existing), to: boxes(item) })
       }
@@ -227,8 +256,21 @@ export function formatReport(report, { dryRun } = {}) {
       out.push(`    ^ ${r.title} (last seen week of ${r.since || '?'} — now repeats weekly)`)
     }
     for (const r of s.retargeted) out.push(`    ~ ${r.title} (${r.from} -> ${r.to} boxes)`)
+    for (const r of s.subitems) {
+      out.push(
+        r.added
+          ? `    + ${r.title} > ${r.added.join(', ')}`
+          : `    !! ${r.title} is a tally — sub-items not added: ${r.skipped.join(', ')}`,
+      )
+    }
     for (const t of s.skipped) out.push(`    = ${t} (already there)`)
-    if (!s.added.length && !s.recurring.length && !s.retargeted.length && !s.skipped.length) {
+    if (
+      !s.added.length &&
+      !s.recurring.length &&
+      !s.retargeted.length &&
+      !s.subitems.length &&
+      !s.skipped.length
+    ) {
       out.push('    (nothing)')
     }
   }
@@ -236,8 +278,13 @@ export function formatReport(report, { dryRun } = {}) {
     out.push(`\n  !! no section matches "${k}" — skipped`)
   }
   const tally = (field) => report.sections.reduce((n, s) => n + s[field].length, 0)
+  const kids = report.sections.reduce(
+    (n, s) => n + s.subitems.reduce((m, r) => m + (r.added?.length || 0), 0),
+    0,
+  )
   out.push(
-    `\n${tally('added')} added, ${tally('recurring')} carried forward, ${tally('retargeted')} adjusted.`,
+    `\n${tally('added')} added, ${kids} sub-items added, ` +
+      `${tally('recurring')} carried forward, ${tally('retargeted')} adjusted.`,
   )
   return out.join('\n')
 }
