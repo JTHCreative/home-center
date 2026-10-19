@@ -36,9 +36,9 @@ import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
 import { applyGoalToHabits, habitSharers, itemInWeek } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
-import NoteHint, { ResizableTextarea } from '../components/NoteHint.jsx'
+import NoteHint, { HoverTip, ResizableTextarea } from '../components/NoteHint.jsx'
 import SubItemTree from '../components/SubItemTree.jsx'
-import { itemCompletion, subDone, subIds, toggleSub } from '../lib/goalItems.js'
+import { checkedAtLabel, itemCompletion, subDone, subIds, toggleSub, withChecks, withDone } from '../lib/goalItems.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
@@ -231,10 +231,7 @@ export default function Goals() {
   }
   const toggleCheckbox = (itemId) => {
     const done = !wp.items[itemId]?.done
-    editWeek((wk) => ({
-      ...wk,
-      items: { ...wk.items, [itemId]: { ...wk.items[itemId], done } },
-    }))
+    editWeek((wk) => ({ ...wk, items: { ...wk.items, [itemId]: withDone(wk.items[itemId], done) } }))
     syncHabit(itemId, { kind: 'checkbox', done })
   }
   const toggleTally = (itemId, index, target) => {
@@ -242,12 +239,12 @@ export default function Goals() {
     const checks = Array.from({ length: target }, (_, i) => (i === index ? !cur[i] : cur[i] || false))
     editWeek((wk) => ({
       ...wk,
-      items: { ...wk.items, [itemId]: { ...wk.items[itemId], checks } },
+      items: { ...wk.items, [itemId]: withChecks(wk.items[itemId], checks, index) },
     }))
     syncHabit(itemId, { kind: 'tally', checks, index, on: checks[index] })
   }
   const toggleChild = (child) =>
-    editWeek((wk) => ({ ...wk, children: toggleSub(wk.children, child) }))
+    editWeek((wk) => toggleSub(wk, child))
 
   // --- Section ops ----------------------------------------------------------
   const saveSection = () => {
@@ -311,20 +308,26 @@ export default function Goals() {
         const from = p[prevWeek]
         if (!from) return p
         const to = p[item.week] || EMPTY_WEEK
-        const items = { ...from.items }
-        const children = { ...from.children }
-        const moved = { items: { ...to.items }, children: { ...to.children } }
-        if (item.id in items) {
-          moved.items[item.id] = items[item.id]
-          delete items[item.id]
-        }
-        for (const id of subIds(item)) {
-          if (id in children) {
-            moved.children[id] = children[id]
-            delete children[id]
+        // Move this goal's entries out of each per-week map (checks and their
+        // check-off times) into the same map for the new week.
+        const left = { ...from }
+        const moved = { ...to }
+        const carry = (key, ids) => {
+          const src = { ...(from[key] || {}) }
+          const dst = { ...(to[key] || {}) }
+          for (const id of ids) {
+            if (id in src) {
+              dst[id] = src[id]
+              delete src[id]
+            }
           }
+          left[key] = src
+          moved[key] = dst
         }
-        return { ...p, [prevWeek]: { ...from, items, children }, [item.week]: { ...to, ...moved } }
+        carry('items', [item.id])
+        carry('children', subIds(item))
+        carry('childrenAt', subIds(item))
+        return { ...p, [prevWeek]: left, [item.week]: moved }
       })
     }
     setSections((list) =>
@@ -725,18 +728,23 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
             {isGroup ? `${doneCount}/${kids.length}` : `${tallyDone}/${item.target}`}
           </span>
         ) : (
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-label={`Toggle ${item.title}`}
-            className={[
-              'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
-              done ? 'text-bg' : 'border-border',
-            ].join(' ')}
-            style={done ? { backgroundColor: color, borderColor: color } : undefined}
+          <HoverTip
+            tip={done ? checkedAtLabel(wp.items[item.id]?.doneAt) : null}
+            className="flex-shrink-0"
           >
-            {done && <CheckIcon className="h-5 w-5" />}
-          </button>
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-label={`Toggle ${item.title}`}
+              className={[
+                'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
+                done ? 'text-bg' : 'border-border',
+              ].join(' ')}
+              style={done ? { backgroundColor: color, borderColor: color } : undefined}
+            >
+              {done && <CheckIcon className="h-5 w-5" />}
+            </button>
+          </HoverTip>
         )}
 
         {/* Title wraps instead of truncating so it stays fully visible. */}
@@ -786,13 +794,14 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
             color={color}
             onToggle={onToggleBox}
             daily={!!item.daily}
+            checkedAt={wp.items[item.id]?.checksAt}
           />
         </div>
       )}
 
       {/* Sub-items (and their nested sub-items) */}
       {isGroup && open && (
-        <SubItemTree kids={kids} checks={wp.children} color={color} onToggle={onToggleChild} />
+        <SubItemTree kids={kids} wp={wp} color={color} onToggle={onToggleChild} />
       )}
     </div>
   )

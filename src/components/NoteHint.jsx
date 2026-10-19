@@ -1,32 +1,41 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NoteIcon } from './Icons.jsx'
 
 const HOLD_MS = 400
 
-// Small note icon that reveals a goal's note in a floating popup over the page.
+// Wraps an element so `tip` (when set) shows in a floating popup over the page.
 // Mouse: hover to show. Touch: press and hold to show; it stays up until the
-// next tap anywhere. Clicks on the icon never reach the surrounding row (which
-// opens the editor), so it's safe to nest inside a tappable title.
-export default function NoteHint({ note, className = '' }) {
+// next tap anywhere, and the hold doesn't count as a tap on the wrapped
+// element. `blockClick` keeps every click from reaching the wrapped element or
+// the row around it (for icons nested inside a tappable title).
+export function HoverTip({ tip, children, label, className = '', blockClick = false }) {
   const ref = useRef(null)
+  const popRef = useRef(null)
   const timer = useRef(null)
-  const [pos, setPos] = useState(null) // { left, top, below } when open
+  const heldOpen = useRef(false)
+  const [pos, setPos] = useState(null) // { center, top, below } when open
 
   const show = () => {
     const r = ref.current?.getBoundingClientRect()
-    if (!r) return
-    const width = Math.min(320, window.innerWidth - 24)
-    const left = Math.max(12, Math.min(r.left + r.width / 2 - width / 2, window.innerWidth - width - 12))
-    // Prefer above the icon; flip below when there's no room near the top.
+    if (!r || !tip) return
+    // Prefer above the anchor; flip below when there's no room near the top.
     const below = r.top < 160
-    setPos({ left, width, top: below ? r.bottom + 8 : r.top - 8, below })
+    setPos({ center: r.left + r.width / 2, top: below ? r.bottom + 8 : r.top - 8, below })
   }
   const hide = () => setPos(null)
   const clearHold = () => {
     clearTimeout(timer.current)
     timer.current = null
   }
+
+  // Keep the popup on screen: center it on the anchor, clamped to the edges.
+  useLayoutEffect(() => {
+    const el = popRef.current
+    if (!pos || !el) return
+    const w = el.offsetWidth
+    el.style.left = `${Math.max(12, Math.min(pos.center - w / 2, window.innerWidth - w - 12))}px`
+  }, [pos])
 
   // A touch-opened popup closes on the next tap anywhere (or on scroll).
   useEffect(() => {
@@ -43,55 +52,80 @@ export default function NoteHint({ note, className = '' }) {
     }
   }, [pos])
   useEffect(() => clearHold, [])
-
-  if (!note) return null
-  const stop = (e) => {
-    e.stopPropagation()
-    e.preventDefault()
-  }
+  useEffect(() => {
+    if (!tip) setPos(null)
+  }, [tip])
 
   return (
     <>
       <span
         ref={ref}
-        role="img"
-        aria-label={`Note: ${note}`}
-        className={`-my-1 inline-flex select-none items-center p-1 align-middle text-gray-400 ${className}`}
+        aria-label={label}
+        className={`inline-flex select-none items-center ${className}`}
         style={{ WebkitTouchCallout: 'none', touchAction: 'manipulation' }}
         onPointerEnter={(e) => e.pointerType === 'mouse' && show()}
         onPointerLeave={(e) => e.pointerType === 'mouse' && hide()}
         onPointerDown={(e) => {
-          e.stopPropagation()
-          if (e.pointerType === 'mouse') return
+          if (blockClick) e.stopPropagation()
+          heldOpen.current = false
+          if (!tip || e.pointerType === 'mouse') return
           clearHold()
-          timer.current = setTimeout(show, HOLD_MS)
+          timer.current = setTimeout(() => {
+            heldOpen.current = true
+            show()
+          }, HOLD_MS)
         }}
         onPointerUp={clearHold}
         onPointerCancel={clearHold}
-        onClick={stop}
+        onClickCapture={(e) => {
+          if (blockClick || heldOpen.current) {
+            e.stopPropagation()
+            e.preventDefault()
+          }
+          heldOpen.current = false
+        }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <NoteIcon className="h-3.5 w-3.5" />
+        {children}
       </span>
       {pos &&
+        tip &&
         createPortal(
           <div
+            ref={popRef}
             role="tooltip"
             className="pointer-events-none fixed z-[60] whitespace-pre-wrap break-words rounded-xl border border-border bg-surface px-4 py-3 text-sm text-gray-200 shadow-glow"
             style={{
-              left: pos.left,
-              width: pos.width,
+              left: pos.center,
               top: pos.top,
+              width: 'max-content',
+              maxWidth: 'min(320px, calc(100vw - 24px))',
               transform: pos.below ? undefined : 'translateY(-100%)',
               maxHeight: '60vh',
               overflow: 'hidden',
             }}
           >
-            {note}
+            {tip}
           </div>,
           document.body,
         )}
     </>
+  )
+}
+
+// Small note icon that reveals a goal's note in a popup (hover, or press and
+// hold on touch). Safe to nest inside a tappable title: clicks never reach it.
+export default function NoteHint({ note, className = '' }) {
+  if (!note) return null
+  return (
+    <HoverTip
+      tip={note}
+      label={`Note: ${note}`}
+      blockClick
+      className={`-my-1 p-1 align-middle text-gray-400 ${className}`}
+    >
+      <NoteIcon className="h-3.5 w-3.5" />
+    </HoverTip>
   )
 }
 

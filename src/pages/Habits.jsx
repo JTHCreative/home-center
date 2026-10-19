@@ -6,6 +6,7 @@ import TallyBoxes from '../components/TallyBoxes.jsx'
 import { useLocalState } from '../lib/storage.js'
 import { migrateColors } from '../lib/colors.js'
 import { GOALS_SEED, SEED_MEMBERS } from '../lib/seeds.js'
+import { withChecks, withDone } from '../lib/goalItems.js'
 import {
   balanceOf as balanceIn,
   entryPoints,
@@ -109,12 +110,14 @@ export default function Habits() {
   }
   // Every habit is a goal item, so its displayed state also mirrors onto the
   // Goals page (and dashboard module) for the same week — and vice versa.
-  const writeGoalEntry = (itemId, patch) =>
+  // `update` maps the goal's current entry to the new one (stamping check-off
+  // times the same way the Goals page does).
+  const writeGoalEntry = (itemId, update) =>
     setGoalsProgress((gp) => {
       const wk = gp[weekKey] || { items: {}, children: {} }
       return {
         ...gp,
-        [weekKey]: { ...wk, items: { ...wk.items, [itemId]: { ...wk.items[itemId], ...patch } } },
+        [weekKey]: { ...wk, items: { ...wk.items, [itemId]: update(wk.items[itemId]) } },
       }
     })
   const toggleCheckbox = (memberId, itemId) => {
@@ -128,7 +131,7 @@ export default function Habits() {
       }
       return { ...p, [weekKey]: next }
     })
-    writeGoalEntry(itemId, { done })
+    writeGoalEntry(itemId, (e) => withDone(e, done))
   }
   const toggleTally = (memberId, itemId, index, target) => {
     const actor = wp[memberId]?.[itemId] || {}
@@ -150,7 +153,7 @@ export default function Habits() {
       }
       return { ...p, [weekKey]: next }
     })
-    writeGoalEntry(itemId, { checks })
+    writeGoalEntry(itemId, (e) => withChecks(e, checks, index))
   }
 
   // --- Roster ops (history is kept when a member is removed from the board) --

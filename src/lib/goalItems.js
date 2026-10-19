@@ -18,12 +18,50 @@ const subFraction = (c, checks) =>
       ? 1
       : 0
 
-// Toggle a sub-item. One with nested sub-items checks (or clears) all of them.
-export function toggleSub(checks, c) {
-  if (kidsOf(c).length === 0) return { ...checks, [c.id]: !checks[c.id] }
-  const next = !subDone(c, checks)
-  return { ...checks, ...Object.fromEntries(kidsOf(c).map((g) => [g.id, next])) }
+// Toggle a sub-item in a week's progress. One with nested sub-items checks (or
+// clears) all of them. Check-off times are kept in `childrenAt`.
+export function toggleSub(wk, c) {
+  const ids = kidsOf(c).length > 0 ? kidsOf(c).map((g) => g.id) : [c.id]
+  const next = !subDone(c, wk.children)
+  const children = { ...wk.children }
+  const childrenAt = { ...wk.childrenAt }
+  const now = Date.now()
+  for (const id of ids) {
+    children[id] = next
+    if (next) childrenAt[id] = now
+    else delete childrenAt[id]
+  }
+  return { ...wk, children, childrenAt }
 }
+
+// When a sub-item was checked off: its own time, or for one with nested
+// sub-items, when the last of them was checked.
+export function subDoneAt(c, wp) {
+  const at = wp.childrenAt || {}
+  if (kidsOf(c).length === 0) return at[c.id]
+  const times = kidsOf(c).map((g) => at[g.id])
+  return times.every(Boolean) ? Math.max(...times) : undefined
+}
+
+// A goal's progress entry with its checkbox set, stamping when it was checked.
+export const withDone = (entry, done) => ({
+  ...entry,
+  done,
+  doneAt: done ? Date.now() : undefined,
+})
+
+// A goal's progress entry with new tally `checks`, stamping box `index`.
+export function withChecks(entry, checks, index) {
+  const checksAt = [...(entry?.checksAt || [])]
+  checksAt[index] = checks[index] ? Date.now() : null
+  return { ...entry, checks, checksAt }
+}
+
+// "Checked off Mon, Oct 19 at 8:42 AM" for a check-off timestamp.
+export const checkedAtLabel = (ts) =>
+  ts
+    ? `Checked off ${new Date(ts).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} at ${new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+    : null
 
 // Every sub-item id under a goal, nested ones included.
 export const subIds = (item) =>

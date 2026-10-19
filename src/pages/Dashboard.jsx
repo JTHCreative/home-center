@@ -86,9 +86,9 @@ import { migrateColors } from '../lib/colors.js'
 import { applyGoalToHabits, balanceOf, habitItemsOf, habitSharers, habitsFor, itemInWeek, weekPoints, weekTarget } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
 import { MemberBadge } from '../components/Member.jsx'
-import NoteHint from '../components/NoteHint.jsx'
+import NoteHint, { HoverTip } from '../components/NoteHint.jsx'
 import SubItemTree from '../components/SubItemTree.jsx'
-import { itemCompletion, subDone, toggleSub } from '../lib/goalItems.js'
+import { checkedAtLabel, itemCompletion, subDone, toggleSub, withChecks, withDone } from '../lib/goalItems.js'
 
 // --- Module registry ---------------------------------------------------------
 // The dashboard is a customizable stack of module *instances*. Each instance has
@@ -696,17 +696,17 @@ function GoalsModule({ sectionId }) {
   }
   const toggleCheckbox = (itemId) => {
     const done = !wp.items[itemId]?.done
-    editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: { ...w.items[itemId], done } } }))
+    editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: withDone(w.items[itemId], done) } }))
     syncHabit(itemId, { kind: 'checkbox', done })
   }
   const toggleTally = (itemId, index, target) => {
     const cur = wp.items[itemId]?.checks || []
     const checks = Array.from({ length: target }, (_, i) => (i === index ? !cur[i] : cur[i] || false))
-    editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: { ...w.items[itemId], checks } } }))
+    editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: withChecks(w.items[itemId], checks, index) } }))
     syncHabit(itemId, { kind: 'tally', checks, index, on: checks[index] })
   }
   const toggleChild = (child) =>
-    editWeek((w) => ({ ...w, children: toggleSub(w.children, child) }))
+    editWeek((w) => toggleSub(w, child))
 
   if (!section) return <p className="text-sm text-gray-500">No goals lists yet.</p>
 
@@ -782,18 +782,23 @@ function DashGoalRow({ item, color, wp, onToggle, onToggleBox, onToggleChild }) 
             {isGroup ? `${kids.filter((c) => subDone(c, wp.children)).length}/${kids.length}` : `${tallyDone}/${item.target}`}
           </span>
         ) : (
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-label={`Toggle ${item.title}`}
-            className={[
-              'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
-              done ? 'text-bg' : 'border-border',
-            ].join(' ')}
-            style={done ? { backgroundColor: color, borderColor: color } : undefined}
+          <HoverTip
+            tip={done ? checkedAtLabel(wp.items[item.id]?.doneAt) : null}
+            className="flex-shrink-0"
           >
-            {done && <CheckIcon className="h-4 w-4" />}
-          </button>
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-label={`Toggle ${item.title}`}
+              className={[
+                'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 active:scale-95',
+                done ? 'text-bg' : 'border-border',
+              ].join(' ')}
+              style={done ? { backgroundColor: color, borderColor: color } : undefined}
+            >
+              {done && <CheckIcon className="h-4 w-4" />}
+            </button>
+          </HoverTip>
         )}
         <span
           className={[
@@ -824,11 +829,12 @@ function DashGoalRow({ item, color, wp, onToggle, onToggleBox, onToggleChild }) 
             color={color}
             onToggle={onToggleBox}
             daily={!!item.daily}
+            checkedAt={wp.items[item.id]?.checksAt}
           />
         </div>
       )}
       {isGroup && open && (
-        <SubItemTree kids={kids} checks={wp.children} color={color} onToggle={onToggleChild} small />
+        <SubItemTree kids={kids} wp={wp} color={color} onToggle={onToggleChild} small />
       )}
     </li>
   )
