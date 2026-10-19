@@ -36,6 +36,9 @@ import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
 import { applyGoalToHabits, habitSharers, itemInWeek } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
+import NoteHint, { ResizableTextarea } from '../components/NoteHint.jsx'
+import SubItemTree from '../components/SubItemTree.jsx'
+import { itemCompletion, subDone, subIds, toggleSub } from '../lib/goalItems.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
@@ -87,22 +90,31 @@ const sundayOf = (d) => {
   c.setDate(c.getDate() - c.getDay()) // week starts Sunday
   return c
 }
+// Parse a "YYYY-MM-DD" week key back into a local Date.
+const fromIso = (k) => {
+  const [y, m, d] = k.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+// Labels for the week starting `start`: the range ("Jun 8 – Jun 14") and how
+// far it is from this week ("This week", "Next week", "3 weeks ago").
+function weekLabels(start) {
+  const end = addDays(start, 6)
+  const fmt = (d) => d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  const delta = Math.round((start - sundayOf(new Date())) / (7 * 864e5))
+  const rel =
+    delta === 0
+      ? 'This week'
+      : delta === -1
+        ? 'Last week'
+        : delta === 1
+          ? 'Next week'
+          : delta < 0
+            ? `${-delta} weeks ago`
+            : `In ${delta} weeks`
+  return { range: `${fmt(start)} – ${fmt(end)}`, rel }
+}
 
 const EMPTY_WEEK = { items: {}, children: {} }
-
-// Completion (0–1) for an item, using the selected week's progress.
-function itemCompletion(item, wp) {
-  const kids = item.children || []
-  if (kids.length > 0) {
-    return kids.filter((c) => wp.children[c.id]).length / kids.length
-  }
-  if (item.type === 'tally') {
-    const checks = wp.items[item.id]?.checks || []
-    const done = checks.slice(0, item.target).filter(Boolean).length
-    return item.target ? Math.max(0, Math.min(1, done / item.target)) : 0
-  }
-  return wp.items[item.id]?.done ? 1 : 0
-}
 
 // Completion over the items visible in the selected week only.
 const sectionCompletion = (s, wp, weekKey) => {
@@ -234,8 +246,8 @@ export default function Goals() {
     }))
     syncHabit(itemId, { kind: 'tally', checks, index, on: checks[index] })
   }
-  const toggleChild = (childId) =>
-    editWeek((wk) => ({ ...wk, children: { ...wk.children, [childId]: !wk.children[childId] } }))
+  const toggleChild = (child) =>
+    editWeek((wk) => ({ ...wk, children: toggleSub(wk.children, child) }))
 
   // --- Section ops ----------------------------------------------------------
   const saveSection = () => {
@@ -262,9 +274,16 @@ export default function Goals() {
   // --- Item ops -------------------------------------------------------------
   const saveItem = () => {
     if (!itemDraft.item.title.trim()) return
-    const children = (itemDraft.item.children || [])
-      .map((c) => ({ id: c.id, title: c.title.trim() }))
-      .filter((c) => c.title)
+    // Trim titles and drop blank sub-items, one nested level included.
+    const trimKids = (list) =>
+      (list || [])
+        .map((c) => ({
+          id: c.id,
+          title: c.title.trim(),
+          ...(c.children ? { children: trimKids(c.children) } : {}),
+        }))
+        .filter((c) => c.title)
+    const children = trimKids(itemDraft.item.children)
     const daily =
       children.length === 0 && itemDraft.item.type === 'tally' && !!itemDraft.item.daily
     const item = {
@@ -276,12 +295,37 @@ export default function Goals() {
       // Habits always repeat; items from before per-week goals (repeats
       // undefined) stay repeating unless explicitly turned off.
       repeats: itemDraft.item.habit ? true : itemDraft.item.repeats !== false,
-      // Stamp the item to the week being viewed when it was created.
+      // Stamp the item to the week being viewed when it was created (or the
+      // week picked in the editor for a one-off goal).
       week: itemDraft.item.week || weekKey,
       children,
       // Checklists (with sub-items) can't be habits — points are per check.
       habit: children.length === 0 && !!itemDraft.item.habit,
       habitMembers: itemDraft.item.habitMembers || [],
+    }
+    // A one-off goal moved to another week carries its checks along with it.
+    const prev = sections.flatMap((s) => s.items).find((it) => it.id === item.id)
+    const prevWeek = prev && prev.repeats === false && !prev.habit ? prev.week : null
+    if (prevWeek && !item.repeats && prevWeek !== item.week) {
+      setProgress((p) => {
+        const from = p[prevWeek]
+        if (!from) return p
+        const to = p[item.week] || EMPTY_WEEK
+        const items = { ...from.items }
+        const children = { ...from.children }
+        const moved = { items: { ...to.items }, children: { ...to.children } }
+        if (item.id in items) {
+          moved.items[item.id] = items[item.id]
+          delete items[item.id]
+        }
+        for (const id of subIds(item)) {
+          if (id in children) {
+            moved.children[id] = children[id]
+            delete children[id]
+          }
+        }
+        return { ...p, [prevWeek]: { ...from, items, children }, [item.week]: { ...to, ...moved } }
+      })
     }
     setSections((list) =>
       list.map((s) => {
@@ -312,19 +356,7 @@ export default function Goals() {
     )
 
   // Week label, e.g. "Jun 8 – Jun 14"
-  const weekEnd = addDays(weekStart, 6)
-  const rangeLabel = `${weekStart.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
-  const weekDelta = Math.round((weekStart - sundayOf(new Date())) / (7 * 864e5))
-  const relLabel =
-    weekDelta === 0
-      ? 'This week'
-      : weekDelta === -1
-        ? 'Last week'
-        : weekDelta === 1
-          ? 'Next week'
-          : weekDelta < 0
-            ? `${-weekDelta} weeks ago`
-            : `In ${weekDelta} weeks`
+  const { range: rangeLabel, rel: relLabel } = weekLabels(weekStart)
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -491,7 +523,7 @@ export default function Goals() {
       )}
 
       <SectionModal draft={sectionDraft} setDraft={setSectionDraft} onClose={() => setSectionDraft(null)} onSave={saveSection} />
-      <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} members={members} />
+      <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} members={members} weekKey={weekKey} />
 
       {/* Rendered last so it stacks above the full-screen list view. */}
       <WhoDidItModal
@@ -627,7 +659,7 @@ function ItemList({ section, wp, weekKey, onEditItem, onToggleCheckbox, onToggle
               wp={wp}
               onToggle={() => onToggleCheckbox(it.id)}
               onToggleBox={(index) => onToggleTally(it.id, index, it.target)}
-              onToggleChild={(childId) => onToggleChild(childId)}
+              onToggleChild={onToggleChild}
               onEdit={() => onEditItem(it)}
               onRemove={() => onRemoveItem(it.id)}
             />
@@ -662,7 +694,7 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
   const isGroup = kids.length > 0
   const isTally = !isGroup && item.type === 'tally'
   const complete = itemCompletion(item, wp) >= 1
-  const doneCount = kids.filter((c) => wp.children[c.id]).length
+  const doneCount = kids.filter((c) => subDone(c, wp.children)).length
   const checks = wp.items[item.id]?.checks || []
   const done = wp.items[item.id]?.done
   const tallyDone = checks.slice(0, item.target).filter(Boolean).length
@@ -720,7 +752,7 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
           {item.habit && (
             <StarIcon className="ml-1.5 inline-block h-3.5 w-3.5 text-accent" title="Habit" />
           )}
-          {item.note && <span className="ml-1.5 font-mono text-xs text-gray-500">· {item.note}</span>}
+          <NoteHint note={item.note} className="ml-0.5" />
         </button>
 
         {(isGroup || isTally) && (
@@ -758,32 +790,9 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
         </div>
       )}
 
-      {/* Sub-items */}
+      {/* Sub-items (and their nested sub-items) */}
       {isGroup && open && (
-        <ul className="ml-9 mt-1 space-y-1 border-l border-border pl-3">
-          {kids.map((c) => {
-            const cdone = !!wp.children[c.id]
-            return (
-              <li key={c.id} className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => onToggleChild(c.id)}
-                  aria-label={`Toggle ${c.title}`}
-                  className={[
-                    'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded border-2 active:scale-95',
-                    cdone ? 'text-bg' : 'border-border',
-                  ].join(' ')}
-                  style={cdone ? { backgroundColor: color, borderColor: color } : undefined}
-                >
-                  {cdone && <CheckIcon className="h-4 w-4" />}
-                </button>
-                <span className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}>
-                  {c.title}
-                </span>
-              </li>
-            )
-          })}
-        </ul>
+        <SubItemTree kids={kids} checks={wp.children} color={color} onToggle={onToggleChild} />
       )}
     </div>
   )
@@ -840,7 +849,7 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
   )
 }
 
-function ItemModal({ draft, setDraft, onClose, onSave, members }) {
+function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
   if (!draft) return null
   const item = draft.item
   const set = (patch) => setDraft({ ...draft, item: { ...item, ...patch } })
@@ -854,11 +863,32 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
         : [...habitMembers, id],
     })
 
-  const addChild = () =>
-    set({ children: [...children, { id: crypto.randomUUID(), title: '' }] })
-  const setChild = (id, title) =>
-    set({ children: children.map((c) => (c.id === id ? { ...c, title } : c)) })
-  const removeChild = (id) => set({ children: children.filter((c) => c.id !== id) })
+  // Sub-item edits: parentId null = top-level sub-items, otherwise the nested
+  // list under that sub-item.
+  const editKids = (parentId, fn) =>
+    set({
+      children: parentId
+        ? children.map((c) => (c.id === parentId ? { ...c, children: fn(c.children || []) } : c))
+        : fn(children),
+    })
+  const addChild = (parentId) =>
+    editKids(parentId, (list) => [...list, { id: crypto.randomUUID(), title: '' }])
+  const setChild = (parentId, id, title) =>
+    editKids(parentId, (list) => list.map((c) => (c.id === id ? { ...c, title } : c)))
+  const removeChild = (parentId, id) => editKids(parentId, (list) => list.filter((c) => c.id !== id))
+  const reorderChildren = (parentId, activeId, overId) =>
+    editKids(parentId, (list) => {
+      const from = list.findIndex((c) => c.id === activeId)
+      const to = list.findIndex((c) => c.id === overId)
+      return from === -1 || to === -1 ? list : arrayMove(list, from, to)
+    })
+
+  // One-off goals live in a single week; new ones default to the week being
+  // viewed. Habits always repeat, so they never get a week.
+  const repeats = item.habit ? true : item.repeats !== false
+  const goalWeek = fromIso(item.week || weekKey)
+  const { range: goalRange, rel: goalRel } = weekLabels(goalWeek)
+  const shiftWeek = (n) => set({ week: iso(addDays(goalWeek, n * 7)) })
 
   return (
     <Modal
@@ -972,19 +1002,55 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
                 <span className="block text-xs text-gray-500">
                   {item.habit
                     ? 'Habits repeat every week'
-                    : 'Off — shows only in the week it was added'}
+                    : repeats
+                      ? 'Shows every week'
+                      : 'Off — shows only in the week picked below'}
                 </span>
               </div>
               <Toggle
-                checked={item.habit ? true : item.repeats !== false}
+                checked={repeats}
                 onChange={(v) => set({ repeats: v })}
                 label="Repeats weekly"
               />
             </div>
 
+            {/* Week picker for a one-off goal — move it to any week. */}
+            {!repeats && (
+              <div>
+                <label className="mb-2 block text-xs text-gray-500">Week</label>
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => shiftWeek(-1)}
+                    aria-label="Previous week"
+                    className="rounded-lg bg-white/5 p-2.5 text-gray-300 active:scale-95"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => set({ week: iso(sundayOf(new Date())) })}
+                    title="Jump to this week"
+                    className="min-w-0 flex-1 rounded-lg px-2 py-1 text-center active:scale-95"
+                  >
+                    <div className="text-sm font-semibold text-white">{goalRange}</div>
+                    <div className="text-xs text-gray-500">{goalRel}</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => shiftWeek(1)}
+                    aria-label="Next week"
+                    className="rounded-lg bg-white/5 p-2.5 text-gray-300 active:scale-95"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="mb-1 block text-xs text-gray-500">Note (optional)</label>
-              <input
+              <ResizableTextarea
                 className={fieldClass}
                 placeholder="e.g. 215 hours, $4,157.50"
                 value={item.note}
@@ -1033,27 +1099,16 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
               Sub-items {hasChildren && <span className="text-gray-600">(turns this into a checklist)</span>}
             </label>
             <div className="space-y-2">
-              {children.map((c) => (
-                <div key={c.id} className="flex items-center gap-2">
-                  <input
-                    className={fieldClass}
-                    placeholder="Sub-item (e.g. Papa Hui)"
-                    value={c.title}
-                    onChange={(e) => setChild(c.id, e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeChild(c.id)}
-                    aria-label="Remove sub-item"
-                    className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
-                  >
-                    <TrashIcon className="h-5 w-5" />
-                  </button>
-                </div>
-              ))}
+              <SubItemList
+                items={children}
+                onAdd={addChild}
+                onChange={setChild}
+                onRemove={removeChild}
+                onReorder={reorderChildren}
+              />
               <button
                 type="button"
-                onClick={addChild}
+                onClick={() => addChild(null)}
                 className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
               >
                 <PlusIcon className="h-4 w-4" /> Add sub-item
@@ -1063,5 +1118,98 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
         </div>
       </div>
     </Modal>
+  )
+}
+
+// Sortable sub-item rows in the goal editor. Drag a row's grip to re-arrange
+// within its list. Top-level rows get a + to add nested sub-items (one level
+// down), shown indented beneath with their own drag handles.
+function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReorder }) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const onDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    onReorder(parentId, active.id, over.id)
+  }
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={items.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+        {items.map((c) => (
+          <SortableSubItem
+            key={c.id}
+            child={c}
+            nested={!!parentId}
+            onAdd={onAdd}
+            onChange={onChange}
+            onRemove={onRemove}
+            onReorder={onReorder}
+            parentId={parentId}
+          />
+        ))}
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, onReorder }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: child.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 40 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  }
+  const grand = child.children || []
+  return (
+    <div ref={setNodeRef} style={style} className="relative space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Reorder ${child.title || 'sub-item'}`}
+          style={{ touchAction: 'none' }}
+          className="flex-shrink-0 cursor-grab rounded p-0.5 text-gray-700 active:cursor-grabbing active:text-gray-300"
+        >
+          <GripIcon className="h-4 w-4" />
+        </button>
+        <input
+          className={fieldClass}
+          placeholder={nested ? 'Nested sub-item' : 'Sub-item (e.g. Papa Hui)'}
+          value={child.title}
+          onChange={(e) => onChange(parentId, child.id, e.target.value)}
+        />
+        {!nested && (
+          <button
+            type="button"
+            onClick={() => onAdd(child.id)}
+            aria-label={`Add sub-item under ${child.title || 'sub-item'}`}
+            className="rounded-lg bg-white/5 p-3 text-gray-300 active:scale-95"
+          >
+            <PlusIcon className="h-5 w-5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => onRemove(parentId, child.id)}
+          aria-label="Remove sub-item"
+          className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
+        >
+          <TrashIcon className="h-5 w-5" />
+        </button>
+      </div>
+      {grand.length > 0 && (
+        <div className="ml-6 space-y-2 border-l border-border pl-3">
+          <SubItemList
+            items={grand}
+            parentId={child.id}
+            onChange={onChange}
+            onRemove={onRemove}
+            onReorder={onReorder}
+          />
+        </div>
+      )}
+    </div>
   )
 }
