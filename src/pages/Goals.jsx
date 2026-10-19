@@ -87,6 +87,29 @@ const sundayOf = (d) => {
   c.setDate(c.getDate() - c.getDay()) // week starts Sunday
   return c
 }
+// Parse a "YYYY-MM-DD" week key back into a local Date.
+const fromIso = (k) => {
+  const [y, m, d] = k.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+// Labels for the week starting `start`: the range ("Jun 8 – Jun 14") and how
+// far it is from this week ("This week", "Next week", "3 weeks ago").
+function weekLabels(start) {
+  const end = addDays(start, 6)
+  const fmt = (d) => d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  const delta = Math.round((start - sundayOf(new Date())) / (7 * 864e5))
+  const rel =
+    delta === 0
+      ? 'This week'
+      : delta === -1
+        ? 'Last week'
+        : delta === 1
+          ? 'Next week'
+          : delta < 0
+            ? `${-delta} weeks ago`
+            : `In ${delta} weeks`
+  return { range: `${fmt(start)} – ${fmt(end)}`, rel }
+}
 
 const EMPTY_WEEK = { items: {}, children: {} }
 
@@ -276,12 +299,37 @@ export default function Goals() {
       // Habits always repeat; items from before per-week goals (repeats
       // undefined) stay repeating unless explicitly turned off.
       repeats: itemDraft.item.habit ? true : itemDraft.item.repeats !== false,
-      // Stamp the item to the week being viewed when it was created.
+      // Stamp the item to the week being viewed when it was created (or the
+      // week picked in the editor for a one-off goal).
       week: itemDraft.item.week || weekKey,
       children,
       // Checklists (with sub-items) can't be habits — points are per check.
       habit: children.length === 0 && !!itemDraft.item.habit,
       habitMembers: itemDraft.item.habitMembers || [],
+    }
+    // A one-off goal moved to another week carries its checks along with it.
+    const prev = sections.flatMap((s) => s.items).find((it) => it.id === item.id)
+    const prevWeek = prev && prev.repeats === false && !prev.habit ? prev.week : null
+    if (prevWeek && !item.repeats && prevWeek !== item.week) {
+      setProgress((p) => {
+        const from = p[prevWeek]
+        if (!from) return p
+        const to = p[item.week] || EMPTY_WEEK
+        const items = { ...from.items }
+        const children = { ...from.children }
+        const moved = { items: { ...to.items }, children: { ...to.children } }
+        if (item.id in items) {
+          moved.items[item.id] = items[item.id]
+          delete items[item.id]
+        }
+        for (const c of item.children) {
+          if (c.id in children) {
+            moved.children[c.id] = children[c.id]
+            delete children[c.id]
+          }
+        }
+        return { ...p, [prevWeek]: { ...from, items, children }, [item.week]: { ...to, ...moved } }
+      })
     }
     setSections((list) =>
       list.map((s) => {
@@ -312,19 +360,7 @@ export default function Goals() {
     )
 
   // Week label, e.g. "Jun 8 – Jun 14"
-  const weekEnd = addDays(weekStart, 6)
-  const rangeLabel = `${weekStart.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
-  const weekDelta = Math.round((weekStart - sundayOf(new Date())) / (7 * 864e5))
-  const relLabel =
-    weekDelta === 0
-      ? 'This week'
-      : weekDelta === -1
-        ? 'Last week'
-        : weekDelta === 1
-          ? 'Next week'
-          : weekDelta < 0
-            ? `${-weekDelta} weeks ago`
-            : `In ${weekDelta} weeks`
+  const { range: rangeLabel, rel: relLabel } = weekLabels(weekStart)
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -491,7 +527,7 @@ export default function Goals() {
       )}
 
       <SectionModal draft={sectionDraft} setDraft={setSectionDraft} onClose={() => setSectionDraft(null)} onSave={saveSection} />
-      <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} members={members} />
+      <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} members={members} weekKey={weekKey} />
 
       {/* Rendered last so it stacks above the full-screen list view. */}
       <WhoDidItModal
@@ -840,7 +876,7 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
   )
 }
 
-function ItemModal({ draft, setDraft, onClose, onSave, members }) {
+function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
   if (!draft) return null
   const item = draft.item
   const set = (patch) => setDraft({ ...draft, item: { ...item, ...patch } })
@@ -859,6 +895,18 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
   const setChild = (id, title) =>
     set({ children: children.map((c) => (c.id === id ? { ...c, title } : c)) })
   const removeChild = (id) => set({ children: children.filter((c) => c.id !== id) })
+  const reorderChildren = (activeId, overId) => {
+    const from = children.findIndex((c) => c.id === activeId)
+    const to = children.findIndex((c) => c.id === overId)
+    if (from !== -1 && to !== -1) set({ children: arrayMove(children, from, to) })
+  }
+
+  // One-off goals live in a single week; new ones default to the week being
+  // viewed. Habits always repeat, so they never get a week.
+  const repeats = item.habit ? true : item.repeats !== false
+  const goalWeek = fromIso(item.week || weekKey)
+  const { range: goalRange, rel: goalRel } = weekLabels(goalWeek)
+  const shiftWeek = (n) => set({ week: iso(addDays(goalWeek, n * 7)) })
 
   return (
     <Modal
@@ -972,15 +1020,51 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
                 <span className="block text-xs text-gray-500">
                   {item.habit
                     ? 'Habits repeat every week'
-                    : 'Off — shows only in the week it was added'}
+                    : repeats
+                      ? 'Shows every week'
+                      : 'Off — shows only in the week picked below'}
                 </span>
               </div>
               <Toggle
-                checked={item.habit ? true : item.repeats !== false}
+                checked={repeats}
                 onChange={(v) => set({ repeats: v })}
                 label="Repeats weekly"
               />
             </div>
+
+            {/* Week picker for a one-off goal — move it to any week. */}
+            {!repeats && (
+              <div>
+                <label className="mb-2 block text-xs text-gray-500">Week</label>
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => shiftWeek(-1)}
+                    aria-label="Previous week"
+                    className="rounded-lg bg-white/5 p-2.5 text-gray-300 active:scale-95"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => set({ week: iso(sundayOf(new Date())) })}
+                    title="Jump to this week"
+                    className="min-w-0 flex-1 rounded-lg px-2 py-1 text-center active:scale-95"
+                  >
+                    <div className="text-sm font-semibold text-white">{goalRange}</div>
+                    <div className="text-xs text-gray-500">{goalRel}</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => shiftWeek(1)}
+                    aria-label="Next week"
+                    className="rounded-lg bg-white/5 p-2.5 text-gray-300 active:scale-95"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="mb-1 block text-xs text-gray-500">Note (optional)</label>
@@ -1033,24 +1117,12 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
               Sub-items {hasChildren && <span className="text-gray-600">(turns this into a checklist)</span>}
             </label>
             <div className="space-y-2">
-              {children.map((c) => (
-                <div key={c.id} className="flex items-center gap-2">
-                  <input
-                    className={fieldClass}
-                    placeholder="Sub-item (e.g. Papa Hui)"
-                    value={c.title}
-                    onChange={(e) => setChild(c.id, e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeChild(c.id)}
-                    aria-label="Remove sub-item"
-                    className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
-                  >
-                    <TrashIcon className="h-5 w-5" />
-                  </button>
-                </div>
-              ))}
+              <SubItemList
+                items={children}
+                onChange={setChild}
+                onRemove={removeChild}
+                onReorder={reorderChildren}
+              />
               <button
                 type="button"
                 onClick={addChild}
@@ -1063,5 +1135,68 @@ function ItemModal({ draft, setDraft, onClose, onSave, members }) {
         </div>
       </div>
     </Modal>
+  )
+}
+
+// Sortable sub-item rows in the goal editor. Drag a row's grip to re-arrange.
+function SubItemList({ items, onChange, onRemove, onReorder }) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const onDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    onReorder(active.id, over.id)
+  }
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={items.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+        {items.map((c) => (
+          <SortableSubItem
+            key={c.id}
+            child={c}
+            onChange={(title) => onChange(c.id, title)}
+            onRemove={() => onRemove(c.id)}
+          />
+        ))}
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+function SortableSubItem({ child, onChange, onRemove }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: child.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 40 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  }
+  return (
+    <div ref={setNodeRef} style={style} className="relative flex items-center gap-2">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label={`Reorder ${child.title || 'sub-item'}`}
+        style={{ touchAction: 'none' }}
+        className="flex-shrink-0 cursor-grab rounded p-0.5 text-gray-700 active:cursor-grabbing active:text-gray-300"
+      >
+        <GripIcon className="h-4 w-4" />
+      </button>
+      <input
+        className={fieldClass}
+        placeholder="Sub-item (e.g. Papa Hui)"
+        value={child.title}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label="Remove sub-item"
+        className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
+      >
+        <TrashIcon className="h-5 w-5" />
+      </button>
+    </div>
   )
 }
