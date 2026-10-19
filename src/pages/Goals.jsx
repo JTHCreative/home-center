@@ -36,6 +36,7 @@ import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
 import { applyGoalToHabits, habitSharers, itemInWeek } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
+import NoteHint, { ResizableTextarea } from '../components/NoteHint.jsx'
 
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
@@ -756,7 +757,7 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
           {item.habit && (
             <StarIcon className="ml-1.5 inline-block h-3.5 w-3.5 text-accent" title="Habit" />
           )}
-          {item.note && <span className="ml-1.5 font-mono text-xs text-gray-500">· {item.note}</span>}
+          <NoteHint note={item.note} className="ml-0.5" />
         </button>
 
         {(isGroup || isTally) && (
@@ -1068,7 +1069,7 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
 
             <div>
               <label className="mb-1 block text-xs text-gray-500">Note (optional)</label>
-              <input
+              <ResizableTextarea
                 className={fieldClass}
                 placeholder="e.g. 215 hours, $4,157.50"
                 value={item.note}

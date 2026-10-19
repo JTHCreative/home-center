@@ -86,6 +86,7 @@ import { migrateColors } from '../lib/colors.js'
 import { applyGoalToHabits, balanceOf, habitItemsOf, habitSharers, habitsFor, itemInWeek, weekPoints, weekTarget } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
 import { MemberBadge } from '../components/Member.jsx'
+import NoteHint from '../components/NoteHint.jsx'
 
 // --- Module registry ---------------------------------------------------------
 // The dashboard is a customizable stack of module *instances*. Each instance has
@@ -809,9 +810,7 @@ function DashGoalRow({ item, color, wp, onToggle, onToggleBox, onToggleChild }) 
           ].join(' ')}
         >
           {item.title}
-          {item.note && (
-            <span className="ml-1.5 font-mono text-[11px] text-gray-500">· {item.note}</span>
-          )}
+          <NoteHint note={item.note} className="ml-0.5" />
         </span>
         {(isGroup || isTally) && (
           <button
