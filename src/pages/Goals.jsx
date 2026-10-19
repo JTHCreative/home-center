@@ -37,6 +37,8 @@ import { migrateColors } from '../lib/colors.js'
 import { applyGoalToHabits, habitSharers, itemInWeek } from '../lib/habits.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
 import NoteHint, { ResizableTextarea } from '../components/NoteHint.jsx'
+import SubItemTree from '../components/SubItemTree.jsx'
+import { itemCompletion, subDone, subIds, toggleSub } from '../lib/goalItems.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
@@ -113,20 +115,6 @@ function weekLabels(start) {
 }
 
 const EMPTY_WEEK = { items: {}, children: {} }
-
-// Completion (0–1) for an item, using the selected week's progress.
-function itemCompletion(item, wp) {
-  const kids = item.children || []
-  if (kids.length > 0) {
-    return kids.filter((c) => wp.children[c.id]).length / kids.length
-  }
-  if (item.type === 'tally') {
-    const checks = wp.items[item.id]?.checks || []
-    const done = checks.slice(0, item.target).filter(Boolean).length
-    return item.target ? Math.max(0, Math.min(1, done / item.target)) : 0
-  }
-  return wp.items[item.id]?.done ? 1 : 0
-}
 
 // Completion over the items visible in the selected week only.
 const sectionCompletion = (s, wp, weekKey) => {
@@ -258,8 +246,8 @@ export default function Goals() {
     }))
     syncHabit(itemId, { kind: 'tally', checks, index, on: checks[index] })
   }
-  const toggleChild = (childId) =>
-    editWeek((wk) => ({ ...wk, children: { ...wk.children, [childId]: !wk.children[childId] } }))
+  const toggleChild = (child) =>
+    editWeek((wk) => ({ ...wk, children: toggleSub(wk.children, child) }))
 
   // --- Section ops ----------------------------------------------------------
   const saveSection = () => {
@@ -286,9 +274,16 @@ export default function Goals() {
   // --- Item ops -------------------------------------------------------------
   const saveItem = () => {
     if (!itemDraft.item.title.trim()) return
-    const children = (itemDraft.item.children || [])
-      .map((c) => ({ id: c.id, title: c.title.trim() }))
-      .filter((c) => c.title)
+    // Trim titles and drop blank sub-items, one nested level included.
+    const trimKids = (list) =>
+      (list || [])
+        .map((c) => ({
+          id: c.id,
+          title: c.title.trim(),
+          ...(c.children ? { children: trimKids(c.children) } : {}),
+        }))
+        .filter((c) => c.title)
+    const children = trimKids(itemDraft.item.children)
     const daily =
       children.length === 0 && itemDraft.item.type === 'tally' && !!itemDraft.item.daily
     const item = {
@@ -323,10 +318,10 @@ export default function Goals() {
           moved.items[item.id] = items[item.id]
           delete items[item.id]
         }
-        for (const c of item.children) {
-          if (c.id in children) {
-            moved.children[c.id] = children[c.id]
-            delete children[c.id]
+        for (const id of subIds(item)) {
+          if (id in children) {
+            moved.children[id] = children[id]
+            delete children[id]
           }
         }
         return { ...p, [prevWeek]: { ...from, items, children }, [item.week]: { ...to, ...moved } }
@@ -664,7 +659,7 @@ function ItemList({ section, wp, weekKey, onEditItem, onToggleCheckbox, onToggle
               wp={wp}
               onToggle={() => onToggleCheckbox(it.id)}
               onToggleBox={(index) => onToggleTally(it.id, index, it.target)}
-              onToggleChild={(childId) => onToggleChild(childId)}
+              onToggleChild={onToggleChild}
               onEdit={() => onEditItem(it)}
               onRemove={() => onRemoveItem(it.id)}
             />
@@ -699,7 +694,7 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
   const isGroup = kids.length > 0
   const isTally = !isGroup && item.type === 'tally'
   const complete = itemCompletion(item, wp) >= 1
-  const doneCount = kids.filter((c) => wp.children[c.id]).length
+  const doneCount = kids.filter((c) => subDone(c, wp.children)).length
   const checks = wp.items[item.id]?.checks || []
   const done = wp.items[item.id]?.done
   const tallyDone = checks.slice(0, item.target).filter(Boolean).length
@@ -795,32 +790,9 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
         </div>
       )}
 
-      {/* Sub-items */}
+      {/* Sub-items (and their nested sub-items) */}
       {isGroup && open && (
-        <ul className="ml-9 mt-1 space-y-1 border-l border-border pl-3">
-          {kids.map((c) => {
-            const cdone = !!wp.children[c.id]
-            return (
-              <li key={c.id} className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => onToggleChild(c.id)}
-                  aria-label={`Toggle ${c.title}`}
-                  className={[
-                    'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded border-2 active:scale-95',
-                    cdone ? 'text-bg' : 'border-border',
-                  ].join(' ')}
-                  style={cdone ? { backgroundColor: color, borderColor: color } : undefined}
-                >
-                  {cdone && <CheckIcon className="h-4 w-4" />}
-                </button>
-                <span className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}>
-                  {c.title}
-                </span>
-              </li>
-            )
-          })}
-        </ul>
+        <SubItemTree kids={kids} checks={wp.children} color={color} onToggle={onToggleChild} />
       )}
     </div>
   )
@@ -891,16 +863,25 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
         : [...habitMembers, id],
     })
 
-  const addChild = () =>
-    set({ children: [...children, { id: crypto.randomUUID(), title: '' }] })
-  const setChild = (id, title) =>
-    set({ children: children.map((c) => (c.id === id ? { ...c, title } : c)) })
-  const removeChild = (id) => set({ children: children.filter((c) => c.id !== id) })
-  const reorderChildren = (activeId, overId) => {
-    const from = children.findIndex((c) => c.id === activeId)
-    const to = children.findIndex((c) => c.id === overId)
-    if (from !== -1 && to !== -1) set({ children: arrayMove(children, from, to) })
-  }
+  // Sub-item edits: parentId null = top-level sub-items, otherwise the nested
+  // list under that sub-item.
+  const editKids = (parentId, fn) =>
+    set({
+      children: parentId
+        ? children.map((c) => (c.id === parentId ? { ...c, children: fn(c.children || []) } : c))
+        : fn(children),
+    })
+  const addChild = (parentId) =>
+    editKids(parentId, (list) => [...list, { id: crypto.randomUUID(), title: '' }])
+  const setChild = (parentId, id, title) =>
+    editKids(parentId, (list) => list.map((c) => (c.id === id ? { ...c, title } : c)))
+  const removeChild = (parentId, id) => editKids(parentId, (list) => list.filter((c) => c.id !== id))
+  const reorderChildren = (parentId, activeId, overId) =>
+    editKids(parentId, (list) => {
+      const from = list.findIndex((c) => c.id === activeId)
+      const to = list.findIndex((c) => c.id === overId)
+      return from === -1 || to === -1 ? list : arrayMove(list, from, to)
+    })
 
   // One-off goals live in a single week; new ones default to the week being
   // viewed. Habits always repeat, so they never get a week.
@@ -1120,13 +1101,14 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
             <div className="space-y-2">
               <SubItemList
                 items={children}
+                onAdd={addChild}
                 onChange={setChild}
                 onRemove={removeChild}
                 onReorder={reorderChildren}
               />
               <button
                 type="button"
-                onClick={addChild}
+                onClick={() => addChild(null)}
                 className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 active:scale-95"
               >
                 <PlusIcon className="h-4 w-4" /> Add sub-item
@@ -1139,12 +1121,14 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
   )
 }
 
-// Sortable sub-item rows in the goal editor. Drag a row's grip to re-arrange.
-function SubItemList({ items, onChange, onRemove, onReorder }) {
+// Sortable sub-item rows in the goal editor. Drag a row's grip to re-arrange
+// within its list. Top-level rows get a + to add nested sub-items (one level
+// down), shown indented beneath with their own drag handles.
+function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReorder }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
-    onReorder(active.id, over.id)
+    onReorder(parentId, active.id, over.id)
   }
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -1153,8 +1137,12 @@ function SubItemList({ items, onChange, onRemove, onReorder }) {
           <SortableSubItem
             key={c.id}
             child={c}
-            onChange={(title) => onChange(c.id, title)}
-            onRemove={() => onRemove(c.id)}
+            nested={!!parentId}
+            onAdd={onAdd}
+            onChange={onChange}
+            onRemove={onRemove}
+            onReorder={onReorder}
+            parentId={parentId}
           />
         ))}
       </SortableContext>
@@ -1162,7 +1150,7 @@ function SubItemList({ items, onChange, onRemove, onReorder }) {
   )
 }
 
-function SortableSubItem({ child, onChange, onRemove }) {
+function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, onReorder }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: child.id,
   })
@@ -1172,32 +1160,56 @@ function SortableSubItem({ child, onChange, onRemove }) {
     zIndex: isDragging ? 40 : undefined,
     opacity: isDragging ? 0.85 : 1,
   }
+  const grand = child.children || []
   return (
-    <div ref={setNodeRef} style={style} className="relative flex items-center gap-2">
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-label={`Reorder ${child.title || 'sub-item'}`}
-        style={{ touchAction: 'none' }}
-        className="flex-shrink-0 cursor-grab rounded p-0.5 text-gray-700 active:cursor-grabbing active:text-gray-300"
-      >
-        <GripIcon className="h-4 w-4" />
-      </button>
-      <input
-        className={fieldClass}
-        placeholder="Sub-item (e.g. Papa Hui)"
-        value={child.title}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label="Remove sub-item"
-        className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
-      >
-        <TrashIcon className="h-5 w-5" />
-      </button>
+    <div ref={setNodeRef} style={style} className="relative space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Reorder ${child.title || 'sub-item'}`}
+          style={{ touchAction: 'none' }}
+          className="flex-shrink-0 cursor-grab rounded p-0.5 text-gray-700 active:cursor-grabbing active:text-gray-300"
+        >
+          <GripIcon className="h-4 w-4" />
+        </button>
+        <input
+          className={fieldClass}
+          placeholder={nested ? 'Nested sub-item' : 'Sub-item (e.g. Papa Hui)'}
+          value={child.title}
+          onChange={(e) => onChange(parentId, child.id, e.target.value)}
+        />
+        {!nested && (
+          <button
+            type="button"
+            onClick={() => onAdd(child.id)}
+            aria-label={`Add sub-item under ${child.title || 'sub-item'}`}
+            className="rounded-lg bg-white/5 p-3 text-gray-300 active:scale-95"
+          >
+            <PlusIcon className="h-5 w-5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => onRemove(parentId, child.id)}
+          aria-label="Remove sub-item"
+          className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
+        >
+          <TrashIcon className="h-5 w-5" />
+        </button>
+      </div>
+      {grand.length > 0 && (
+        <div className="ml-6 space-y-2 border-l border-border pl-3">
+          <SubItemList
+            items={grand}
+            parentId={child.id}
+            onChange={onChange}
+            onRemove={onRemove}
+            onReorder={onReorder}
+          />
+        </div>
+      )}
     </div>
   )
 }

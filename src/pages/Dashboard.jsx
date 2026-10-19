@@ -87,6 +87,8 @@ import { applyGoalToHabits, balanceOf, habitItemsOf, habitSharers, habitsFor, it
 import WhoDidItModal from '../components/WhoDidIt.jsx'
 import { MemberBadge } from '../components/Member.jsx'
 import NoteHint from '../components/NoteHint.jsx'
+import SubItemTree from '../components/SubItemTree.jsx'
+import { itemCompletion, subDone, toggleSub } from '../lib/goalItems.js'
 
 // --- Module registry ---------------------------------------------------------
 // The dashboard is a customizable stack of module *instances*. Each instance has
@@ -418,16 +420,6 @@ const fmtMiles = (meters) => {
 
 // --- Goals completion helpers (mirror Goals.jsx) -----------------------------
 const EMPTY_WEEK = { items: {}, children: {} }
-function itemCompletion(item, wp) {
-  const kids = item.children || []
-  if (kids.length > 0) return kids.filter((c) => wp.children[c.id]).length / kids.length
-  if (item.type === 'tally') {
-    const checks = wp.items[item.id]?.checks || []
-    const done = checks.slice(0, item.target).filter(Boolean).length
-    return item.target ? Math.max(0, Math.min(1, done / item.target)) : 0
-  }
-  return wp.items[item.id]?.done ? 1 : 0
-}
 const sectionCompletion = (s, wp, weekKey) => {
   const items = s.items.filter((it) => itemInWeek(it, weekKey))
   return items.length === 0
@@ -713,8 +705,8 @@ function GoalsModule({ sectionId }) {
     editWeek((w) => ({ ...w, items: { ...w.items, [itemId]: { ...w.items[itemId], checks } } }))
     syncHabit(itemId, { kind: 'tally', checks, index, on: checks[index] })
   }
-  const toggleChild = (childId) =>
-    editWeek((w) => ({ ...w, children: { ...w.children, [childId]: !w.children[childId] } }))
+  const toggleChild = (child) =>
+    editWeek((w) => ({ ...w, children: toggleSub(w.children, child) }))
 
   if (!section) return <p className="text-sm text-gray-500">No goals lists yet.</p>
 
@@ -787,7 +779,7 @@ function DashGoalRow({ item, color, wp, onToggle, onToggleBox, onToggleChild }) 
             className="flex h-6 min-w-[2.5rem] flex-shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-xs font-bold"
             style={{ backgroundColor: `${color}22`, color }}
           >
-            {isGroup ? `${kids.filter((c) => wp.children[c.id]).length}/${kids.length}` : `${tallyDone}/${item.target}`}
+            {isGroup ? `${kids.filter((c) => subDone(c, wp.children)).length}/${kids.length}` : `${tallyDone}/${item.target}`}
           </span>
         ) : (
           <button
@@ -836,32 +828,7 @@ function DashGoalRow({ item, color, wp, onToggle, onToggleBox, onToggleChild }) 
         </div>
       )}
       {isGroup && open && (
-        <ul className="ml-7 mt-1 space-y-1 border-l border-border pl-3">
-          {kids.map((c) => {
-            const cdone = !!wp.children[c.id]
-            return (
-              <li key={c.id} className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => onToggleChild(c.id)}
-                  aria-label={`Toggle ${c.title}`}
-                  className={[
-                    'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 active:scale-95',
-                    cdone ? 'text-bg' : 'border-border',
-                  ].join(' ')}
-                  style={cdone ? { backgroundColor: color, borderColor: color } : undefined}
-                >
-                  {cdone && <CheckIcon className="h-3.5 w-3.5" />}
-                </button>
-                <span
-                  className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}
-                >
-                  {c.title}
-                </span>
-              </li>
-            )
-          })}
-        </ul>
+        <SubItemTree kids={kids} checks={wp.children} color={color} onToggle={onToggleChild} small />
       )}
     </li>
   )
