@@ -10,3 +10,40 @@ export function parseLocalDate(str) {
   if (!y || !mo || !d) return new Date(NaN)
   return new Date(y, mo - 1, d, h || 0, mi || 0)
 }
+
+// --- Week helpers (weeks start Sunday, keyed by that Sunday's 'YYYY-MM-DD') --
+export const isoDate = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+export const addDays = (d, n) => {
+  const c = new Date(d)
+  c.setDate(c.getDate() + n)
+  return c
+}
+export const sundayOf = (d) => {
+  const c = new Date(d)
+  c.setHours(0, 0, 0, 0)
+  c.setDate(c.getDate() - c.getDay()) // week starts Sunday
+  return c
+}
+// Labels for the week starting `start`: the range ("Jun 8 – Jun 14") and how
+// far it is from this week ("This week", "Next week", "3 weeks ago").
+export function weekLabels(start) {
+  const end = addDays(start, 6)
+  const fmt = (d) => d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  const delta = Math.round((start - sundayOf(new Date())) / (7 * 864e5))
+  const rel =
+    delta === 0
+      ? 'This week'
+      : delta === -1
+        ? 'Last week'
+        : delta === 1
+          ? 'Next week'
+          : delta < 0
+            ? `${-delta} weeks ago`
+            : `In ${delta} weeks`
+  return { range: `${fmt(start)} – ${fmt(end)}`, rel }
+}
