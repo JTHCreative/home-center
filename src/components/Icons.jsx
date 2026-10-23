@@ -147,6 +147,16 @@ export function CalendarIcon(props) {
   )
 }
 
+// Calendar with an arrow out — "move to another week".
+export function MoveIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M21 11V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h7" />
+      <path d="M3 9h18M8 2v4M16 2v4M15 18h7M19 15l3 3-3 3" />
+    </svg>
+  )
+}
+
 export function MealIcon(props) {
   return (
     <svg {...base} {...props}>

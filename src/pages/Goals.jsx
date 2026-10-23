@@ -28,6 +28,7 @@ import {
   ChevronRight,
   ChevronUp,
   GripIcon,
+  MoveIcon,
   PlusIcon,
   StarIcon,
   TrashIcon,
@@ -35,10 +36,24 @@ import {
 import { GOALS_SEED as SEED, SEED_MEMBERS } from '../lib/seeds.js'
 import { migrateColors } from '../lib/colors.js'
 import { applyGoalToHabits, habitSharers, itemInWeek } from '../lib/habits.js'
+import { addDays, isoDate as iso, parseLocalDate as fromIso, sundayOf, weekLabels } from '../lib/dates.js'
 import WhoDidItModal from '../components/WhoDidIt.jsx'
+import ConfirmDialog from '../components/ConfirmDialog.jsx'
+import WeekPicker from '../components/WeekPicker.jsx'
 import NoteHint, { HoverTip, ResizableTextarea } from '../components/NoteHint.jsx'
 import SubItemTree from '../components/SubItemTree.jsx'
-import { checkedAtLabel, itemCompletion, subDone, subIds, toggleSub, withChecks, withDone } from '../lib/goalItems.js'
+import {
+  carryProgress,
+  checkedAtLabel,
+  itemCompletion,
+  moveSubItem,
+  subDone,
+  subIds,
+  toggleSub,
+  trimKids,
+  withChecks,
+  withDone,
+} from '../lib/goalItems.js'
 
 // Section accent palette (tap to pick when creating/editing a section).
 // Nature-inspired Color Design System palette, shared across the app.
@@ -71,48 +86,6 @@ const CAL_COLORS = {
 // the timeframe ({ startDate, startTime }) shapes used by the Calendar.
 const evDate = (e) => e.startDate || e.date || ''
 const evTime = (e) => e.startTime || e.time || ''
-
-// --- Date helpers ------------------------------------------------------------
-const iso = (d) => {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-const addDays = (d, n) => {
-  const c = new Date(d)
-  c.setDate(c.getDate() + n)
-  return c
-}
-const sundayOf = (d) => {
-  const c = new Date(d)
-  c.setHours(0, 0, 0, 0)
-  c.setDate(c.getDate() - c.getDay()) // week starts Sunday
-  return c
-}
-// Parse a "YYYY-MM-DD" week key back into a local Date.
-const fromIso = (k) => {
-  const [y, m, d] = k.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-// Labels for the week starting `start`: the range ("Jun 8 – Jun 14") and how
-// far it is from this week ("This week", "Next week", "3 weeks ago").
-function weekLabels(start) {
-  const end = addDays(start, 6)
-  const fmt = (d) => d.toLocaleDateString([], { month: 'short', day: 'numeric' })
-  const delta = Math.round((start - sundayOf(new Date())) / (7 * 864e5))
-  const rel =
-    delta === 0
-      ? 'This week'
-      : delta === -1
-        ? 'Last week'
-        : delta === 1
-          ? 'Next week'
-          : delta < 0
-            ? `${-delta} weeks ago`
-            : `In ${delta} weeks`
-  return { range: `${fmt(start)} – ${fmt(end)}`, rel }
-}
 
 const EMPTY_WEEK = { items: {}, children: {} }
 
@@ -158,6 +131,8 @@ export default function Goals() {
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
   const [fullSectionId, setFullSectionId] = useState(null) // section opened full screen
   const [whoDidIt, setWhoDidIt] = useState(null) // { itemId, change, title, sharers } — point picker
+  const [confirm, setConfirm] = useState(null) // { title, message, onConfirm } — delete confirmation
+  const [moving, setMoving] = useState(null) // { path, title } — sub-item being moved to another week
 
   // Derived so live edits/toggles show while the full-screen view is open.
   const fullSection = sections.find((s) => s.id === fullSectionId) || null
@@ -258,6 +233,17 @@ export default function Goals() {
   }
   const removeSection = (id) => setSections((list) => list.filter((s) => s.id !== id))
 
+  // Every delete asks first (Enter / Confirm deletes, Esc / Cancel keeps it).
+  const askDelete = (what, onConfirm, message) =>
+    setConfirm({
+      title: `Delete ${what}?`,
+      message,
+      onConfirm: () => {
+        setConfirm(null)
+        onConfirm()
+      },
+    })
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
@@ -271,15 +257,6 @@ export default function Goals() {
   // --- Item ops -------------------------------------------------------------
   const saveItem = () => {
     if (!itemDraft.item.title.trim()) return
-    // Trim titles and drop blank sub-items, one nested level included.
-    const trimKids = (list) =>
-      (list || [])
-        .map((c) => ({
-          id: c.id,
-          title: c.title.trim(),
-          ...(c.children ? { children: trimKids(c.children) } : {}),
-        }))
-        .filter((c) => c.title)
     const children = trimKids(itemDraft.item.children)
     const daily =
       children.length === 0 && itemDraft.item.type === 'tally' && !!itemDraft.item.daily
@@ -304,31 +281,13 @@ export default function Goals() {
     const prev = sections.flatMap((s) => s.items).find((it) => it.id === item.id)
     const prevWeek = prev && prev.repeats === false && !prev.habit ? prev.week : null
     if (prevWeek && !item.repeats && prevWeek !== item.week) {
-      setProgress((p) => {
-        const from = p[prevWeek]
-        if (!from) return p
-        const to = p[item.week] || EMPTY_WEEK
-        // Move this goal's entries out of each per-week map (checks and their
-        // check-off times) into the same map for the new week.
-        const left = { ...from }
-        const moved = { ...to }
-        const carry = (key, ids) => {
-          const src = { ...(from[key] || {}) }
-          const dst = { ...(to[key] || {}) }
-          for (const id of ids) {
-            if (id in src) {
-              dst[id] = src[id]
-              delete src[id]
-            }
-          }
-          left[key] = src
-          moved[key] = dst
-        }
-        carry('items', [item.id])
-        carry('children', subIds(item))
-        carry('childrenAt', subIds(item))
-        return { ...p, [prevWeek]: left, [item.week]: moved }
-      })
+      setProgress((p) =>
+        carryProgress(p, prevWeek, item.week, {
+          items: [item.id],
+          children: subIds(item),
+          childrenAt: subIds(item),
+        }),
+      )
     }
     setSections((list) =>
       list.map((s) => {
@@ -341,6 +300,30 @@ export default function Goals() {
       }),
     )
     setItemDraft(null)
+  }
+  // Move one sub-item (and its nested sub-items) of the goal being edited to
+  // another week: the goal (and parent sub-item) are duplicated there, or an
+  // existing copy reused, and the sub-item's checks move along with it.
+  const moveSub = (toWeek) => {
+    const { sectionId, item } = itemDraft
+    const fromWeek = item.week || weekKey
+    const goal = { ...item, week: fromWeek }
+    const section = sections.find((s) => s.id === sectionId)
+    const { items, remaining, movedIds } = moveSubItem({
+      items: section.items,
+      goal,
+      path: moving.path,
+      toWeek,
+    })
+    setSections((list) => list.map((s) => (s.id === sectionId ? { ...s, items } : s)))
+    setProgress((p) => carryProgress(p, fromWeek, toWeek, { children: movedIds, childrenAt: movedIds }))
+    const { range } = weekLabels(fromIso(toWeek))
+    setItemDraft((d) => ({
+      ...d,
+      item: { ...d.item, week: fromWeek, children: remaining },
+      notice: `Moved "${moving.title}" to ${range}`,
+    }))
+    setMoving(null)
   }
   const removeItem = (sectionId, itemId) =>
     setSections((list) =>
@@ -417,10 +400,16 @@ export default function Goals() {
                 onToggleCheckbox={toggleCheckbox}
                 onToggleTally={toggleTally}
                 onToggleChild={toggleChild}
-                onRemoveItem={(itemId) => removeItem(section.id, itemId)}
+                onRemoveItem={(it) => askDelete(`"${it.title}"`, () => removeItem(section.id, it.id))}
                 onReorderItems={(activeId, overId) => reorderItems(section.id, activeId, overId)}
                 onEditSection={() => setSectionDraft({ ...section })}
-                onRemoveSection={() => removeSection(section.id)}
+                onRemoveSection={() =>
+                  askDelete(
+                    `the "${section.title}" list`,
+                    () => removeSection(section.id),
+                    'All of its goals are deleted too.',
+                  )
+                }
                 onOpenFull={() => setFullSectionId(section.id)}
               />
             ))}
@@ -509,7 +498,7 @@ export default function Goals() {
               onToggleCheckbox={toggleCheckbox}
               onToggleTally={toggleTally}
               onToggleChild={toggleChild}
-              onRemoveItem={(itemId) => removeItem(fullSection.id, itemId)}
+              onRemoveItem={(it) => askDelete(`"${it.title}"`, () => removeItem(fullSection.id, it.id))}
               onReorderItems={(activeId, overId) => reorderItems(fullSection.id, activeId, overId)}
             />
             <div className="mt-4 border-t border-border pt-4">
@@ -526,7 +515,30 @@ export default function Goals() {
       )}
 
       <SectionModal draft={sectionDraft} setDraft={setSectionDraft} onClose={() => setSectionDraft(null)} onSave={saveSection} />
-      <ItemModal draft={itemDraft} setDraft={setItemDraft} onClose={() => setItemDraft(null)} onSave={saveItem} members={members} weekKey={weekKey} />
+      <ItemModal
+        draft={itemDraft}
+        setDraft={setItemDraft}
+        onClose={() => setItemDraft(null)}
+        onSave={saveItem}
+        members={members}
+        weekKey={weekKey}
+        onAskDelete={askDelete}
+        onMove={(path, title) => setMoving({ path, title })}
+      />
+      <WeekPicker
+        open={!!moving && !!itemDraft}
+        title={moving ? `Move "${moving.title}" to…` : ''}
+        fromWeek={itemDraft ? itemDraft.item.week || weekKey : weekKey}
+        onPick={moveSub}
+        onClose={() => setMoving(null)}
+      />
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirm?.title}
+        message={confirm?.message}
+        onConfirm={() => confirm?.onConfirm()}
+        onCancel={() => setConfirm(null)}
+      />
 
       {/* Rendered last so it stacks above the full-screen list view. */}
       <WhoDidItModal
@@ -664,7 +676,7 @@ function ItemList({ section, wp, weekKey, onEditItem, onToggleCheckbox, onToggle
               onToggleBox={(index) => onToggleTally(it.id, index, it.target)}
               onToggleChild={onToggleChild}
               onEdit={() => onEditItem(it)}
-              onRemove={() => onRemoveItem(it.id)}
+              onRemove={() => onRemoveItem(it)}
             />
           ))}
         </ul>
@@ -858,7 +870,7 @@ function SectionModal({ draft, setDraft, onClose, onSave }) {
   )
 }
 
-function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
+function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey, onAskDelete, onMove }) {
   if (!draft) return null
   const item = draft.item
   const set = (patch) => setDraft({ ...draft, item: { ...item, ...patch } })
@@ -885,6 +897,15 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
   const setChild = (parentId, id, title) =>
     editKids(parentId, (list) => list.map((c) => (c.id === id ? { ...c, title } : c)))
   const removeChild = (parentId, id) => editKids(parentId, (list) => list.filter((c) => c.id !== id))
+  // Deleting asks first — except a blank row just added, which holds nothing.
+  const askRemoveChild = (parentId, c) => {
+    if (!c.title.trim() && !(c.children || []).length) return removeChild(parentId, c.id)
+    onAskDelete(
+      c.title.trim() ? `"${c.title.trim()}"` : 'this sub-item',
+      () => removeChild(parentId, c.id),
+      (c.children || []).length ? 'Its nested sub-items are deleted too.' : undefined,
+    )
+  }
   const reorderChildren = (parentId, activeId, overId) =>
     editKids(parentId, (list) => {
       const from = list.findIndex((c) => c.id === activeId)
@@ -898,6 +919,15 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
   const goalWeek = fromIso(item.week || weekKey)
   const { range: goalRange, rel: goalRel } = weekLabels(goalWeek)
   const shiftWeek = (n) => set({ week: iso(addDays(goalWeek, n * 7)) })
+  // Sub-items move between weeks only on one-off goals (weekly goals already
+  // show in every week), and need a title so the copy has a name.
+  const moveBlock = repeats
+    ? 'Weekly goals show every week — turn off Repeats weekly to move sub-items'
+    : !item.title.trim()
+      ? 'Name the goal first'
+      : null
+  const askMove = (parentId, c) =>
+    onMove(parentId ? [parentId, c.id] : [c.id], c.title.trim())
 
   return (
     <Modal
@@ -1108,12 +1138,17 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
               Sub-items {hasChildren && <span className="text-gray-600">(turns this into a checklist)</span>}
             </label>
             <div className="space-y-2">
+              {draft.notice && (
+                <p className="rounded-lg bg-accent/10 px-3 py-2 text-xs text-accent">{draft.notice}</p>
+              )}
               <SubItemList
                 items={children}
                 onAdd={addChild}
                 onChange={setChild}
-                onRemove={removeChild}
+                onRemove={askRemoveChild}
                 onReorder={reorderChildren}
+                onMove={askMove}
+                moveBlock={moveBlock}
               />
               <button
                 type="button"
@@ -1133,7 +1168,7 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey }) {
 // Sortable sub-item rows in the goal editor. Drag a row's grip to re-arrange
 // within its list. Top-level rows get a + to add nested sub-items (one level
 // down), shown indented beneath with their own drag handles.
-function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReorder }) {
+function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReorder, onMove, moveBlock }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
@@ -1151,6 +1186,8 @@ function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReor
             onChange={onChange}
             onRemove={onRemove}
             onReorder={onReorder}
+            onMove={onMove}
+            moveBlock={moveBlock}
             parentId={parentId}
           />
         ))}
@@ -1159,7 +1196,7 @@ function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReor
   )
 }
 
-function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, onReorder }) {
+function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, onReorder, onMove, moveBlock }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: child.id,
   })
@@ -1199,9 +1236,20 @@ function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, o
             <PlusIcon className="h-5 w-5" />
           </button>
         )}
+        {/* Move to another week (one-off goals only; blank rows can't move). */}
         <button
           type="button"
-          onClick={() => onRemove(parentId, child.id)}
+          disabled={!!moveBlock || !child.title.trim()}
+          onClick={() => onMove(parentId, child)}
+          aria-label={`Move ${child.title || 'sub-item'} to another week`}
+          title={moveBlock || (child.title.trim() ? 'Move to another week' : 'Name it first')}
+          className="rounded-lg bg-white/5 p-3 text-gray-300 active:scale-95 disabled:opacity-30 disabled:active:scale-100"
+        >
+          <MoveIcon className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemove(parentId, child)}
           aria-label="Remove sub-item"
           className="rounded-lg bg-loss/15 p-3 text-loss active:scale-95"
         >
@@ -1216,6 +1264,8 @@ function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, o
             onChange={onChange}
             onRemove={onRemove}
             onReorder={onReorder}
+            onMove={onMove}
+            moveBlock={moveBlock}
           />
         </div>
       )}

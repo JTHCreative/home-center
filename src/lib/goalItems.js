@@ -80,3 +80,112 @@ export function itemCompletion(item, wp) {
   }
   return wp.items[item.id]?.done ? 1 : 0
 }
+
+// Trim sub-item titles and drop blank ones, one nested level included.
+export const trimKids = (list) =>
+  (list || [])
+    .map((c) => ({
+      id: c.id,
+      title: c.title.trim(),
+      ...(c.copyOf ? { copyOf: c.copyOf } : {}),
+      ...(c.children ? { children: trimKids(c.children) } : {}),
+    }))
+    .filter((c) => c.title)
+
+// Move the given ids' entries in each per-week progress map (checks and their
+// check-off times) from week `from` to week `to`. `keys` maps a progress map
+// name ('items', 'children', 'childrenAt') to the ids to carry.
+export function carryProgress(progress, from, to, keys) {
+  const src = progress[from]
+  if (!src || from === to) return progress
+  const dst = progress[to] || { items: {}, children: {} }
+  const left = { ...src }
+  const moved = { ...dst }
+  for (const [key, ids] of Object.entries(keys)) {
+    const a = { ...(src[key] || {}) }
+    const b = { ...(dst[key] || {}) }
+    for (const id of ids) {
+      if (id in a) {
+        b[id] = a[id]
+        delete a[id]
+      }
+    }
+    left[key] = a
+    moved[key] = b
+  }
+  return { ...progress, [from]: left, [to]: moved }
+}
+
+// A goal (or sub-item) and its copies in other weeks share one root id.
+const rootOf = (x) => x.copyOf || x.id
+
+// Sub-items with the one at `path` ([subId] or [subId, nestedId]) removed.
+const removeAt = (kids, [first, nested]) =>
+  nested
+    ? kids.map((c) => (c.id === first ? { ...c, children: kidsOf(c).filter((g) => g.id !== nested) } : c))
+    : kids.filter((c) => c.id !== first)
+
+// Move one sub-item of a one-off goal to another week. Only that sub-item
+// (with its own nested sub-items) moves; the goal above it, and for a nested
+// sub-item its parent too, are duplicated into the target week — or reused
+// when a copy of them already lives there (moving back reuses the original).
+//   items: the section's goals · goal: the goal as edited (may be unsaved)
+//   path: [subId] or [subId, nestedId] · toWeek: target week key
+// Returns the section's new goals, the edited goal's remaining sub-items, and
+// the moved ids (whose checks should follow via carryProgress).
+export function moveSubItem({ items, goal, path, toWeek }) {
+  const parent = path.length === 2 ? (goal.children || []).find((c) => c.id === path[0]) : null
+  const moved = parent
+    ? kidsOf(parent).find((g) => g.id === path[1])
+    : (goal.children || []).find((c) => c.id === path[0])
+  const [movedClean] = trimKids([moved])
+
+  // The goal's home in the target week: an existing copy, or a new duplicate.
+  const existing = items.find(
+    (it) =>
+      it.id !== goal.id &&
+      it.week === toWeek &&
+      it.repeats === false &&
+      !it.habit &&
+      rootOf(it) === rootOf(goal),
+  )
+  const target = existing
+    ? { ...existing, children: [...(existing.children || [])] }
+    : {
+        ...goal,
+        id: crypto.randomUUID(),
+        title: goal.title.trim(),
+        copyOf: rootOf(goal),
+        week: toWeek,
+        repeats: false,
+        habit: false,
+        children: [],
+      }
+
+  if (parent) {
+    // Nested: drop it under the parent's copy in the target goal.
+    const idx = target.children.findIndex((c) => rootOf(c) === rootOf(parent))
+    const host =
+      idx === -1
+        ? { id: crypto.randomUUID(), title: parent.title.trim(), copyOf: rootOf(parent), children: [] }
+        : target.children[idx]
+    const nextHost = { ...host, children: [...kidsOf(host), movedClean] }
+    target.children =
+      idx === -1
+        ? [...target.children, nextHost]
+        : target.children.map((c, i) => (i === idx ? nextHost : c))
+  } else {
+    target.children = [...target.children, movedClean]
+  }
+
+  const nextItems = items.map((it) => {
+    if (it.id === goal.id) return { ...it, children: removeAt(it.children || [], path) }
+    if (existing && it.id === existing.id) return target
+    return it
+  })
+  return {
+    items: existing ? nextItems : [...nextItems, target],
+    remaining: removeAt(goal.children || [], path),
+    movedIds: [moved.id, ...kidsOf(moved).map((g) => g.id)],
+  }
+}
