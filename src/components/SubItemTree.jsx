@@ -1,5 +1,6 @@
 import { CheckIcon } from './Icons.jsx'
 import { HoverTip } from './NoteHint.jsx'
+import { PriorityMark } from './Priority.jsx'
 import { checkedAtLabel, subDone, subDoneAt } from '../lib/goalItems.js'
 
 // A goal's sub-item checklist (Goals page and dashboard). Sub-items with their
@@ -40,6 +41,7 @@ export default function SubItemTree({ kids, wp, color, onToggle, small = false, 
               <span className={cdone ? 'text-sm text-gray-500 line-through' : 'text-sm text-gray-200'}>
                 {c.title}
               </span>
+              <PriorityMark node={c} />
               {grand.length > 0 && (
                 <span className="font-mono text-xs text-gray-500">
                   {grand.filter((g) => checks[g.id]).length}/{grand.length}
