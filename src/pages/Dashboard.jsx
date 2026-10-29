@@ -88,7 +88,8 @@ import WhoDidItModal from '../components/WhoDidIt.jsx'
 import { MemberBadge } from '../components/Member.jsx'
 import NoteHint, { HoverTip } from '../components/NoteHint.jsx'
 import SubItemTree from '../components/SubItemTree.jsx'
-import { checkedAtLabel, itemCompletion, subDone, toggleSub, withChecks, withDone } from '../lib/goalItems.js'
+import { PriorityMark } from '../components/Priority.jsx'
+import { checkedAtLabel, itemCompletion, sortByPriority, subDone, toggleSub, withChecks, withDone } from '../lib/goalItems.js'
 
 // --- Module registry ---------------------------------------------------------
 // The dashboard is a customizable stack of module *instances*. Each instance has
@@ -660,6 +661,7 @@ function StocksModule({ watchlistId }) {
 function GoalsModule({ sectionId }) {
   const [sections] = useLocalState('goals-sections', GOALS_SEED, migrateColors)
   const [progress, setProgress] = useLocalState('goals-progress', {})
+  const [sortMode] = useLocalState('goals-sort', 'custom') // read-only, set on the Goals page
   const [habitsRoster] = useLocalState('habits-roster', []) // read-only, for habit sync
   const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors) // read-only, for point picker
   const [, setHabitsProgress] = useLocalState('habits-progress', {}) // write-through: habit goals mirror into Habits
@@ -711,8 +713,10 @@ function GoalsModule({ sectionId }) {
   if (!section) return <p className="text-sm text-gray-500">No goals lists yet.</p>
 
   const color = section.color
-  // Only this week's goals: repeating items plus the week's one-offs.
-  const weekItems = section.items.filter((it) => itemInWeek(it, wk))
+  // Only this week's goals: repeating items plus the week's one-offs, ordered
+  // by priority when the Goals page is sorted that way.
+  const inWeek = section.items.filter((it) => itemInWeek(it, wk))
+  const weekItems = sortMode === 'priority' ? sortByPriority(inWeek) : inWeek
   return (
     <div>
       <div className="mb-3 flex items-center gap-3">
@@ -807,6 +811,7 @@ function DashGoalRow({ item, color, wp, onToggle, onToggleBox, onToggleChild }) 
           ].join(' ')}
         >
           {item.title}
+          <PriorityMark node={item} className="ml-1.5" />
           <NoteHint note={item.note} className="ml-0.5" />
         </span>
         {(isGroup || isTally) && (

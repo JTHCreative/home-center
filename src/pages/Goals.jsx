@@ -40,6 +40,7 @@ import { addDays, isoDate as iso, parseLocalDate as fromIso, sundayOf, weekLabel
 import WhoDidItModal from '../components/WhoDidIt.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import WeekPicker from '../components/WeekPicker.jsx'
+import { PriorityCycle, PriorityIcon, PriorityMark, PriorityPicker } from '../components/Priority.jsx'
 import NoteHint, { HoverTip, ResizableTextarea } from '../components/NoteHint.jsx'
 import SubItemTree from '../components/SubItemTree.jsx'
 import {
@@ -47,6 +48,8 @@ import {
   checkedAtLabel,
   itemCompletion,
   moveSubItem,
+  effectivePriority,
+  sortByPriority,
   subDone,
   subIds,
   toggleSub,
@@ -126,6 +129,8 @@ export default function Goals() {
   const [members] = useLocalState('meals-members', SEED_MEMBERS, migrateColors) // read-only, for event member circles
   const [habitsRoster] = useLocalState('habits-roster', []) // read-only, for habit sync
   const [, setHabitsProgress] = useLocalState('habits-progress', {}) // write-through: habit goals mirror into Habits
+  const [sortMode, setSortMode] = useLocalState('goals-sort', 'custom') // 'custom' | 'priority'
+  const prioritySort = sortMode === 'priority'
   const [weekStart, setWeekStart] = useState(() => sundayOf(new Date()))
   const [sectionDraft, setSectionDraft] = useState(null)
   const [itemDraft, setItemDraft] = useState(null) // { sectionId, item }
@@ -347,6 +352,27 @@ export default function Goals() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="Goals" subtitle="Color-coded lists, tracked by week">
+        {/* Goal order: your drag order, or highest priority first. */}
+        <div className="flex rounded-xl bg-white/5 p-1" role="group" aria-label="Sort goals">
+          {[
+            { id: 'custom', label: 'My order' },
+            { id: 'priority', label: 'Priority' },
+          ].map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => setSortMode(o.id)}
+              aria-pressed={sortMode === o.id}
+              className={[
+                'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold active:scale-95',
+                sortMode === o.id ? 'bg-accent/15 text-white shadow-glow' : 'text-gray-400',
+              ].join(' ')}
+            >
+              {o.id === 'priority' && <PriorityIcon level={3} className="h-4 w-3" />}
+              {o.label}
+            </button>
+          ))}
+        </div>
         <Button onClick={() => setSectionDraft(newSection())}>
           <span className="flex items-center gap-2">
             <PlusIcon className="h-5 w-5" /> Add List
@@ -411,6 +437,7 @@ export default function Goals() {
                   )
                 }
                 onOpenFull={() => setFullSectionId(section.id)}
+                prioritySort={prioritySort}
               />
             ))}
           </SortableContext>
@@ -500,6 +527,7 @@ export default function Goals() {
               onToggleChild={toggleChild}
               onRemoveItem={(it) => askDelete(`"${it.title}"`, () => removeItem(fullSection.id, it.id))}
               onReorderItems={(activeId, overId) => reorderItems(fullSection.id, activeId, overId)}
+              prioritySort={prioritySort}
             />
             <div className="mt-4 border-t border-border pt-4">
               <button
@@ -573,7 +601,7 @@ function SortableSection({ section, ...props }) {
   )
 }
 
-function SectionCard({ section, wp, weekKey, dragHandleProps, onAddItem, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems, onEditSection, onRemoveSection, onOpenFull }) {
+function SectionCard({ section, wp, weekKey, dragHandleProps, onAddItem, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems, onEditSection, onRemoveSection, onOpenFull, prioritySort }) {
   const pct = sectionCompletion(section, wp, weekKey)
 
   return (
@@ -617,6 +645,7 @@ function SectionCard({ section, wp, weekKey, dragHandleProps, onAddItem, onEditI
         onToggleChild={onToggleChild}
         onRemoveItem={onRemoveItem}
         onReorderItems={onReorderItems}
+        prioritySort={prioritySort}
       />
 
       <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
@@ -650,14 +679,18 @@ function SectionCard({ section, wp, weekKey, dragHandleProps, onAddItem, onEditI
 
 // Sortable list of one section's goal items — used by both the section card
 // and the full-screen view. Drag an item's grip to re-arrange within the list.
-function ItemList({ section, wp, weekKey, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems }) {
+function ItemList({ section, wp, weekKey, onEditItem, onToggleCheckbox, onToggleTally, onToggleChild, onRemoveItem, onReorderItems, prioritySort }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
     onReorderItems(active.id, over.id)
   }
-  // Only the selected week's goals: repeating items plus that week's one-offs.
-  const items = section.items.filter((it) => itemInWeek(it, weekKey))
+  // Only the selected week's goals: repeating items plus that week's one-offs,
+  // highest priority first when sorting by priority (dragging is off then).
+  const inWeek = section.items.filter((it) => itemInWeek(it, weekKey))
+  const items = prioritySort ? sortByPriority(inWeek) : inWeek
+  // Edit the stored goal, not the display copy (whose sub-items may be re-sorted).
+  const original = (id) => section.items.find((it) => it.id === id)
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -675,7 +708,8 @@ function ItemList({ section, wp, weekKey, onEditItem, onToggleCheckbox, onToggle
               onToggle={() => onToggleCheckbox(it.id)}
               onToggleBox={(index) => onToggleTally(it.id, index, it.target)}
               onToggleChild={onToggleChild}
-              onEdit={() => onEditItem(it)}
+              onEdit={() => onEditItem(original(it.id))}
+              dragDisabled={prioritySort}
               onRemove={() => onRemoveItem(it)}
             />
           ))}
@@ -687,9 +721,10 @@ function ItemList({ section, wp, weekKey, onEditItem, onToggleCheckbox, onToggle
 
 // Sortable wrapper for a goal item: renders the row's <li>, applies the drag
 // transform, and hands the handle props down so only the grip starts a drag.
-function SortableGoalItem({ item, ...props }) {
+function SortableGoalItem({ item, dragDisabled, ...props }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
+    disabled: dragDisabled,
   })
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -699,12 +734,17 @@ function SortableGoalItem({ item, ...props }) {
   }
   return (
     <li ref={setNodeRef} style={style} className="relative rounded-lg px-1 py-1.5">
-      <GoalItem item={item} dragHandleProps={{ ...attributes, ...listeners }} {...props} />
+      <GoalItem
+        item={item}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        dragDisabled={dragDisabled}
+        {...props}
+      />
     </li>
   )
 }
 
-function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onToggleChild, onEdit, onRemove }) {
+function GoalItem({ item, color, wp, dragHandleProps, dragDisabled, onToggle, onToggleBox, onToggleChild, onEdit, onRemove }) {
   const kids = item.children || []
   const isGroup = kids.length > 0
   const isTally = !isGroup && item.type === 'tally'
@@ -725,8 +765,12 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
           type="button"
           {...dragHandleProps}
           aria-label={`Reorder ${item.title}`}
+          title={dragDisabled ? 'Switch to "My order" to drag' : undefined}
           style={{ touchAction: 'none' }}
-          className="-ml-1 flex-shrink-0 cursor-grab rounded p-0.5 text-gray-700 active:cursor-grabbing active:text-gray-300"
+          className={[
+            '-ml-1 flex-shrink-0 rounded p-0.5 text-gray-700',
+            dragDisabled ? 'cursor-default opacity-30' : 'cursor-grab active:cursor-grabbing active:text-gray-300',
+          ].join(' ')}
         >
           <GripIcon className="h-4 w-4" />
         </button>
@@ -769,6 +813,7 @@ function GoalItem({ item, color, wp, dragHandleProps, onToggle, onToggleBox, onT
           >
             {item.title}
           </span>
+          <PriorityMark node={item} className="ml-1.5" />
           {item.habit && (
             <StarIcon className="ml-1.5 inline-block h-3.5 w-3.5 text-accent" title="Habit" />
           )}
@@ -894,6 +939,10 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey, onAskDe
     })
   const addChild = (parentId) =>
     editKids(parentId, (list) => [...list, { id: crypto.randomUUID(), title: '' }])
+  const setChildPriority = (parentId, id, priority) =>
+    editKids(parentId, (list) => list.map((c) => (c.id === id ? { ...c, priority } : c)))
+  const pri = effectivePriority(item)
+  const inheritedPriority = pri.inherited ? pri.level : 0
   const setChild = (parentId, id, title) =>
     editKids(parentId, (list) => list.map((c) => (c.id === id ? { ...c, title } : c)))
   const removeChild = (parentId, id) => editKids(parentId, (list) => list.filter((c) => c.id !== id))
@@ -1087,6 +1136,18 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey, onAskDe
               </div>
             )}
 
+            {/* Priority: a flagged sub-item lifts the goal to at least its level. */}
+            <div>
+              <label className="mb-2 block text-xs text-gray-500">Priority</label>
+              <PriorityPicker value={item.priority} onChange={(v) => set({ priority: v })} />
+              {inheritedPriority && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
+                  Shows as <PriorityIcon level={inheritedPriority} />
+                  {['', 'Low', 'Medium', 'High'][inheritedPriority]} — set on a sub-item
+                </p>
+              )}
+            </div>
+
             <div>
               <label className="mb-1 block text-xs text-gray-500">Note (optional)</label>
               <ResizableTextarea
@@ -1149,6 +1210,7 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey, onAskDe
                 onReorder={reorderChildren}
                 onMove={askMove}
                 moveBlock={moveBlock}
+                onPriority={setChildPriority}
               />
               <button
                 type="button"
@@ -1168,7 +1230,7 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey, onAskDe
 // Sortable sub-item rows in the goal editor. Drag a row's grip to re-arrange
 // within its list. Top-level rows get a + to add nested sub-items (one level
 // down), shown indented beneath with their own drag handles.
-function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReorder, onMove, moveBlock }) {
+function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReorder, onMove, moveBlock, onPriority }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
@@ -1188,6 +1250,7 @@ function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReor
             onReorder={onReorder}
             onMove={onMove}
             moveBlock={moveBlock}
+            onPriority={onPriority}
             parentId={parentId}
           />
         ))}
@@ -1196,7 +1259,7 @@ function SubItemList({ items, parentId = null, onAdd, onChange, onRemove, onReor
   )
 }
 
-function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, onReorder, onMove, moveBlock }) {
+function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, onReorder, onMove, moveBlock, onPriority }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: child.id,
   })
@@ -1220,12 +1283,20 @@ function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, o
         >
           <GripIcon className="h-4 w-4" />
         </button>
-        <input
-          className={fieldClass}
-          placeholder={nested ? 'Nested sub-item' : 'Sub-item (e.g. Papa Hui)'}
-          value={child.title}
-          onChange={(e) => onChange(parentId, child.id, e.target.value)}
-        />
+        {/* Priority sits inside the field (tap to cycle) to save row space. */}
+        <div className="relative min-w-0 flex-1">
+          <input
+            className={`${fieldClass} pr-11`}
+            placeholder={nested ? 'Nested sub-item' : 'Sub-item (e.g. Papa Hui)'}
+            value={child.title}
+            onChange={(e) => onChange(parentId, child.id, e.target.value)}
+          />
+          <PriorityCycle
+            value={child.priority}
+            onChange={(v) => onPriority(parentId, child.id, v)}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2"
+          />
+        </div>
         {!nested && (
           <button
             type="button"
@@ -1266,6 +1337,7 @@ function SortableSubItem({ child, nested, parentId, onAdd, onChange, onRemove, o
             onReorder={onReorder}
             onMove={onMove}
             moveBlock={moveBlock}
+            onPriority={onPriority}
           />
         </div>
       )}

@@ -88,6 +88,7 @@ export const trimKids = (list) =>
       id: c.id,
       title: c.title.trim(),
       ...(c.copyOf ? { copyOf: c.copyOf } : {}),
+      ...(c.priority ? { priority: c.priority } : {}),
       ...(c.children ? { children: trimKids(c.children) } : {}),
     }))
     .filter((c) => c.title)
@@ -188,4 +189,28 @@ export function moveSubItem({ items, goal, path, toWeek }) {
     remaining: removeAt(goal.children || [], path),
     movedIds: [moved.id, ...kidsOf(moved).map((g) => g.id)],
   }
+}
+
+// --- Priority ---------------------------------------------------------------
+// Goals and sub-items can be flagged low / medium / high. A parent shows the
+// highest priority among itself and everything under it, so flagging a
+// sub-item lifts the goal (and a nested item lifts its parent sub-item).
+export const PRIORITY_LEVELS = { low: 1, medium: 2, high: 3 }
+export const PRIORITY_NAMES = ['', 'low', 'medium', 'high']
+
+// { level: 0–3, inherited } — inherited when a child sets a level above the
+// item's own.
+export function effectivePriority(node) {
+  const own = PRIORITY_LEVELS[node.priority] || 0
+  const fromKids = Math.max(0, ...kidsOf(node).map((c) => effectivePriority(c).level))
+  return { level: Math.max(own, fromKids), inherited: fromKids > own }
+}
+
+// Copies of `list` ordered high → low priority (unflagged last), keeping the
+// custom order among equals; sub-items are ordered the same way.
+export function sortByPriority(list) {
+  return (list || [])
+    .map((it, i) => ({ it, i, level: effectivePriority(it).level }))
+    .sort((a, b) => b.level - a.level || a.i - b.i)
+    .map(({ it }) => (kidsOf(it).length ? { ...it, children: sortByPriority(it.children) } : it))
 }
