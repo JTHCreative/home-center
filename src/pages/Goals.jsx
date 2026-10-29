@@ -983,6 +983,7 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey, onAskDe
       open={!!draft}
       onClose={onClose}
       title="Goal"
+      resizeKey="goal-editor"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -1002,8 +1003,10 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey, onAskDe
         />
 
         {/* Two columns: settings on the left, the sub-item checklist on the
-            right, so tall lists spread sideways instead of forcing a scroll. */}
-        <div className="grid gap-5 md:grid-cols-2">
+            right, so tall lists spread sideways instead of forcing a scroll.
+            Widening the window (corner grip) grows only the sub-item column;
+            the settings column stays at its normal width. */}
+        <div className="grid gap-5 md:grid-cols-[minmax(0,350px)_minmax(calc(50%_-_10px),1fr)]">
           <div className="space-y-4">
             {/* Type only applies to a single goal (no sub-items). */}
             {!hasChildren && (
@@ -1140,7 +1143,7 @@ function ItemModal({ draft, setDraft, onClose, onSave, members, weekKey, onAskDe
             <div>
               <label className="mb-2 block text-xs text-gray-500">Priority</label>
               <PriorityPicker value={item.priority} onChange={(v) => set({ priority: v })} />
-              {inheritedPriority && (
+              {inheritedPriority > 0 && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
                   Shows as <PriorityIcon level={inheritedPriority} />
                   {['', 'Low', 'Medium', 'High'][inheritedPriority]} — set on a sub-item
